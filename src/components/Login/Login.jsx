@@ -13,7 +13,7 @@ import Visibility from "@mui/icons-material/Visibility";
 import VisibilityOff from "@mui/icons-material/VisibilityOff";
 import { colors } from "../../design-system/tokens";
 
-/* 🔐 HARD-CODED CREDENTIALS */
+/* HARD-CODED CREDENTIALS */
 const VALID_USER = {
   email: "admin@slcw.com",
   password: "123456",
