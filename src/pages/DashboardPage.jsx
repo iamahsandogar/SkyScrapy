@@ -2,7 +2,7 @@ import { Box, Typography, Button } from "@mui/material";
 import NotificationsNoneIcon from "@mui/icons-material/NotificationsNone";
 import InsertChartOutlinedIcon from "@mui/icons-material/InsertChartOutlined";
 import AddIcon from "@mui/icons-material/Add";
-import StatCard from "../components/dashboard/StatCard";
+import StatCard from "../components/Dashboard/StatCard";
 import Topbar from "../components/global/Topbar";
 import { stats } from "../data/dashboardData";
 import UpcomingReminders from "../components/Dashboard/UpcomingReminders";
