@@ -1,15 +1,25 @@
 import React from "react";
 import { useNavigate } from "react-router-dom";
 import { ListItemButton, ListItemIcon, ListItemText } from "@mui/material";
-import LogoutRoundedIcon from "@mui/icons-material/LogoutRounded"; // MUI logout icon
+import LogoutRoundedIcon from "@mui/icons-material/LogoutRounded";
 import { colors } from "../../design-system/tokens";
+import { authAPI } from "../../services/api"; // Add this import
 
 const LogoutButton = () => {
   const navigate = useNavigate();
 
-  const handleLogout = () => {
-    localStorage.clear();
-    navigate("/login", { replace: true });
+  const handleLogout = async () => {
+    try {
+      // Call logout API to clear cookies on backend
+      await authAPI.logout();
+    } catch (error) {
+      console.error("Logout error:", error);
+      // Continue with logout even if API call fails
+    } finally {
+      // Clear local storage
+      localStorage.clear();
+      navigate("/login", { replace: true });
+    }
   };
 
   return (

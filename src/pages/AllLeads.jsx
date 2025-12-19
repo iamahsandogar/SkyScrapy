@@ -29,6 +29,10 @@ import { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import Topbar from "../components/global/Topbar";
 import { colors } from "../design-system/tokens";
+import { FaLinkedin } from "react-icons/fa";
+import VisibilityIcon from "@mui/icons-material/Visibility";
+import LeadDetailsModal from "../components/Leads/LeadDetailsModal";
+import MoreHorizIcon from "@mui/icons-material/MoreHoriz";
 
 const getChipStyles = (status) => {
   switch (status) {
@@ -110,12 +114,49 @@ export default function AllLeads() {
   const [visibleColumns, setVisibleColumns] = useState(() => {
     return JSON.parse(localStorage.getItem("leadColumns")) || DEFAULT_COLUMNS;
   });
+  const [selectedLead, setSelectedLead] = useState(null);
+  const [isModalOpen, setIsModalOpen] = useState(false);
+  // Lead actions menu
+  const [actionAnchorEl, setActionAnchorEl] = useState(null);
+  const [menuLead, setMenuLead] = useState(null);
+
+  const actionOpen = Boolean(actionAnchorEl);
+
+  const handleActionMenuOpen = (event, lead) => {
+    setActionAnchorEl(event.currentTarget);
+    setMenuLead(lead);
+  };
+
+  const handleActionMenuClose = () => {
+    setActionAnchorEl(null);
+    setMenuLead(null);
+  };
+
+  const handleViewLead = (lead) => {
+    setSelectedLead(lead);
+    setIsModalOpen(true);
+  };
+
+  const handleCloseModal = () => {
+    setSelectedLead(null);
+    setIsModalOpen(false);
+  };
 
   const navigate = useNavigate();
 
   useEffect(() => {
     setLeads(JSON.parse(localStorage.getItem("leads")) || []);
   }, []);
+
+  const getEmployeeName = (assignedTo) => {
+    if (!assignedTo || assignedTo === "None") return "None";
+
+    const employees = JSON.parse(localStorage.getItem("employees")) || [];
+
+    const emp = employees.find((e) => String(e.id) === String(assignedTo));
+
+    return emp ? `${emp.firstName} ${emp.lastName}` : "None";
+  };
 
   const handleDeleteLead = (id) => {
     if (!confirm("Delete this lead?")) return;
@@ -302,6 +343,7 @@ export default function AllLeads() {
         }}
       >
         <Table
+          aria-label="basic table"
           sx={{
             tableLayout: "auto",
           }}
@@ -331,7 +373,7 @@ export default function AllLeads() {
                 <TableCell sx={tableBodyCellStyles}>Source</TableCell>
               )}
               {visibleColumns.includes("description") && (
-                <TableCell sx={tableBodyCellStyles}>Description</TableCell>
+                <TableCell sx={{ tableBodyCellStyles }}>Description</TableCell>
               )}
               {visibleColumns.includes("company") && (
                 <TableCell sx={tableBodyCellStyles}>Company</TableCell>
@@ -366,121 +408,163 @@ export default function AllLeads() {
                 </TableCell>
               </TableRow>
             ) : (
-              filteredLeads.map((lead) => (
-                <TableRow key={lead.id}>
-                  {visibleColumns.includes("title") && (
-                    <TableCell>
-                      <Typography fontWeight={700}>
-                        {lead.title || `${lead.firstName} ${lead.lastName}`}
-                      </Typography>
-                      <Typography fontSize={12} color="text.secondary">
-                        {lead.company} • {lead.email}
-                      </Typography>
-                    </TableCell>
-                  )}
+              filteredLeads.map((lead) => {
+                console.log(lead);
+                return (
+                  <TableRow key={lead.id}>
+                    {visibleColumns.includes("title") && (
+                      <TableCell>{lead.title}</TableCell>
+                    )}
 
-                  {visibleColumns.includes("linkedIn") && (
-                    <TableCell>
-                      {lead.linkedIn ? (
-                        <Button
+                    {visibleColumns.includes("linkedIn") && (
+                      <TableCell>
+                        {lead.linkedIn ? (
+                          <a
+                            href={lead.linkedIn}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            style={{ textDecoration: "none", color: "#0A66C2" }}
+                          >
+                            <FaLinkedin size={24} />
+                          </a>
+                        ) : (
+                          "-"
+                        )}
+                      </TableCell>
+                    )}
+
+                    {visibleColumns.includes("status") && (
+                      <TableCell>
+                        <Chip
+                          label={lead.status || "None"}
+                          sx={getChipStyles(lead.status)}
                           size="small"
-                          variant="outlined"
-                          onClick={() => window.open(lead.linkedIn, "_blank")}
-                        >
-                          LinkedIn
-                        </Button>
-                      ) : (
-                        "-"
-                      )}
-                    </TableCell>
-                  )}
+                        />
+                      </TableCell>
+                    )}
 
-                  {visibleColumns.includes("status") && (
+                    {visibleColumns.includes("assignedTo") && (
+                      <TableCell>{getEmployeeName(lead.assignedTo)}</TableCell>
+                    )}
+
+                    {visibleColumns.includes("followUpAt") && (
+                      <TableCell>
+                        {lead.followUpAt
+                          ? new Date(lead.followUpAt).toLocaleDateString()
+                          : "-"}
+                      </TableCell>
+                    )}
+
+                    {visibleColumns.includes("followupStatus") && (
+                      <TableCell>{lead.followupStatus || "-"}</TableCell>
+                    )}
+
+                    {visibleColumns.includes("source") && (
+                      <TableCell>{lead.source || "-"}</TableCell>
+                    )}
+
+                    {visibleColumns.includes("description") && (
+                      <TableCell>
+                        {lead.description.length > 50
+                          ? lead.description.slice(0, 50) + "..."
+                          : lead.description}
+                      </TableCell>
+                    )}
+
+                    {visibleColumns.includes("company") && (
+                      <TableCell>{lead.company || "-"}</TableCell>
+                    )}
+
+                    {visibleColumns.includes("firstName") && (
+                      <TableCell>{lead.firstName || "-"}</TableCell>
+                    )}
+
+                    {visibleColumns.includes("lastName") && (
+                      <TableCell>{lead.lastName || "-"}</TableCell>
+                    )}
+
+                    {visibleColumns.includes("email") && (
+                      <TableCell>{lead.email || "-"}</TableCell>
+                    )}
+
+                    {visibleColumns.includes("phone") && (
+                      <TableCell>{lead.phone || "-"}</TableCell>
+                    )}
+
+                    {visibleColumns.includes("positionTitle") && (
+                      <TableCell>{lead.positionTitle || "-"}</TableCell>
+                    )}
+
                     <TableCell>
-                      <Chip
-                        label={lead.status || "None"}
-                        sx={getChipStyles(lead.status)}
+                      <IconButton
                         size="small"
-                      />
+                        onClick={(e) => handleActionMenuOpen(e, lead)}
+                      >
+                        <MoreHorizIcon />
+                      </IconButton>
                     </TableCell>
-                  )}
-
-                  {visibleColumns.includes("assignedTo") && (
-                    <TableCell>{lead.assignedTo || "-"}</TableCell>
-                  )}
-
-                  {visibleColumns.includes("followUpAt") && (
-                    <TableCell>
-                      {lead.followUpAt
-                        ? new Date(lead.followUpAt).toLocaleDateString()
-                        : "-"}
-                    </TableCell>
-                  )}
-
-                  {visibleColumns.includes("followupStatus") && (
-                    <TableCell>{lead.followupStatus || "-"}</TableCell>
-                  )}
-
-                  {visibleColumns.includes("source") && (
-                    <TableCell>{lead.source || "-"}</TableCell>
-                  )}
-
-                  {visibleColumns.includes("description") && (
-                    <TableCell>{lead.description || "-"}</TableCell>
-                  )}
-
-                  {visibleColumns.includes("company") && (
-                    <TableCell>{lead.company || "-"}</TableCell>
-                  )}
-
-                  {visibleColumns.includes("firstName") && (
-                    <TableCell>{lead.firstName || "-"}</TableCell>
-                  )}
-
-                  {visibleColumns.includes("lastName") && (
-                    <TableCell>{lead.lastName || "-"}</TableCell>
-                  )}
-
-                  {visibleColumns.includes("email") && (
-                    <TableCell>{lead.email || "-"}</TableCell>
-                  )}
-
-                  {visibleColumns.includes("phone") && (
-                    <TableCell>{lead.phone || "-"}</TableCell>
-                  )}
-
-                  {visibleColumns.includes("positionTitle") && (
-                    <TableCell>{lead.positionTitle || "-"}</TableCell>
-                  )}
-
-                  <TableCell>
-                    <Box display="flex" gap={1}>
-                      <IconButton
-                        size="small"
-                        onClick={() => navigate(`/edit-lead/${lead.id}`)}
-                      >
-                        <EditIcon fontSize="small" />
-                      </IconButton>
-                      <IconButton
-                        size="small"
-                        onClick={() => handleDeleteLead(lead.id)}
-                      >
-                        <DeleteIcon fontSize="small" />
-                      </IconButton>
-                      <IconButton
-                        size="small"
-                        onClick={() => handleConvertToProject(lead)}
-                      >
-                        <AssignmentTurnedInIcon fontSize="small" />
-                      </IconButton>
-                    </Box>
-                  </TableCell>
-                </TableRow>
-              ))
+                  </TableRow>
+                );
+              })
             )}
           </TableBody>
         </Table>
       </TableContainer>
+      <Menu
+        anchorEl={actionAnchorEl}
+        open={actionOpen}
+        onClose={handleActionMenuClose}
+        anchorOrigin={{ vertical: "bottom", horizontal: "right" }}
+        transformOrigin={{ vertical: "top", horizontal: "right" }}
+      >
+        <MenuItem
+          onClick={() => {
+            handleViewLead(menuLead);
+            handleActionMenuClose();
+          }}
+        >
+          <VisibilityIcon fontSize="small" sx={{ mr: 1 }} />
+          View
+        </MenuItem>
+
+        <MenuItem
+          onClick={() => {
+            navigate(`/edit-lead/${menuLead.id}`);
+            handleActionMenuClose();
+          }}
+        >
+          <EditIcon fontSize="small" sx={{ mr: 1 }} />
+          Edit
+        </MenuItem>
+
+        <MenuItem
+          onClick={() => {
+            handleConvertToProject(menuLead);
+            handleActionMenuClose();
+          }}
+        >
+          <AssignmentTurnedInIcon fontSize="small" sx={{ mr: 1 }} />
+          Convert to Project
+        </MenuItem>
+
+        <MenuItem
+          onClick={() => {
+            handleDeleteLead(menuLead.id);
+            handleActionMenuClose();
+          }}
+          sx={{ color: "error.main" }}
+        >
+          <DeleteIcon fontSize="small" sx={{ mr: 1 }} />
+          Delete
+        </MenuItem>
+      </Menu>
+
+      <LeadDetailsModal
+        open={isModalOpen}
+        onClose={handleCloseModal}
+        lead={selectedLead}
+        getEmployeeName={getEmployeeName}
+      />
     </Box>
   );
 }

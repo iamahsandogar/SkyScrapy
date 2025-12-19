@@ -50,6 +50,8 @@ const MuiDatePickerPadding = {
 export default function CreateLead() {
   const { editId } = useParams();
   const navigate = useNavigate();
+  const [employees, setEmployees] = useState([]);
+  const [errors, setErrors] = useState({});
 
   const [formData, setFormData] = useState({
     title: "",
@@ -68,21 +70,53 @@ export default function CreateLead() {
     linkedIn: "",
   });
 
-  const getLeads = () => JSON.parse(localStorage.getItem("leads")) || [];
+  const getLeads = (leadId = null) => {
+    const allLeads = JSON.parse(localStorage.getItem("leads")) || [];
+
+    if (leadId) {
+      // Return the single lead to edit
+      return allLeads.find((l) => String(l.id) === String(leadId));
+    }
+
+    // Return all leads
+    return allLeads;
+  };
+
   const saveLeads = (data) =>
     localStorage.setItem("leads", JSON.stringify(data));
 
   useEffect(() => {
-    if (editId) {
-      const leads = getLeads();
-      const lead = leads.find((l) => String(l.id) === String(editId));
-      if (lead)
-        setFormData({
-          ...lead,
-          followUpAt: lead.followUpAt ? dayjs(lead.followUpAt) : null,
-        });
-    }
-  }, [editId]);
+    const savedEmployees = JSON.parse(localStorage.getItem("employees")) || [];
+
+    // Optional: only active employees
+    const activeEmployees = savedEmployees.filter(
+      (emp) => emp.status === "Active"
+    );
+
+    setEmployees(activeEmployees);
+
+    setFormData((prev) => {
+      if (editId) {
+        const leadToEdit = getLeads(editId);
+        if (leadToEdit) {
+          return {
+            ...prev,
+            ...leadToEdit,
+            followUpAt: leadToEdit.followUpAt
+              ? dayjs(leadToEdit.followUpAt)
+              : null,
+          };
+        }
+      }
+      return prev;
+    });
+  }, []);
+
+  const getEmployeeName = (id) => {
+    const employees = JSON.parse(localStorage.getItem("employees")) || [];
+    const emp = employees.find((e) => e.id === id);
+    return emp ? `${emp.firstName} ${emp.lastName}` : "-";
+  };
 
   const handleChange = (e) => {
     setFormData({ ...formData, [e.target.name]: e.target.value });
@@ -92,8 +126,16 @@ export default function CreateLead() {
     setFormData({ ...formData, followUpAt: date });
   };
 
+  const isValidLinkedInURL = (url) => {
+    // Matches URLs like https://linkedin.com/in/username or https://www.linkedin.com/in/username
+    const regex =
+      /^https:\/\/(www\.)?linkedin\.com\/(in|company)\/[A-Za-z0-9_-]+\/?$/i;
+    return regex.test(url);
+  };
+
   const validateForm = () => {
     const requiredFields = [
+      "title",
       "status",
       "followupStatus",
       "firstName",
@@ -108,12 +150,19 @@ export default function CreateLead() {
   };
 
   const handleSubmit = () => {
+    // LinkedIn URL validation
+    const linkedInRegex =
+      /^https:\/\/(www\.)?linkedin\.com\/(in|company)\/[A-Za-z0-9_-]+\/?$/i;
+    if (formData.linkedIn && !linkedInRegex.test(formData.linkedIn)) {
+      alert("Please enter a valid LinkedIn URL.");
+      return;
+    }
     if (!validateForm()) {
       alert("Please fill all required fields.");
       return;
     }
 
-    const leads = getLeads();
+    const allLeads = JSON.parse(localStorage.getItem("leads")) || [];
     const formattedData = {
       ...formData,
       followUpAt: formData.followUpAt
@@ -122,14 +171,16 @@ export default function CreateLead() {
     };
 
     if (editId) {
-      const updated = leads.map((l) =>
+      // Update existing lead
+      const updatedLeads = allLeads.map((l) =>
         String(l.id) === String(editId) ? { ...formattedData, id: editId } : l
       );
-      saveLeads(updated);
+      localStorage.setItem("leads", JSON.stringify(updatedLeads));
       alert("Lead updated successfully!");
     } else {
+      // Create new lead
       const newLead = { ...formattedData, id: Date.now() };
-      saveLeads([...leads, newLead]);
+      localStorage.setItem("leads", JSON.stringify([...allLeads, newLead]));
       alert("Lead created successfully!");
     }
     navigate("/all-leads");
@@ -155,9 +206,11 @@ export default function CreateLead() {
             {/* ROW 1 */}
             <Box display="flex" gap={2} flexWrap="wrap">
               <Box flex={1} minWidth={200}>
-                <Typography fontWeight="bold" sx={{ mb: 0.5 }}>
+                {/* <Typography fontWeight="bold" sx={{ mb: 0.5 }}>
                   Title
-                </Typography>
+                </Typography> */}
+                <RequiredLabel text="Title" />
+
                 <TextField
                   sx={MuiTextFieldPadding}
                   fullWidth
@@ -255,13 +308,7 @@ export default function CreateLead() {
                   value={formData.followupStatus}
                   onChange={handleChange}
                 >
-                  {[
-                    "None",
-                    "Completed",
-                    "In Progress",
-                    "Pending",
-                    "Rejected",
-                  ].map((val) => (
+                  {["Completed", "Pending"].map((val) => (
                     <MenuItem key={val} value={val}>
                       {val}
                     </MenuItem>
@@ -280,9 +327,9 @@ export default function CreateLead() {
                   value={formData.assignedTo}
                   onChange={handleChange}
                 >
-                  {["None", "Ayesha Zahid"].map((val) => (
-                    <MenuItem key={val} value={val}>
-                      {val}
+                  {employees.map((emp) => (
+                    <MenuItem key={emp.id} value={emp.id}>
+                      {emp.firstName} {emp.lastName}
                     </MenuItem>
                   ))}
                 </TextField>
@@ -372,6 +419,22 @@ export default function CreateLead() {
                 name="linkedIn"
                 value={formData.linkedIn}
                 onChange={handleChange}
+                onBlur={() => {
+                  // re-validate on blur (works even with autofill)
+                  if (
+                    formData.linkedIn &&
+                    !isValidLinkedInURL(formData.linkedIn)
+                  ) {
+                    setErrors((prev) => ({
+                      ...prev,
+                      linkedIn: "Enter a valid LinkedIn URL",
+                    }));
+                  } else {
+                    setErrors((prev) => ({ ...prev, linkedIn: "" }));
+                  }
+                }}
+                error={!!errors.linkedIn}
+                helperText={errors.linkedIn}
               />
             </Box>
 

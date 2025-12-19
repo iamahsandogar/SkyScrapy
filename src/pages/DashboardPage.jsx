@@ -12,6 +12,7 @@ import UnreadNotes from "../components/Dashboard/UnreadNotes";
 import OngoingProjects from "../components/Dashboard/OngoingProjects";
 import ChartBox from "../components/Dashboard/ChartBox";
 import { useNavigate } from "react-router-dom";
+import ProjectCompletionTable from "../components/Dashboard/ProjectCompletionChart";
 
 export default function Dashboard() {
   const navigate = useNavigate();
@@ -99,6 +100,9 @@ export default function Dashboard() {
         ))}
       </Box> */}
       {/* Ongoing Projects + Chart */}
+      <Box display={"grid"} gridTemplateColumns="1fr 1fr" gap={2} mt={2}>
+        <ProjectCompletionTable />
+      </Box>
       <Box display={"grid"} gridTemplateColumns="1fr 1fr" gap={2} mt={2}>
         <OngoingProjects />
         <ChartBox />

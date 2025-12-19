@@ -11,21 +11,21 @@ const data = [
 
 const ChartBox = () => {
   return (
-    <Box>
-      <Card
-        sx={{
-          boxShadow: "none",
-          borderRadius: "12px",
-          padding: 4,
-          backgroundColor: "#fff",
-          width: "100%",
-          height: "350px",
-        }}
+    <Card
+      sx={{
+        boxShadow: "none",
+        borderRadius: "12px",
+        padding: 4,
+        backgroundColor: "#fff",
+        width: "100%",
+        height: "350px",
+      }}
+    >
+      {/* Title */}
+      <CardContent
+        sx={{ height: "100%", display: "flex", flexDirection: "column" }}
       >
-        {/* Title */}
-        <Typography variant="p" fontWeight="bold">
-          Lead Status Breakdown
-        </Typography>
+        <Typography fontWeight="bold">Lead Status Breakdown</Typography>
 
         {/* Chart row */}
         <Box
@@ -76,8 +76,8 @@ const ChartBox = () => {
             ))}
           </Box>
         </Box>
-      </Card>
-    </Box>
+      </CardContent>
+    </Card>
   );
 };
 

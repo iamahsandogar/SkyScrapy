@@ -1,7 +1,6 @@
 import { Routes, Route, Navigate } from "react-router-dom";
 import Layout from "./components/Layout.jsx";
 
-import Login from "./components/Login/Login.jsx";
 import ForgotPassword from "./components/Login/ForgotPassword.jsx";
 import ResetPassword from "./components/Login/ResetPassword.jsx";
 
@@ -13,6 +12,7 @@ import ManageEmployees from "./components/Employees/ManageEmployees.jsx";
 import KanbanBoard from "./components/Kanban/KanbanBoard.jsx";
 import AllProjects from "./components/Projects/AllProjects.jsx";
 import AuthGuard from "./components/Auth/AuthGuard.jsx";
+import Login from "./components/Login/Login.jsx";
 
 export default function App() {
   return (

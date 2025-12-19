@@ -12,19 +12,14 @@ import { Link, useNavigate } from "react-router-dom";
 import Visibility from "@mui/icons-material/Visibility";
 import VisibilityOff from "@mui/icons-material/VisibilityOff";
 import { colors } from "../../design-system/tokens";
+import { authAPI } from "../services/api";
 
-/* HARD-CODED CREDENTIALS */
-const VALID_USER = {
-  email: "admin@slcw.com",
-  password: "123456",
-};
-
-function Login() {
+export default function Login() {
   const navigate = useNavigate();
 
   const [showPassword, setShowPassword] = useState(false);
   const [error, setError] = useState("");
-
+  const [loading, setLoading] = useState(false);
   const [credentials, setCredentials] = useState({
     email: "",
     password: "",
@@ -35,7 +30,7 @@ function Login() {
     setError("");
   };
 
-  const handleLogin = () => {
+  const handleLogin = async () => {
     const { email, password } = credentials;
 
     if (!email || !password) {
@@ -43,11 +38,22 @@ function Login() {
       return;
     }
 
-    if (email === VALID_USER.email && password === VALID_USER.password) {
-      localStorage.setItem("isAuth", "true");
-      navigate("/dashboard", { replace: true });
-    } else {
-      setError("Invalid email or password");
+    setLoading(true);
+    setError("");
+
+    try {
+      const response = await authAPI.login(email, password);
+
+      // Cookie is handled automatically
+      if (response?.user) {
+        localStorage.setItem("user", JSON.stringify(response.user));
+        localStorage.setItem("isAuth", "true");
+        navigate("/dashboard", { replace: true });
+      }
+    } catch (err) {
+      setError(err.message || "Invalid email or password");
+    } finally {
+      setLoading(false);
     }
   };
 
@@ -61,14 +67,7 @@ function Login() {
         backgroundColor: "#f5f5f5",
       }}
     >
-      <Paper
-        elevation={3}
-        sx={{
-          width: 380,
-          padding: 4,
-          borderRadius: 4,
-        }}
-      >
+      <Paper elevation={3} sx={{ width: 380, padding: 4, borderRadius: 4 }}>
         {/* Logo */}
         <Box
           sx={{
@@ -124,7 +123,7 @@ function Login() {
           sx={{ mb: 2 }}
         />
 
-        {/* Error Message */}
+        {/* Error */}
         {error && (
           <Typography color="error" fontSize={14} mb={2}>
             {error}
@@ -151,6 +150,7 @@ function Login() {
           variant="contained"
           fullWidth
           onClick={handleLogin}
+          disabled={loading}
           sx={{
             py: 1.3,
             borderRadius: 2,
@@ -161,11 +161,9 @@ function Login() {
             "&:hover": { backgroundColor: "#0E3AA8" },
           }}
         >
-          Login
+          {loading ? "Logging in..." : "Login"}
         </Button>
       </Paper>
     </Box>
   );
 }
-
-export default Login;

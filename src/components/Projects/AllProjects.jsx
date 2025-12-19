@@ -26,6 +26,10 @@ import { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import Topbar from "../global/Topbar";
 import { colors } from "../../design-system/tokens";
+import VisibilityIcon from "@mui/icons-material/Visibility";
+import ProjectDetailsModal from "./ProjectDetailsModal";
+import MoreHorizonIcon from "@mui/icons-material/MoreHoriz";
+import Menu from "@mui/material/Menu";
 
 const getChipStyles = (status) => {
   switch (status) {
@@ -68,12 +72,48 @@ export default function AllProjects() {
   const [q, setQ] = useState("");
   const [statusFilter, setStatusFilter] = useState("All");
   const navigate = useNavigate();
+  const [selectedProject, setSelectedProject] = useState(null);
+  const [isModalOpen, setIsModalOpen] = useState(false);
+  const [anchorEl, setAnchorEl] = useState(null);
+  const [menuProject, setMenuProject] = useState(null);
+
+  const open = Boolean(anchorEl);
+
+  const handleMenuOpen = (event, project) => {
+    setAnchorEl(event.currentTarget);
+    setMenuProject(project);
+  };
+
+  const handleMenuClose = () => {
+    setAnchorEl(null);
+    setMenuProject(null);
+  };
+
+  const handleViewProject = (project) => {
+    setSelectedProject(project);
+    setIsModalOpen(true);
+  };
+
+  const handleCloseModal = () => {
+    setSelectedProject(null);
+    setIsModalOpen(false);
+  };
 
   // Load leads and projects from localStorage
   useEffect(() => {
     setLeads(JSON.parse(localStorage.getItem("leads")) || []);
     setProjects(JSON.parse(localStorage.getItem("projects")) || []);
   }, []);
+
+  const getEmployeeName = (assignedTo) => {
+    if (!assignedTo || assignedTo === "None") return "None";
+
+    const employees = JSON.parse(localStorage.getItem("employees")) || [];
+
+    const emp = employees.find((e) => String(e.id) === String(assignedTo));
+
+    return emp ? `${emp.firstName} ${emp.lastName}` : "None";
+  };
 
   // Delete lead
   const handleDeleteLead = (id) => {
@@ -249,10 +289,8 @@ export default function AllProjects() {
           <TableHead>
             <TableRow>
               <TableCell>Project Title</TableCell>
-              <TableCell>Status</TableCell>
+              <TableCell>Description</TableCell>
               <TableCell>Assigned To</TableCell>
-              <TableCell>Start Date</TableCell>
-              <TableCell>End Date</TableCell>
               <TableCell>Actions</TableCell>
             </TableRow>
           </TableHead>
@@ -268,45 +306,20 @@ export default function AllProjects() {
                 <TableRow key={proj.id}>
                   <TableCell>
                     <Typography fontWeight={700}>{proj.title}</Typography>
-                    <Typography fontSize={12} color="text.secondary">
-                      {proj.description}
-                    </Typography>
                   </TableCell>
                   <TableCell>
-                    <Chip
-                      label={proj.status}
-                      size="small"
-                      sx={{
-                        width: "90px",
-                        ...getChipStyles(proj.status),
-                        fontWeight: 600,
-                        borderRadius: "5px",
-                      }}
-                    />
+                    {proj.description.length > 50
+                      ? proj.description.slice(0, 50) + "..."
+                      : proj.description}
                   </TableCell>
-                  <TableCell>{proj.assignedTo}</TableCell>
-                  <TableCell>
-                    {proj.startDate
-                      ? new Date(proj.startDate).toLocaleDateString()
-                      : ""}
-                  </TableCell>
-                  <TableCell>
-                    {proj.endDate
-                      ? new Date(proj.endDate).toLocaleDateString()
-                      : ""}
-                  </TableCell>
+                  <TableCell>{getEmployeeName(proj.assignedTo)}</TableCell>
+
                   <TableCell>
                     <IconButton
                       size="small"
-                      onClick={() => navigate(`/edit-project/${proj.id}`)}
+                      onClick={(e) => handleMenuOpen(e, proj)}
                     >
-                      <EditIcon fontSize="small" />
-                    </IconButton>
-                    <IconButton
-                      size="small"
-                      onClick={() => handleDeleteProject(proj.id)}
-                    >
-                      <DeleteIcon fontSize="small" />
+                      <MoreHorizonIcon />
                     </IconButton>
                   </TableCell>
                 </TableRow>
@@ -314,7 +327,57 @@ export default function AllProjects() {
             )}
           </TableBody>
         </Table>
+        <Menu
+          anchorEl={anchorEl}
+          open={open}
+          onClose={handleMenuClose}
+          anchorOrigin={{
+            vertical: "bottom",
+            horizontal: "right",
+          }}
+          transformOrigin={{
+            vertical: "top",
+            horizontal: "right",
+          }}
+        >
+          <MenuItem
+            onClick={() => {
+              handleViewProject(menuProject);
+              handleMenuClose();
+            }}
+          >
+            <VisibilityIcon fontSize="small" sx={{ mr: 1 }} />
+            View
+          </MenuItem>
+
+          <MenuItem
+            onClick={() => {
+              navigate(`/edit-project/${menuProject.id}`);
+              handleMenuClose();
+            }}
+          >
+            <EditIcon fontSize="small" sx={{ mr: 1 }} />
+            Edit
+          </MenuItem>
+
+          <MenuItem
+            onClick={() => {
+              handleDeleteProject(menuProject.id);
+              handleMenuClose();
+            }}
+            sx={{ color: "error.main" }}
+          >
+            <DeleteIcon fontSize="small" sx={{ mr: 1 }} />
+            Delete
+          </MenuItem>
+        </Menu>
       </TableContainer>
+      <ProjectDetailsModal
+        open={isModalOpen}
+        onClose={handleCloseModal}
+        project={selectedProject}
+        getEmployeeName={getEmployeeName}
+      />
     </Box>
   );
 }
