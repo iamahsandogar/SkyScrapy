@@ -1,12 +1,24 @@
-const API_BASE_URL =
-  import.meta.env.VITE_API_BASE_URL || "https://crm-leads-cwml.onrender.com";
+import { env } from "../../config/env.js";
+
+const API_BASE_URL = env.API_BASE_URL;
+const API_TIMEOUT = env.API_TIMEOUT;
+const API_VERSION = env.API_VERSION;
 
 /**
  * Make API request with automatic cookie handling
  * Cookies are automatically sent and received by the browser
+ * @param {string} endpoint - API endpoint path (e.g., "/api/common/auth/login/")
+ * @param {RequestInit} options - Fetch options (method, body, headers, etc.)
+ * @returns {Promise<any>} - Response data
  */
 async function apiRequest(endpoint, options = {}) {
-  const url = `${API_BASE_URL}${endpoint}`;
+  // Build full URL with optional API version prefix
+  let fullEndpoint = endpoint;
+  if (API_VERSION && !endpoint.includes(`/${API_VERSION}/`)) {
+    // Insert version after /api if endpoint starts with /api
+    fullEndpoint = endpoint.replace(/^(\/api)/, `$1/${API_VERSION}`);
+  }
+  const url = `${API_BASE_URL}${fullEndpoint}`;
 
   const defaultOptions = {
     credentials: "include", // CRITICAL: This sends cookies with the request
@@ -16,31 +28,46 @@ async function apiRequest(endpoint, options = {}) {
     },
   };
 
-  const response = await fetch(url, {
-    ...defaultOptions,
-    ...options,
-    headers: {
-      ...defaultOptions.headers,
-      ...options.headers,
-    },
-  });
+  // Create abort controller for timeout
+  const controller = new AbortController();
+  const timeoutId = setTimeout(() => controller.abort(), API_TIMEOUT);
 
-  // Handle non-JSON responses
-  const contentType = response.headers.get("content-type");
-  if (!contentType || !contentType.includes("application/json")) {
-    if (!response.ok) {
-      throw new Error(`HTTP error! status: ${response.status}`);
+  try {
+    const response = await fetch(url, {
+      ...defaultOptions,
+      ...options,
+      signal: controller.signal,
+      headers: {
+        ...defaultOptions.headers,
+        ...options.headers,
+      },
+    });
+    
+    clearTimeout(timeoutId);
+
+    // Handle non-JSON responses
+    const contentType = response.headers.get("content-type");
+    if (!contentType || !contentType.includes("application/json")) {
+      if (!response.ok) {
+        throw new Error(`HTTP error! status: ${response.status}`);
+      }
+      return null;
     }
-    return null;
+
+    const data = await response.json();
+
+    if (!response.ok) {
+      throw new Error(data.error || `HTTP error! status: ${response.status}`);
+    }
+
+    return data;
+  } catch (error) {
+    clearTimeout(timeoutId);
+    if (error.name === 'AbortError') {
+      throw new Error(`Request timeout after ${API_TIMEOUT}ms`);
+    }
+    throw error;
   }
-
-  const data = await response.json();
-
-  if (!response.ok) {
-    throw new Error(data.error || `HTTP error! status: ${response.status}`);
-  }
-
-  return data;
 }
 
 // Authentication API methods

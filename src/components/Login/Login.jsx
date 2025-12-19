@@ -13,6 +13,7 @@ import Visibility from "@mui/icons-material/Visibility";
 import VisibilityOff from "@mui/icons-material/VisibilityOff";
 import { colors } from "../../design-system/tokens";
 import { authAPI } from "../services/api";
+import { env } from "../../config/env.js";
 
 export default function Login() {
   const navigate = useNavigate();
@@ -78,8 +79,8 @@ export default function Login() {
           }}
         >
           <img
-            src="/White Orange SLCW.png"
-            alt="SLCW Icon"
+            src={env.LOGO_FULL_PATH}
+            alt="App Logo"
             style={{ width: "180px", height: "55px" }}
           />
           <Typography variant="h5" fontWeight="bold" mt={1}>

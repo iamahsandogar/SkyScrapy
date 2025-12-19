@@ -18,6 +18,7 @@ import { useState } from "react";
 import * as Icons from "@mui/icons-material";
 import { sidebarMenu } from "../../data/sidebarMenu";
 import { useNavigate } from "react-router-dom";
+import { env } from "../../config/env.js";
 
 export default function SidebarMenu() {
   const navigate = useNavigate();
@@ -58,8 +59,8 @@ export default function SidebarMenu() {
           }}
         >
           <img
-            src="/SLCW Icon.png"
-            alt="SLCW Icon"
+            src={env.LOGO_ICON_PATH}
+            alt="App Icon"
             style={{ width: "35px", height: "35px", objectFit: "contain" }}
           />
           <Typography
@@ -68,7 +69,7 @@ export default function SidebarMenu() {
             lineHeight={1}
             fontSize={25}
           >
-            SLCW CRM
+            {env.APP_NAME}
           </Typography>
         </Box>
 

@@ -13,6 +13,7 @@ import { Link, useNavigate, useSearchParams } from "react-router-dom";
 import Visibility from "@mui/icons-material/Visibility";
 import VisibilityOff from "@mui/icons-material/VisibilityOff";
 import { authAPI } from "../services/api";
+import { env } from "../../config/env.js";
 
 export default function ResetPassword() {
   const navigate = useNavigate();
@@ -129,8 +130,8 @@ export default function ResetPassword() {
           }}
         >
           <img
-            src="/White Orange SLCW.png"
-            alt="SLCW Icon"
+            src={env.LOGO_FULL_PATH}
+            alt="App Logo"
             style={{
               width: "180px",
               height: "55px",

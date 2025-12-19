@@ -2,6 +2,7 @@ import { useState } from "react";
 import { Box, Typography, TextField, Button, Link, Alert } from "@mui/material";
 import { colors } from "../../design-system/tokens";
 import { authAPI } from "../services/api";
+import { env } from "../../config/env.js";
 
 export default function ForgotPassword() {
   const [email, setEmail] = useState("");
@@ -73,8 +74,8 @@ export default function ForgotPassword() {
           }}
         >
           <img
-            src="/White Orange SLCW.png"
-            alt="SLCW Icon"
+            src={env.LOGO_FULL_PATH}
+            alt="App Logo"
             style={{
               width: "180px",
               height: "55px",
