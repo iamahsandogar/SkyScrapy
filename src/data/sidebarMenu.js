@@ -1,15 +1,24 @@
-// src/design-system/navigation/menu.config.js
-// import { sidebarMenu } from "./sidebarMenu";
-
 export const sidebarMenu = [
-  { label: "Dashboard", icon: "Dashboard", path: "/dashboard" },
+  {
+    label: "Dashboard",
+    icon: "Dashboard",
+    path: "/dashboard",
+  },
 
   {
     label: "Leads",
     icon: "Group",
     children: [
-      { label: "All Leads", path: "/all-leads" },
-      { label: "Add Lead", path: "/create-lead" },
+      {
+        label: "All Leads",
+        icon: "ListAlt", // ✅ ADDED (was missing)
+        path: "/all-leads",
+      },
+      {
+        label: "Add Lead",
+        icon: "Add", // ➕ PLUS ICON
+        path: "/create-lead",
+      },
     ],
   },
 
@@ -25,12 +34,24 @@ export const sidebarMenu = [
     children: [
       {
         label: "Add Employee",
-        path: "/create-employee",
         icon: "PersonAdd",
+        path: "/create-employee",
       },
-      { label: "Manage Employee", path: "/management/manage-employees" },
-      { label: "Manage Lead Options", path: "/manage-e/mployees" },
-      { label: "Projects", path: "/management/projects" },
+      {
+        label: "Manage Employee",
+        icon: "People",
+        path: "/management/manage-employees",
+      },
+      {
+        label: "Manage Lead Options",
+        icon: "Tune",
+        path: "/management/manage-lead-options",
+      },
+      {
+        label: "Projects",
+        icon: "Work",
+        path: "/management/projects",
+      },
     ],
   },
 ];

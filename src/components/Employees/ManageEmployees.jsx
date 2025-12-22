@@ -29,7 +29,7 @@ const getActionButtonStyles = (action) => {
     case "deactivate":
       return {
         backgroundColor: colors.yellowAccent[800],
-        color: colors.grey[100],
+        color: colors.yellowAccent[400],
         border: `1px solid ${colors.yellowAccent[400]}`,
         "&:hover": {
           backgroundColor: colors.yellowAccent[700],
@@ -135,7 +135,14 @@ export default function ManageEmployees() {
                 <TableCell>
                   <Chip
                     label={emp.status}
-                    color={emp.status === "Active" ? "success" : "default"}
+                    sx={{
+                      backgroundColor:
+                        emp.status === "Active"
+                          ? colors.greenAccent[800]
+                          : colors.grey[500],
+                      color: colors.greenAccent[400],
+                      fontWeight: "bold",
+                    }}
                   />
                 </TableCell>
 

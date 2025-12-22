@@ -33,6 +33,7 @@ import { FaLinkedin } from "react-icons/fa";
 import VisibilityIcon from "@mui/icons-material/Visibility";
 import LeadDetailsModal from "../components/Leads/LeadDetailsModal";
 import MoreHorizIcon from "@mui/icons-material/MoreHoriz";
+import apiRequest from "../components/services/api";
 
 const getChipStyles = (status) => {
   switch (status) {
@@ -122,6 +123,28 @@ export default function AllLeads() {
 
   const actionOpen = Boolean(actionAnchorEl);
 
+  useEffect(() => {
+    const fetchLeads = async () => {
+      try {
+        // const data = await apiRequest("/api/leads/", { method: "GET" });
+        const data = await fetch(
+          "https://crm-leads-cwml.onrender.com//api/leads/",
+          { method: "GET" }
+        );
+        if (data && Array.isArray(data.leads)) {
+          setLeads(data.leads);
+        } else {
+          setLeads([]);
+        }
+      } catch (err) {
+        console.error("Failed to fetch leads:", err);
+        setLeads([]);
+      }
+    };
+
+    fetchLeads();
+  }, []);
+
   const handleActionMenuOpen = (event, lead) => {
     setActionAnchorEl(event.currentTarget);
     setMenuLead(lead);
@@ -144,10 +167,6 @@ export default function AllLeads() {
 
   const navigate = useNavigate();
 
-  useEffect(() => {
-    setLeads(JSON.parse(localStorage.getItem("leads")) || []);
-  }, []);
-
   const getEmployeeName = (assignedTo) => {
     if (!assignedTo || assignedTo === "None") return "None";
 
@@ -158,11 +177,15 @@ export default function AllLeads() {
     return emp ? `${emp.firstName} ${emp.lastName}` : "None";
   };
 
-  const handleDeleteLead = (id) => {
+  const handleDeleteLead = async (id) => {
     if (!confirm("Delete this lead?")) return;
-    const next = leads.filter((l) => String(l.id) !== String(id));
-    localStorage.setItem("leads", JSON.stringify(next));
-    setLeads(next);
+    try {
+      await apiRequest(`/api/leads/${id}`, { method: "DELETE" });
+      setLeads(leads.filter((l) => String(l.id) !== String(id)));
+    } catch (err) {
+      console.error("Failed to delete lead:", err);
+      alert("Failed to delete lead. Please try again.");
+    }
   };
 
   const handleExportLeadsCSV = () => {
@@ -187,31 +210,40 @@ export default function AllLeads() {
     URL.revokeObjectURL(url);
   };
 
-  const handleConvertToProject = (lead) => {
-    const newProject = {
-      id: Date.now(),
-      title: lead.title || `${lead.firstName} ${lead.lastName}`,
-      status: lead.status,
-      description: lead.description || "",
-      assignedTo: lead.assignedTo || "",
-      startDate: new Date().toISOString(),
-      endDate: "",
-    };
+  const handleConvertToProject = async (lead) => {
+    try {
+      // Only send fields your backend expects
+      const newProject = {
+        title: lead.title || `${lead.firstName} ${lead.lastName}`,
+        status: lead.status,
+        description: lead.description || "",
+        assignedTo: lead.assignedTo || null,
+        startDate: new Date().toISOString(),
+        endDate: null, // if backend expects it
+      };
 
-    const savedProjects = JSON.parse(localStorage.getItem("projects")) || [];
-    savedProjects.push(newProject);
-    localStorage.setItem("projects", JSON.stringify(savedProjects));
+      const projectResponse = await apiRequest("/api/projects/", {
+        method: "POST",
+        body: JSON.stringify(newProject),
+        headers: { "Content-Type": "application/json" },
+      });
 
-    const remainingLeads = leads.filter((l) => l.id !== lead.id);
-    localStorage.setItem("leads", JSON.stringify(remainingLeads));
-    setLeads(remainingLeads);
+      console.log("Project created:", projectResponse);
 
-    alert(
-      `Lead "${
-        lead.title || lead.firstName
-      }" converted to project successfully!`
-    );
-    navigate(`/management/projects`);
+      // Delete the lead after successful creation
+      await apiRequest(`/api/leads/${lead.id}/`, { method: "DELETE" });
+      setLeads(leads.filter((l) => l.id !== lead.id));
+
+      alert(
+        `Lead "${
+          lead.title || lead.firstName
+        }" converted to project successfully!`
+      );
+      navigate(`/management/projects`);
+    } catch (err) {
+      console.error("Failed to convert lead:", err);
+      alert("Failed to convert lead: " + err.message);
+    }
   };
 
   const handleOpenCustomize = (e) => setAnchorEl(e.currentTarget);

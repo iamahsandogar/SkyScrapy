@@ -1,61 +1,22 @@
-import React, { useState } from "react";
-import {
-  Box,
-  Typography,
-  Paper,
-  TextField,
-  Button,
-  IconButton,
-  InputAdornment,
-  Alert,
-} from "@mui/material";
-import { Link, useNavigate, useSearchParams } from "react-router-dom";
-import Visibility from "@mui/icons-material/Visibility";
-import VisibilityOff from "@mui/icons-material/VisibilityOff";
+import { useState } from "react";
+import { Box, Typography, TextField, Button, Link, Alert } from "@mui/material";
 import { authAPI } from "../services/api";
 
-export default function ResetPassword() {
-  const navigate = useNavigate();
-  const [searchParams] = useSearchParams();
-
-  const [showPassword, setShowPassword] = useState(false);
-  const [showConfirm, setShowConfirm] = useState(false);
+export default function ForgotPassword() {
+  const [email, setEmail] = useState("");
   const [loading, setLoading] = useState(false);
-  const [error, setError] = useState("");
   const [message, setMessage] = useState("");
-
-  const [passwords, setPasswords] = useState({
-    password: "",
-    confirmPassword: "",
-  });
+  const [error, setError] = useState("");
 
   const handleChange = (e) => {
-    setPasswords({ ...passwords, [e.target.name]: e.target.value });
+    setEmail(e.target.value);
+    setMessage("");
     setError("");
   };
 
-  const handleUpdate = async () => {
-    if (!passwords.password || !passwords.confirmPassword) {
-      setError("Please enter both password fields.");
-      return;
-    }
-
-    if (passwords.password !== passwords.confirmPassword) {
-      setError("Passwords do not match.");
-      return;
-    }
-
-    if (passwords.password.length < 8) {
-      setError("Password must be at least 8 characters long.");
-      return;
-    }
-
-    // Get uid and token from URL
-    const uid = searchParams.get("uid");
-    const token = searchParams.get("token");
-
-    if (!uid || !token) {
-      setError("Invalid reset link. Please request a new password reset.");
+  const handleSubmit = async () => {
+    if (!email) {
+      setError("Please enter your email");
       return;
     }
 
@@ -64,25 +25,13 @@ export default function ResetPassword() {
     setMessage("");
 
     try {
-      const response = await authAPI.passwordResetConfirm(
-        uid,
-        token,
-        passwords.password
+      const response = await authAPI.passwordResetRequest(email);
+      setMessage(
+        response.message ||
+          "If an account with this email exists, a password reset link has been sent."
       );
-
-      // User is now logged in (cookies are set automatically)
-      if (response.user) {
-        localStorage.setItem("user", JSON.stringify(response.user));
-        localStorage.setItem("isAuth", "true");
-        setMessage("Password reset successfully! Redirecting...");
-
-        // Navigate to dashboard after a short delay
-        setTimeout(() => {
-          navigate("/dashboard", { replace: true });
-        }, 1500);
-      }
     } catch (err) {
-      setError(err.message || "Failed to reset password. Please try again.");
+      setError(err.message || "Failed to send reset link. Please try again.");
     } finally {
       setLoading(false);
     }

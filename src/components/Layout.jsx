@@ -2,8 +2,15 @@ import { Box } from "@mui/material";
 import React from "react";
 import Sidebar from "./global/Sidebar";
 import { Outlet } from "react-router-dom";
-
+import { useState, useEffect } from "react";
 function Layout({ children }) {
+  const [user, setUser] = useState(null);
+
+  useEffect(() => {
+    const storedUser = localStorage.getItem("user");
+    if (storedUser) setUser(JSON.parse(storedUser));
+  }, []);
+
   return (
     <Box
       display={"flex"}
@@ -21,7 +28,7 @@ function Layout({ children }) {
           maxHeight: "100vh",
         }}
       >
-        <Sidebar />
+        <Sidebar user={user} />
       </Box>
       <Box
         sx={{

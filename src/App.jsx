@@ -13,6 +13,7 @@ import KanbanBoard from "./components/Kanban/KanbanBoard.jsx";
 import AllProjects from "./components/Projects/AllProjects.jsx";
 import AuthGuard from "./components/Auth/AuthGuard.jsx";
 import Login from "./components/Login/Login.jsx";
+import ManageLeadOptions from "./components/Leads/ManageLeadOptions.jsx";
 
 export default function App() {
   return (
@@ -37,6 +38,10 @@ export default function App() {
           <Route
             path="/management/manage-employees"
             element={<ManageEmployees />}
+          />
+          <Route
+            path="/management/manage-lead-options"
+            element={<ManageLeadOptions />}
           />
           <Route path="/reminders" element={<KanbanBoard />} />
           <Route path="/management/projects" element={<AllProjects />} />

@@ -115,14 +115,6 @@ export default function AllProjects() {
     return emp ? `${emp.firstName} ${emp.lastName}` : "None";
   };
 
-  // Delete lead
-  const handleDeleteLead = (id) => {
-    if (!confirm("Delete this lead?")) return;
-    const next = leads.filter((l) => String(l.id) !== String(id));
-    localStorage.setItem("leads", JSON.stringify(next));
-    setLeads(next);
-  };
-
   // Delete project
   const handleDeleteProject = (id) => {
     if (!confirm("Delete this project?")) return;
@@ -350,7 +342,7 @@ export default function AllProjects() {
             View
           </MenuItem>
 
-          <MenuItem
+          {/* <MenuItem
             onClick={() => {
               navigate(`/edit-project/${menuProject.id}`);
               handleMenuClose();
@@ -358,7 +350,7 @@ export default function AllProjects() {
           >
             <EditIcon fontSize="small" sx={{ mr: 1 }} />
             Edit
-          </MenuItem>
+          </MenuItem> */}
 
           <MenuItem
             onClick={() => {

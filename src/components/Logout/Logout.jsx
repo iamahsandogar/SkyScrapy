@@ -6,19 +6,14 @@ import { colors } from "../../design-system/tokens";
 import { authAPI } from "../../services/api"; // Add this import
 
 const LogoutButton = () => {
-  const navigate = useNavigate();
-
   const handleLogout = async () => {
     try {
       // Call logout API to clear cookies on backend
-      await authAPI.logout();
+      const response = await authAPI.logout();
+      console.log("Logout response:", response);
     } catch (error) {
       console.error("Logout error:", error);
       // Continue with logout even if API call fails
-    } finally {
-      // Clear local storage
-      localStorage.clear();
-      navigate("/login", { replace: true });
     }
   };
 

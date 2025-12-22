@@ -52,6 +52,7 @@ export default function CreateLead() {
   const navigate = useNavigate();
   const [employees, setEmployees] = useState([]);
   const [errors, setErrors] = useState({});
+  const [meta, setMeta] = useState({ status: [], source: [] });
 
   const [formData, setFormData] = useState({
     title: "",
@@ -70,6 +71,12 @@ export default function CreateLead() {
     linkedIn: "",
   });
 
+  const getLeadMeta = () =>
+    JSON.parse(localStorage.getItem("leadMeta")) || {
+      status: [],
+      source: [],
+    };
+
   const getLeads = (leadId = null) => {
     const allLeads = JSON.parse(localStorage.getItem("leads")) || [];
 
@@ -87,29 +94,21 @@ export default function CreateLead() {
 
   useEffect(() => {
     const savedEmployees = JSON.parse(localStorage.getItem("employees")) || [];
+    setEmployees(savedEmployees.filter((e) => e.status === "Active"));
 
-    // Optional: only active employees
-    const activeEmployees = savedEmployees.filter(
-      (emp) => emp.status === "Active"
-    );
+    setMeta(getLeadMeta());
 
-    setEmployees(activeEmployees);
-
-    setFormData((prev) => {
-      if (editId) {
-        const leadToEdit = getLeads(editId);
-        if (leadToEdit) {
-          return {
-            ...prev,
-            ...leadToEdit,
-            followUpAt: leadToEdit.followUpAt
-              ? dayjs(leadToEdit.followUpAt)
-              : null,
-          };
-        }
+    if (editId) {
+      const leadToEdit = getLeads(editId);
+      if (leadToEdit) {
+        setFormData({
+          ...leadToEdit,
+          followUpAt: leadToEdit.followUpAt
+            ? dayjs(leadToEdit.followUpAt)
+            : null,
+        });
       }
-      return prev;
-    });
+    }
   }, []);
 
   const getEmployeeName = (id) => {
@@ -229,13 +228,8 @@ export default function CreateLead() {
                   value={formData.status}
                   onChange={handleChange}
                 >
-                  {[
-                    "None",
-                    "Completed",
-                    "In Progress",
-                    "Pending",
-                    "Rejected",
-                  ].map((val) => (
+                  <MenuItem value="None">None</MenuItem>
+                  {meta.status.map((val) => (
                     <MenuItem key={val} value={val}>
                       {val}
                     </MenuItem>
@@ -254,7 +248,8 @@ export default function CreateLead() {
                   value={formData.source}
                   onChange={handleChange}
                 >
-                  {["None", "Website Form", "Email", "Phone"].map((val) => (
+                  <MenuItem value="None">None</MenuItem>
+                  {meta.source.map((val) => (
                     <MenuItem key={val} value={val}>
                       {val}
                     </MenuItem>

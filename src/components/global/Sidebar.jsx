@@ -3,7 +3,7 @@ import React from "react";
 import { colors } from "../../design-system/tokens";
 import SidebarMenu from "./SidebarMenu";
 
-function Sidebar() {
+function Sidebar({ user }) {
   return (
     <Box
       sx={{
@@ -15,7 +15,7 @@ function Sidebar() {
         border: `1px solid ${colors.grey[900]}`,
       }}
     >
-      <SidebarMenu />
+      <SidebarMenu user={user} />
     </Box>
   );
 }

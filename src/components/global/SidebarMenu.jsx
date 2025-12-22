@@ -11,20 +11,33 @@ import {
   IconButton,
   Typography,
 } from "@mui/material";
-
-import { colors } from "../../design-system/tokens/index";
+import { dividerClasses } from "@mui/material/Divider";
 
 import { useState } from "react";
 import * as Icons from "@mui/icons-material";
 import { sidebarMenu } from "../../data/sidebarMenu";
 import { useNavigate } from "react-router-dom";
-
-export default function SidebarMenu() {
+import { authAPI } from "../services/api";
+import { colors } from "../../design-system/tokens";
+export default function SidebarMenu({ user }) {
   const navigate = useNavigate();
   const [open, setOpen] = useState({});
 
   const toggle = (index) =>
     setOpen((prev) => ({ ...prev, [index]: !prev[index] }));
+
+  const handleLogout = async () => {
+    try {
+      const response = await authAPI.logout();
+      if (response) {
+        localStorage.removeItem("user");
+        localStorage.removeItem("isAuth");
+        navigate("/login", { replace: true });
+      }
+    } catch (error) {
+      console.error("Logout error:", error);
+    }
+  };
 
   return (
     <Box
@@ -32,13 +45,6 @@ export default function SidebarMenu() {
         p: 1,
         width: "100%",
         height: "100%",
-        // "& .MuiDrawer-paper": {
-        //   width: 240,
-        //   p: "8px",
-        //   border: `1px solid ${colors.grey[900]}`,
-        //   borderRadius: "12px",
-        //   margin: "8px",
-        // },
       }}
     >
       <List
@@ -50,6 +56,7 @@ export default function SidebarMenu() {
           rowGap: 2,
         }}
       >
+        {/* LOGO */}
         <Box
           sx={{
             display: "flex",
@@ -72,6 +79,7 @@ export default function SidebarMenu() {
           </Typography>
         </Box>
 
+        {/* SEARCH */}
         <Box>
           <Box
             sx={{
@@ -88,7 +96,7 @@ export default function SidebarMenu() {
             <InputBase placeholder="Search" />
           </Box>
         </Box>
-
+        {/* SIDEBAR MENU */}
         <Box sx={{ flexGrow: 1 }}>
           {sidebarMenu.map((item, index) => {
             if (item.type === "divider")
@@ -99,6 +107,7 @@ export default function SidebarMenu() {
 
             return (
               <div key={item.label}>
+                {/* PARENT ITEM */}
                 <ListItemButton
                   onClick={() => {
                     if (hasChildren) {
@@ -134,38 +143,42 @@ export default function SidebarMenu() {
                     ))}
                 </ListItemButton>
 
-                {/*============== CHILDREN =================*/}
+                {/* CHILDREN ITEMS */}
                 {hasChildren && (
                   <Collapse in={open[index]} timeout="auto" unmountOnExit>
                     <List component="div" disablePadding>
-                      {item.children.map((child) => (
-                        <ListItemButton
-                          key={child.label}
-                          onClick={() => navigate(child.path)}
-                          sx={{
-                            pl: 3,
-                            mt: 0.5,
+                      {item.children.map((child) => {
+                        // 🔴 CHANGED: Resolve child icon separately
+                        const ChildIcon = child.icon ? Icons[child.icon] : null;
 
-                            borderRadius: 1,
-                            "&:hover": { bgcolor: "action.hover" },
-                          }}
-                        >
-                          {Icon && (
-                            <ListItemIcon sx={{ minWidth: 36 }}>
-                              <Icon
-                                fontSize="small"
-                                color={item.danger ? "error" : "inherit"}
-                              />
-                            </ListItemIcon>
-                          )}
-                          <ListItemText
-                            primary={child.label}
+                        return (
+                          <ListItemButton
+                            key={child.label}
+                            onClick={() => navigate(child.path)}
                             sx={{
-                              "& .MuiListItemText-primary": { fontSize: 14 },
+                              pl: 3,
+                              mt: 0.5,
+                              borderRadius: 1,
+                              "&:hover": { bgcolor: "action.hover" },
                             }}
-                          />
-                        </ListItemButton>
-                      ))}
+                          >
+                            {ChildIcon && (
+                              <ListItemIcon sx={{ minWidth: 36 }}>
+                                <ChildIcon fontSize="small" />
+                              </ListItemIcon>
+                            )}
+
+                            <ListItemText
+                              primary={child.label}
+                              sx={{
+                                "& .MuiListItemText-primary": {
+                                  fontSize: 14,
+                                },
+                              }}
+                            />
+                          </ListItemButton>
+                        );
+                      })}
                     </List>
                   </Collapse>
                 )}
@@ -174,22 +187,41 @@ export default function SidebarMenu() {
           })}
         </Box>
 
+        {/* SETTINGS & LOGOUT */}
         <Box>
-          <ListItemButton>
-            <ListItemIcon sx={{ minWidth: 36 }}>
-              <Icons.Settings fontSize="small" />
-            </ListItemIcon>
-            <ListItemText primary="Settings" />
-          </ListItemButton>
-          <ListItemButton
-            sx={{ color: colors.redAccent[500] }}
-            onClick={() => {
-              // Clear auth token/session if any
-              localStorage.removeItem("authToken"); // optional
-              navigate("/login"); // navigate to Login screen
+          <Box
+            sx={{
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "center",
+              borderRadius: 2,
+              height: "40px",
+              color: colors.blueAccent[100],
+              px: 1,
             }}
           >
-            <ListItemIcon sx={{ minWidth: 36, color: colors.redAccent[500] }}>
+            <p
+              style={{
+                fontSize: "14px",
+                fontWeight: "500",
+                textAlign: "center",
+              }}
+            >
+              Logged In as {user ? user.name || user.email : "Guest"}
+            </p>
+          </Box>
+          <Box
+            sx={{
+              height: "1px",
+              backgroundImage:
+                "repeating-linear-gradient(to right, grey 0, grey 2px, transparent 2px, transparent 6px)",
+            }}
+          />
+          <ListItemButton
+            sx={{ color: colors.redAccent[500] }}
+            onClick={handleLogout}
+          >
+            <ListItemIcon sx={{ color: colors.redAccent[500] }}>
               <Icons.LogoutRounded fontSize="small" />
             </ListItemIcon>
             <ListItemText primary="Logout" />

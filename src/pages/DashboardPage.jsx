@@ -26,36 +26,6 @@ export default function Dashboard() {
 
         {/* Bell + Button + Graph */}
         <Box display="flex" alignItems="center" gap={1}>
-          <Box position="relative">
-            <Box
-              sx={{
-                width: 40,
-                height: 40,
-                borderRadius: "50%",
-                backgroundColor: "#F2F3F4",
-                display: "flex",
-                alignItems: "center",
-                justifyContent: "center",
-                cursor: "pointer",
-              }}
-            >
-              <NotificationsNoneIcon sx={{ fontSize: 22 }} />
-            </Box>
-
-            <Box
-              sx={{
-                width: 10,
-                height: 10,
-                borderRadius: "50%",
-                backgroundColor: "red",
-                position: "absolute",
-                top: 6,
-                right: 6,
-                border: "2px solid white",
-              }}
-            />
-          </Box>
-
           <Button
             variant="contained"
             startIcon={<AddIcon />}
@@ -68,21 +38,6 @@ export default function Dashboard() {
           >
             Add New Lead
           </Button>
-
-          <Box
-            sx={{
-              width: 40,
-              height: 40,
-              borderRadius: "50%",
-              backgroundColor: "#F2F3F4",
-              display: "flex",
-              alignItems: "center",
-              justifyContent: "center",
-              cursor: "pointer",
-            }}
-          >
-            <InsertChartOutlinedIcon sx={{ fontSize: 22 }} />
-          </Box>
         </Box>
       </Topbar>
       {/* Stat Cards - Full Row */}
