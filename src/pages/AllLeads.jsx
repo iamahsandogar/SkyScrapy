@@ -128,7 +128,7 @@ export default function AllLeads() {
       try {
         // const data = await apiRequest("/api/leads/", { method: "GET" });
         const data = await fetch(
-          "https://crm-leads-cwml.onrender.com//api/leads/",
+          "https://crm-leads-cwml.onrender.com/api/leads/",
           { method: "GET" }
         );
         if (data && Array.isArray(data.leads)) {
