@@ -12,6 +12,7 @@ import { useParams, useNavigate } from "react-router-dom";
 import { LocalizationProvider, DatePicker } from "@mui/x-date-pickers";
 import { AdapterDayjs } from "@mui/x-date-pickers/AdapterDayjs";
 import dayjs from "dayjs";
+import apiRequest from "../services/api";
 
 const MuiSelectPadding = {
   "& .MuiSelect-select": {
@@ -148,41 +149,51 @@ export default function CreateLead() {
     return true;
   };
 
-  const handleSubmit = () => {
-    // LinkedIn URL validation
+  const handleSubmit = async () => {
+    // LinkedIn validation
     const linkedInRegex =
       /^https:\/\/(www\.)?linkedin\.com\/(in|company)\/[A-Za-z0-9_-]+\/?$/i;
+
     if (formData.linkedIn && !linkedInRegex.test(formData.linkedIn)) {
       alert("Please enter a valid LinkedIn URL.");
       return;
     }
+
     if (!validateForm()) {
       alert("Please fill all required fields.");
       return;
     }
 
-    const allLeads = JSON.parse(localStorage.getItem("leads")) || [];
-    const formattedData = {
+    // Prepare payload
+    const payload = {
       ...formData,
       followUpAt: formData.followUpAt
         ? dayjs(formData.followUpAt).format("YYYY-MM-DD")
-        : "",
+        : null,
     };
 
-    if (editId) {
-      // Update existing lead
-      const updatedLeads = allLeads.map((l) =>
-        String(l.id) === String(editId) ? { ...formattedData, id: editId } : l
-      );
-      localStorage.setItem("leads", JSON.stringify(updatedLeads));
-      alert("Lead updated successfully!");
-    } else {
-      // Create new lead
-      const newLead = { ...formattedData, id: Date.now() };
-      localStorage.setItem("leads", JSON.stringify([...allLeads, newLead]));
-      alert("Lead created successfully!");
+    try {
+      if (editId) {
+        // 🔁 UPDATE LEAD
+        await apiRequest(`/api/leads/${editId}/`, {
+          method: "PUT",
+          body: JSON.stringify(payload),
+        });
+        alert("Lead updated successfully!");
+      } else {
+        // ➕ CREATE LEAD
+        await apiRequest("/api/leads/", {
+          method: "POST",
+          body: JSON.stringify(payload),
+        });
+        alert("Lead created successfully!");
+      }
+
+      navigate("/all-leads");
+    } catch (error) {
+      console.error("Submit Lead Error:", error);
+      alert(error.message || "Failed to submit lead");
     }
-    navigate("/all-leads");
   };
 
   const RequiredLabel = ({ text }) => (

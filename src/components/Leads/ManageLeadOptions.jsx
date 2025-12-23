@@ -11,44 +11,78 @@ import DeleteIcon from "@mui/icons-material/Delete";
 import SaveIcon from "@mui/icons-material/Save";
 import CloseIcon from "@mui/icons-material/Close";
 import { useEffect, useState } from "react";
+import apiRequest from "../services/api";
 
-const STORAGE_KEY = "leadMeta";
+export default function ManageLeadOptions() {
+  const [data, setData] = useState({
+    status: [],
+    source: [],
+  });
 
-const defaultData = {
-  status: ["Completed", "In Progress", "Pending", "Rejected"],
-  source: ["Website Form", "Email", "Phone"],
-};
-
-export default function LeadMetaManager() {
-  const [data, setData] = useState(defaultData);
   const [type, setType] = useState("status");
   const [newValue, setNewValue] = useState("");
   const [editIndex, setEditIndex] = useState(null);
   const [editValue, setEditValue] = useState("");
+  const [loading, setLoading] = useState(false);
 
+  /* ------------------------------------
+     FETCH STATUS & SOURCE FROM BACKEND
+  -------------------------------------*/
   useEffect(() => {
-    const saved = JSON.parse(localStorage.getItem(STORAGE_KEY));
-    if (!saved) {
-      localStorage.setItem(STORAGE_KEY, JSON.stringify(defaultData));
-    } else {
-      setData(saved);
-    }
+    fetchOptions();
   }, []);
 
-  const save = (updated) => {
-    setData(updated);
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(updated));
+  const fetchOptions = async () => {
+    try {
+      setLoading(true);
+
+      const [statuses, sources] = await Promise.all([
+        apiRequest("/ui/options/statuses/"),
+        apiRequest("/ui/options/sources/"),
+      ]);
+
+      setData({
+        status: statuses?.statuses || [],
+        source: sources?.sources || [],
+      });
+    } catch (error) {
+      console.error("Failed to load options", error);
+      alert("Failed to load lead options");
+    } finally {
+      setLoading(false);
+    }
   };
 
-  const addItem = () => {
+  /* ------------------------------------
+     ADD STATUS / SOURCE
+  -------------------------------------*/
+  const addItem = async () => {
     if (!newValue.trim()) return;
-    save({
-      ...data,
-      [type]: [...data[type], newValue.trim()],
-    });
-    setNewValue("");
+
+    try {
+      const endpoint =
+        type === "status"
+          ? "/ui/options/statuses/create/"
+          : "/ui/options/sources/create/";
+
+      await apiRequest(endpoint, {
+        method: "POST",
+        body: JSON.stringify({
+          name: newValue.trim(),
+        }),
+      });
+
+      setNewValue("");
+      fetchOptions(); // refresh list
+    } catch (error) {
+      console.error("Add failed", error);
+      alert(error.message || "Failed to add");
+    }
   };
 
+  /* ------------------------------------
+     EDIT / DELETE (DISABLED - NO API)
+  -------------------------------------*/
   const startEdit = (index, value) => {
     setEditIndex(index);
     setEditValue(value);
@@ -59,25 +93,16 @@ export default function LeadMetaManager() {
     setEditValue("");
   };
 
-  const saveEdit = () => {
-    const updated = [...data[type]];
-    updated[editIndex] = editValue.trim();
-    save({ ...data, [type]: updated });
-    cancelEdit();
-  };
-
-  const deleteItem = (index) => {
-    const updated = data[type].filter((_, i) => i !== index);
-    save({ ...data, [type]: updated });
-  };
-
+  /* ------------------------------------
+     UI
+  -------------------------------------*/
   return (
     <Paper sx={{ p: 3, borderRadius: 3 }}>
       <Typography variant="h6" fontWeight="bold" mb={2}>
         Lead Status & Source Settings
       </Typography>
 
-      {/* Switch */}
+      {/* SWITCH */}
       <Box display="flex" gap={2} mb={2}>
         <Button
           variant={type === "status" ? "contained" : "outlined"}
@@ -99,7 +124,7 @@ export default function LeadMetaManager() {
         </Button>
       </Box>
 
-      {/* Add */}
+      {/* ADD */}
       <Box display="flex" gap={2} mb={3}>
         <TextField
           fullWidth
@@ -112,37 +137,23 @@ export default function LeadMetaManager() {
         </Button>
       </Box>
 
-      {/* List */}
+      {/* LOADING */}
+      {loading && <Typography color="text.secondary">Loading...</Typography>}
+
+      {/* LIST */}
       {data[type].map((item, index) => (
         <Box key={index} display="flex" alignItems="center" gap={2} mb={1}>
-          {editIndex === index ? (
-            <>
-              <TextField
-                fullWidth
-                value={editValue}
-                onChange={(e) => setEditValue(e.target.value)}
-              />
-              <IconButton color="success" onClick={saveEdit}>
-                <SaveIcon />
-              </IconButton>
-              <IconButton color="warning" onClick={cancelEdit}>
-                <CloseIcon />
-              </IconButton>
-            </>
-          ) : (
-            <>
-              <Typography flex={1}>{item}</Typography>
-              <IconButton
-                color="primary"
-                onClick={() => startEdit(index, item)}
-              >
-                <EditIcon />
-              </IconButton>
-              <IconButton color="error" onClick={() => deleteItem(index)}>
-                <DeleteIcon />
-              </IconButton>
-            </>
-          )}
+          <Typography flex={1}>
+            {typeof item === "string" ? item : item.name}
+          </Typography>
+
+          {/* Disabled until backend supports update/delete */}
+          <IconButton disabled>
+            <EditIcon />
+          </IconButton>
+          <IconButton disabled>
+            <DeleteIcon />
+          </IconButton>
         </Box>
       ))}
     </Paper>
