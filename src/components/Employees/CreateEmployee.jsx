@@ -11,6 +11,8 @@ import { useState } from "react";
 import Visibility from "@mui/icons-material/Visibility";
 import VisibilityOff from "@mui/icons-material/VisibilityOff";
 import Topbar from "../global/Topbar";
+import apiRequest from "../services/api";
+import { useNavigate } from "react-router-dom";
 const MuiTextFieldPadding = {
   "& .MuiOutlinedInput-root": {
     padding: 0,
@@ -23,6 +25,8 @@ const MuiTextFieldPadding = {
 
 export default function CreateEmployee() {
   const [showPassword, setShowPassword] = useState(false);
+  const [loading, setLoading] = useState(false);
+  const navigate = useNavigate();
 
   const [formData, setFormData] = useState({
     first_name: "",
@@ -33,49 +37,58 @@ export default function CreateEmployee() {
     alternate_phone: "",
   });
 
-  const getEmployees = () =>
-    JSON.parse(localStorage.getItem("employees")) || [];
-
-  const saveEmployees = (data) =>
-    localStorage.setItem("employees", JSON.stringify(data));
-
   const handleChange = (e) => {
     setFormData({ ...formData, [e.target.name]: e.target.value });
   };
 
-  const handleSubmit = () => {
+  const handleSubmit = async () => {
     if (
       !formData.first_name ||
       !formData.last_name ||
       !formData.email ||
-      !formData.password ||
-      !formData.phone ||
-      !formData.alternate_phone
-    ) {
+      !formData.password) {
       alert("Please fill all required fields");
       return;
     }
 
-    const employees = getEmployees();
+    try {
+      setLoading(true);
 
-    const newEmployee = {
-      id: Date.now(),
-      ...formData,
-      status: "Active",
-    };
+      // Prepare payload - only send fields that have values
+      const payload = {
+        first_name: formData.first_name.trim(),
+        last_name: formData.last_name.trim(),
+        email: formData.email.trim(),
+        password: formData.password,
+        ...(formData.phone && { phone: formData.phone.trim() }),
+        ...(formData.alternate_phone && { alternate_phone: formData.alternate_phone.trim() }),
+      };
 
-    saveEmployees([...employees, newEmployee]);
+      await apiRequest("/api/common/users/create-employee/", {
+        method: "POST",
+        body: JSON.stringify(payload),
+      });
 
-    alert("Employee Created Successfully");
+      alert("Employee Created Successfully");
 
-    setFormData({
-      first_name: "",
-      last_name: "",
-      email: "",
-      password: "",
-      phone: "",
-      alternate_phone: "",
-    });
+      // Reset form
+      setFormData({
+        first_name: "",
+        last_name: "",
+        email: "",
+        password: "",
+        phone: "",
+        alternate_phone: "",
+      });
+
+      // Optionally navigate to employees list
+      // navigate("/management/employees");
+    } catch (error) {
+      console.error("Failed to create employee", error);
+      alert(error.message || "Failed to create employee. Please try again.");
+    } finally {
+      setLoading(false);
+    }
   };
 
   const RequiredLabel = ({ text }) => (
@@ -100,7 +113,7 @@ export default function CreateEmployee() {
               <TextField
                 sx={MuiTextFieldPadding}
                 fullWidth
-                name="firstName"
+                name="first_name"
                 value={formData.first_name}
                 onChange={handleChange}
                 placeholder="Enter first name"
@@ -112,7 +125,7 @@ export default function CreateEmployee() {
               <TextField
                 sx={MuiTextFieldPadding}
                 fullWidth
-                name="lastName"
+                name="last_name"
                 value={formData.last_name}
                 onChange={handleChange}
                 placeholder="Enter last name"
@@ -160,7 +173,7 @@ export default function CreateEmployee() {
 
           <Box display="flex" gap={2}>
             <Box flex={1}>
-              <Typography variant="body2" sx={{ mb: 0.5, fontWeight: "bold" }}>
+              <Typography fontWeight="bold" sx={{ mb: 0.5 }}>
                 Phone
               </Typography>
               <TextField
@@ -174,7 +187,7 @@ export default function CreateEmployee() {
             </Box>
 
             <Box flex={1}>
-            <Typography variant="body2" sx={{ mb: 0.5, fontWeight: "bold" }}>
+              <Typography fontWeight="bold" sx={{ mb: 0.5 }}>
                 Alternate Phone
               </Typography>
               <TextField
@@ -192,8 +205,9 @@ export default function CreateEmployee() {
             variant="contained"
             sx={{ width: "fit-content", mt: 2 }}
             onClick={handleSubmit}
+            disabled={loading}
           >
-            Add Employee
+            {loading ? "Creating..." : "Add Employee"}
           </Button>
         </Box>
       </Paper>

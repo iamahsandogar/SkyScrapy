@@ -196,9 +196,12 @@ export default function ManageEmployees() {
                       sx={{
                         backgroundColor:
                           (emp.status === "Active" || emp.is_active)
-                            ? colors.greenAccent[800]
-                            : colors.grey[500],
-                        color: colors.greenAccent[400],
+                            ? colors.greenAccent[900]
+                            : colors.grey[900],
+                            color:
+                            (emp.status === "Active" || emp.is_active)
+                              ? colors.greenAccent[500]
+                              : colors.grey[500],
                         fontWeight: "bold",
                       }}
                     />
@@ -218,6 +221,7 @@ export default function ManageEmployees() {
                           textTransform: "none",
                           fontWeight: "bold",
                           borderRadius: 1,
+                          boxShadow: "none",
                         }}
                       >
                         {(emp.status === "Active" || emp.is_active) ? "Deactivate" : "Activate"}
@@ -233,6 +237,7 @@ export default function ManageEmployees() {
                           textTransform: "none",
                           fontWeight: "bold",
                           borderRadius: 1,
+                          boxShadow: "none",
                         }}
                       >
                         Delete
