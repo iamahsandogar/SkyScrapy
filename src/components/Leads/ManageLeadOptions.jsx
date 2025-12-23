@@ -81,7 +81,41 @@ export default function ManageLeadOptions() {
   };
 
   /* ------------------------------------
-     EDIT / DELETE (DISABLED - NO API)
+     DELETE STATUS / SOURCE
+  -------------------------------------*/
+  const deleteItem = async (item) => {
+    // Get the primary key from the item
+    const pk = typeof item === "object" ? (item.id || item.pk) : null;
+    
+    if (!pk) {
+      alert("Cannot delete: Item missing ID");
+      return;
+    }
+
+    // Confirm deletion
+    if (!window.confirm(`Are you sure you want to delete "${typeof item === "string" ? item : item.name}"?`)) {
+      return;
+    }
+
+    try {
+      const endpoint =
+        type === "status"
+          ? `/ui/options/statuses/${pk}/delete/`
+          : `/ui/options/sources/${pk}/delete/`;
+
+      await apiRequest(endpoint, {
+        method: "POST",
+      });
+
+      fetchOptions(); // refresh list
+    } catch (error) {
+      console.error("Delete failed", error);
+      alert(error.message || "Failed to delete");
+    }
+  };
+
+  /* ------------------------------------
+     EDIT (DISABLED - NO API)
   -------------------------------------*/
   const startEdit = (index, value) => {
     setEditIndex(index);
@@ -147,11 +181,11 @@ export default function ManageLeadOptions() {
             {typeof item === "string" ? item : item.name}
           </Typography>
 
-          {/* Disabled until backend supports update/delete */}
-          <IconButton disabled>
-            <EditIcon />
-          </IconButton>
-          <IconButton disabled>
+          <IconButton 
+            onClick={() => deleteItem(item)}
+            color="error"
+            disabled={loading}
+          >
             <DeleteIcon />
           </IconButton>
         </Box>
