@@ -126,18 +126,18 @@ export default function AllLeads() {
   useEffect(() => {
     const fetchLeads = async () => {
       try {
-        // const data = await apiRequest("/api/leads/", { method: "GET" });
-        const data = await fetch(
-          "https://crm-leads-cwml.onrender.com/api/leads/",
-          { method: "GET", credentials: "include" }
-        );
+        const data = await apiRequest("/api/leads/");
+        // Handle different response formats
         if (data && Array.isArray(data.leads)) {
           setLeads(data.leads);
+        } else if (data && Array.isArray(data)) {
+          setLeads(data);
         } else {
           setLeads([]);
         }
       } catch (err) {
         console.error("Failed to fetch leads:", err);
+        alert("Failed to load leads");
         setLeads([]);
       }
     };

@@ -25,10 +25,12 @@ export default function CreateEmployee() {
   const [showPassword, setShowPassword] = useState(false);
 
   const [formData, setFormData] = useState({
-    firstName: "",
-    lastName: "",
+    first_name: "",
+    last_name: "",
     email: "",
     password: "",
+    phone: "",
+    alternate_phone: "",
   });
 
   const getEmployees = () =>
@@ -43,10 +45,12 @@ export default function CreateEmployee() {
 
   const handleSubmit = () => {
     if (
-      !formData.firstName ||
-      !formData.lastName ||
+      !formData.first_name ||
+      !formData.last_name ||
       !formData.email ||
-      !formData.password
+      !formData.password ||
+      !formData.phone ||
+      !formData.alternate_phone
     ) {
       alert("Please fill all required fields");
       return;
@@ -65,10 +69,12 @@ export default function CreateEmployee() {
     alert("Employee Created Successfully");
 
     setFormData({
-      firstName: "",
-      lastName: "",
+      first_name: "",
+      last_name: "",
       email: "",
       password: "",
+      phone: "",
+      alternate_phone: "",
     });
   };
 
@@ -95,7 +101,7 @@ export default function CreateEmployee() {
                 sx={MuiTextFieldPadding}
                 fullWidth
                 name="firstName"
-                value={formData.firstName}
+                value={formData.first_name}
                 onChange={handleChange}
                 placeholder="Enter first name"
               />
@@ -107,7 +113,7 @@ export default function CreateEmployee() {
                 sx={MuiTextFieldPadding}
                 fullWidth
                 name="lastName"
-                value={formData.lastName}
+                value={formData.last_name}
                 onChange={handleChange}
                 placeholder="Enter last name"
               />
@@ -148,6 +154,36 @@ export default function CreateEmployee() {
                     </InputAdornment>
                   ),
                 }}
+              />
+            </Box>
+          </Box>
+
+          <Box display="flex" gap={2}>
+            <Box flex={1}>
+              <Typography variant="body2" sx={{ mb: 0.5, fontWeight: "bold" }}>
+                Phone
+              </Typography>
+              <TextField
+                sx={MuiTextFieldPadding}
+                fullWidth
+                name="phone"
+                value={formData.phone}
+                onChange={handleChange}
+                placeholder="Enter phone no"
+              />
+            </Box>
+
+            <Box flex={1}>
+            <Typography variant="body2" sx={{ mb: 0.5, fontWeight: "bold" }}>
+                Alternate Phone
+              </Typography>
+              <TextField
+                sx={MuiTextFieldPadding}
+                fullWidth
+                name="alternate_phone"
+                value={formData.alternate_phone}
+                onChange={handleChange}
+                placeholder="Enter alternative phone no"
               />
             </Box>
           </Box>
