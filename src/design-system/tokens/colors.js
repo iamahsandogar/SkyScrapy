@@ -128,7 +128,7 @@ export const tokens = (mode = "light") =>
           400: "#535ac8",
           500: "#264fc9",
           600: "#868dfb",
-          700: "#a4a9fc",
+          700: "#1F69FF",
           800: "#c3c6fd",
           900: "#e1e2fe",
         },
