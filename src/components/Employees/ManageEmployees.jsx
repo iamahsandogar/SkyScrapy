@@ -104,7 +104,7 @@ export default function ManageEmployees() {
       <Paper sx={{ p: 2, borderRadius: 3, mt: 2 }}>
         <Table>
           <TableHead>
-            <TableRow sx={{ backgroundColor: "#dbeafe" }}>
+            <TableRow sx={{}}>
               <TableCell>
                 <b>Employee Details</b>
               </TableCell>
