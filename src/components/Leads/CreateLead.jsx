@@ -72,24 +72,33 @@ export default function CreateLead() {
   });
 
   /* ------------------------------------
-     FETCH STATUS & SOURCE FROM BACKEND
+     FETCH ALL DATA FROM BACKEND (STATUS, SOURCE, EMPLOYEES)
   -------------------------------------*/
-  const fetchLeadOptions = async () => {
+  const fetchAllData = async () => {
     try {
       setLoadingMeta(true);
-      const [statuses, sources] = await Promise.all([
+      
+      // Fetch all three APIs in parallel for better performance
+      const [statusesResponse, sourcesResponse, employeesResponse] = await Promise.all([
         apiRequest("/ui/options/statuses/"),
         apiRequest("/ui/options/sources/"),
+        apiRequest("/ui/employees/"),
       ]);
 
+      // Set status and source
       setMeta({
-        status: statuses?.statuses || [],
-        source: sources?.sources || [],
+        status: statusesResponse?.statuses || [],
+        source: sourcesResponse?.sources || [],
       });
+
+      // Set employees (filter active ones)
+      const employeesList = employeesResponse?.employees || employeesResponse || [];
+      setEmployees(employeesList.filter((e) => e.status === "Active" || e.is_active));
     } catch (error) {
-      console.error("Failed to load lead options", error);
+      console.error("Failed to load data", error);
       // Set empty arrays on error to prevent crashes
       setMeta({ status: [], source: [] });
+      setEmployees([]);
     } finally {
       setLoadingMeta(false);
     }
@@ -121,20 +130,8 @@ export default function CreateLead() {
       }
     }
 
-    // Fetch employees from API
-    const fetchEmployees = async () => {
-      try {
-        const data = await apiRequest("/ui/employees/");
-        const employeesList = data?.employees || data || [];
-        setEmployees(employeesList.filter((e) => e.status === "Active" || e.is_active));
-      } catch (error) {
-        console.error("Failed to load employees", error);
-        setEmployees([]);
-      }
-    };
-
-    fetchEmployees();
-    fetchLeadOptions();
+    // Load all data (status, source, employees) when page opens
+    fetchAllData();
 
     if (editId) {
       // Fetch lead data from API for editing
