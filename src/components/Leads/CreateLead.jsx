@@ -367,6 +367,7 @@ export default function CreateLead() {
               <Box flex={1} minWidth={200}>
                 <RequiredLabel text="Assigned To" />
                 <TextField
+                disabled={!isAdmin}
                   select
                   fullWidth
                   name="assigned_to"
