@@ -54,6 +54,7 @@ export default function CreateLead() {
   const [employees, setEmployees] = useState([]);
   const [errors, setErrors] = useState({});
   const [meta, setMeta] = useState({ status: [], source: [] });
+  const [loadingMeta, setLoadingMeta] = useState(false);
 
   const [formData, setFormData] = useState({
     title: "",
@@ -72,51 +73,67 @@ export default function CreateLead() {
     linkedIn: "",
   });
 
-  const getLeadMeta = () =>
-    JSON.parse(localStorage.getItem("leadMeta")) || {
-      status: [],
-      source: [],
-    };
+  /* ------------------------------------
+     FETCH STATUS & SOURCE FROM BACKEND
+  -------------------------------------*/
+  const fetchLeadOptions = async () => {
+    try {
+      setLoadingMeta(true);
+      const [statuses, sources] = await Promise.all([
+        apiRequest("/ui/options/statuses/"),
+        apiRequest("/ui/options/sources/"),
+      ]);
 
-  const getLeads = (leadId = null) => {
-    const allLeads = JSON.parse(localStorage.getItem("leads")) || [];
-
-    if (leadId) {
-      // Return the single lead to edit
-      return allLeads.find((l) => String(l.id) === String(leadId));
+      setMeta({
+        status: statuses?.statuses || [],
+        source: sources?.sources || [],
+      });
+    } catch (error) {
+      console.error("Failed to load lead options", error);
+      // Set empty arrays on error to prevent crashes
+      setMeta({ status: [], source: [] });
+    } finally {
+      setLoadingMeta(false);
     }
-
-    // Return all leads
-    return allLeads;
   };
-
-  const saveLeads = (data) =>
-    localStorage.setItem("leads", JSON.stringify(data));
 
   useEffect(() => {
-    const savedEmployees = JSON.parse(localStorage.getItem("employees")) || [];
-    setEmployees(savedEmployees.filter((e) => e.status === "Active"));
+    // Fetch employees from API
+    const fetchEmployees = async () => {
+      try {
+        const data = await apiRequest("/ui/employees/");
+        const employeesList = data?.employees || data || [];
+        setEmployees(employeesList.filter((e) => e.status === "Active" || e.is_active));
+      } catch (error) {
+        console.error("Failed to load employees", error);
+        setEmployees([]);
+      }
+    };
 
-    setMeta(getLeadMeta());
+    fetchEmployees();
+    fetchLeadOptions();
 
     if (editId) {
-      const leadToEdit = getLeads(editId);
-      if (leadToEdit) {
-        setFormData({
-          ...leadToEdit,
-          followUpAt: leadToEdit.followUpAt
-            ? dayjs(leadToEdit.followUpAt)
-            : null,
-        });
-      }
+      // Fetch lead data from API for editing
+      const fetchLead = async () => {
+        try {
+          const leadToEdit = await apiRequest(`/api/leads/${editId}/`);
+          if (leadToEdit) {
+            setFormData({
+              ...leadToEdit,
+              followUpAt: leadToEdit.followUpAt
+                ? dayjs(leadToEdit.followUpAt)
+                : null,
+            });
+          }
+        } catch (error) {
+          console.error("Failed to load lead", error);
+          alert("Failed to load lead data");
+        }
+      };
+      fetchLead();
     }
-  }, []);
-
-  const getEmployeeName = (id) => {
-    const employees = JSON.parse(localStorage.getItem("employees")) || [];
-    const emp = employees.find((e) => e.id === id);
-    return emp ? `${emp.firstName} ${emp.lastName}` : "-";
-  };
+  }, [editId]);
 
   const handleChange = (e) => {
     setFormData({ ...formData, [e.target.name]: e.target.value });
@@ -238,13 +255,18 @@ export default function CreateLead() {
                   name="status"
                   value={formData.status}
                   onChange={handleChange}
+                  disabled={loadingMeta}
                 >
                   <MenuItem value="None">None</MenuItem>
-                  {meta.status.map((val) => (
-                    <MenuItem key={val} value={val}>
-                      {val}
-                    </MenuItem>
-                  ))}
+                  {meta.status.map((item, index) => {
+                    const value = typeof item === "string" ? item : item.name;
+                    const key = typeof item === "object" && item.id ? item.id : index;
+                    return (
+                      <MenuItem key={key} value={value}>
+                        {value}
+                      </MenuItem>
+                    );
+                  })}
                 </TextField>
               </Box>
               <Box flex={1} minWidth={200}>
@@ -258,13 +280,18 @@ export default function CreateLead() {
                   name="source"
                   value={formData.source}
                   onChange={handleChange}
+                  disabled={loadingMeta}
                 >
                   <MenuItem value="None">None</MenuItem>
-                  {meta.source.map((val) => (
-                    <MenuItem key={val} value={val}>
-                      {val}
-                    </MenuItem>
-                  ))}
+                  {meta.source.map((item, index) => {
+                    const value = typeof item === "string" ? item : item.name;
+                    const key = typeof item === "object" && item.id ? item.id : index;
+                    return (
+                      <MenuItem key={key} value={value}>
+                        {value}
+                      </MenuItem>
+                    );
+                  })}
                 </TextField>
               </Box>
             </Box>
@@ -333,11 +360,17 @@ export default function CreateLead() {
                   value={formData.assignedTo}
                   onChange={handleChange}
                 >
-                  {employees.map((emp) => (
-                    <MenuItem key={emp.id} value={emp.id}>
-                      {emp.firstName} {emp.lastName}
-                    </MenuItem>
-                  ))}
+                  <MenuItem value="None">None</MenuItem>
+                  {employees.map((emp) => {
+                    const empId = emp.id || emp.pk || emp.uuid;
+                    const firstName = emp.firstName || emp.first_name || "";
+                    const lastName = emp.lastName || emp.last_name || "";
+                    return (
+                      <MenuItem key={empId} value={empId}>
+                        {firstName} {lastName}
+                      </MenuItem>
+                    );
+                  })}
                 </TextField>
               </Box>
             </Box>
