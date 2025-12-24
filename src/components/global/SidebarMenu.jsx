@@ -53,7 +53,7 @@ export default function SidebarMenu({ user }) {
           flexDirection: "column",
           height: "100%",
           color: colors.grey[100],
-          rowGap: 2,
+          rowGap: 1,
           overflow: "hidden",
         }}
       >
@@ -89,17 +89,20 @@ export default function SidebarMenu({ user }) {
             overflowY: "auto",
             overflowX: "hidden",
             minHeight: 0,
+            display: "flex",
+            flexDirection: "column",
+            gap: 0.5,
           }}
         >
           {sidebarMenu.map((item, index) => {
             if (item.type === "divider")
-              return <Divider key={index} sx={{ my: 1 }} />;
+              return <Divider key={index} sx={{ my: 0.5 }} />;
 
             const Icon = item.icon ? Icons[item.icon] : null;
             const hasChildren = Boolean(item.children);
 
             return (
-              <div key={item.label}>
+              <Box key={item.label} sx={{ display: "flex", flexDirection: "column" }}>
                 {/* PARENT ITEM */}
                 <ListItemButton
                   onClick={() => {
@@ -111,10 +114,12 @@ export default function SidebarMenu({ user }) {
                   }}
                   sx={{
                     pl: 1,
+                    py: 0.75,
                     borderRadius: 1,
                     "&:hover": { bgcolor: "action.hover" },
                     display: "flex",
                     gap: 1,
+                    minHeight: 40,
                   }}
                 >
                   {Icon && (
@@ -126,7 +131,14 @@ export default function SidebarMenu({ user }) {
                     </ListItemIcon>
                   )}
 
-                  <ListItemText primary={item.label} />
+                  <ListItemText 
+                    primary={item.label}
+                    sx={{
+                      "& .MuiListItemText-primary": {
+                        fontSize: "14px",
+                      },
+                    }}
+                  />
 
                   {hasChildren &&
                     (open[index] ? (
@@ -139,9 +151,8 @@ export default function SidebarMenu({ user }) {
                 {/* CHILDREN ITEMS */}
                 {hasChildren && (
                   <Collapse in={open[index]} timeout="auto" unmountOnExit>
-                    <List component="div" disablePadding>
+                    <List component="div" disablePadding sx={{ py: 0.5 }}>
                       {item.children.map((child) => {
-                        // 🔴 CHANGED: Resolve child icon separately
                         const ChildIcon = child.icon ? Icons[child.icon] : null;
 
                         return (
@@ -150,9 +161,10 @@ export default function SidebarMenu({ user }) {
                             onClick={() => navigate(child.path)}
                             sx={{
                               pl: 3,
-                              mt: 0.5,
+                              py: 0.5,
                               borderRadius: 1,
                               "&:hover": { bgcolor: "action.hover" },
+                              minHeight: 36,
                             }}
                           >
                             {ChildIcon && (
@@ -165,7 +177,7 @@ export default function SidebarMenu({ user }) {
                               primary={child.label}
                               sx={{
                                 "& .MuiListItemText-primary": {
-                                  fontSize: 14,
+                                  fontSize: 13,
                                 },
                               }}
                             />
@@ -175,7 +187,7 @@ export default function SidebarMenu({ user }) {
                     </List>
                   </Collapse>
                 )}
-              </div>
+              </Box>
             );
           })}
         </Box>
