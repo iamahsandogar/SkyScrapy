@@ -98,25 +98,7 @@ export default function SidebarMenu({ user, collapsed, setCollapsed }) {
           )}
         </Box>
 
-        {/* SEARCH */}
-        {!collapsed && (
-          <Box>
-            <Box
-              sx={{
-                display: "flex",
-                alignItems: "center",
-                gap: 1,
-                border: `1px solid ${colors.grey[700]}`,
-                borderRadius: 10,
-              }}
-            >
-              <IconButton>
-                <Icons.SearchRounded />
-              </IconButton>
-              <InputBase placeholder="Search" />
-            </Box>
-          </Box>
-        )}
+        
         {/* SIDEBAR MENU */}
         <Box sx={{ flexGrow: 1 }}>
           {sidebarMenu.map((item, index) => {
