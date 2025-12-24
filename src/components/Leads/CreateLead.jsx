@@ -120,11 +120,11 @@ export default function CreateLead() {
         userData.role === "0";
       setIsAdmin(admin);
 
-      // Set default assigned_to to current user (both admin and employee can change it)
-      if (!editId) {
+      // If employee (not admin), auto-assign to themselves when creating new lead
+      if (!admin && !editId) {
         const userId = userData.id || userData.pk || userData.uuid;
         if (userId) {
-          // Set the assigned_to to the current user's ID as default (can be changed)
+          // Set the assigned_to to the employee's own ID
           setFormData((prev) => ({ ...prev, assigned_to: userId }));
         }
       }
