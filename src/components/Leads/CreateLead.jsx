@@ -307,9 +307,7 @@ export default function CreateLead() {
                   disabled={loadingMeta}
                   displayEmpty
                 >
-                  <MenuItem value="" disabled>
-                    <em>Select Status</em>
-                  </MenuItem>
+                 
                   {meta.status.map((item, index) => {
                     const statusId = typeof item === "object" ? (item.id || item.pk) : null;
                     const statusName = typeof item === "string" ? item : item.name;
