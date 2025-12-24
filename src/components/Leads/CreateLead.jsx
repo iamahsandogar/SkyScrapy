@@ -15,8 +15,12 @@ import dayjs from "dayjs";
 import apiRequest from "../services/api";
 
 const MuiSelectPadding = {
+  "& .MuiOutlinedInput-root": {
+    padding: 0,
+  },
   "& .MuiSelect-select": {
     padding: "7px",
+    height: "auto",
   },
   "& .MuiPickersSectionList-sectionContent": {
     padding: "7px",
@@ -363,11 +367,11 @@ export default function CreateLead() {
             </Box>
 
             {/* ROW 2 */}
-            <Box display="flex" gap={2} flexWrap="wrap">
+            <Box display="flex" gap={2}  flexWrap="wrap">
               <Box flex={1} minWidth={200}>
                 <RequiredLabel text="Assigned To" />
                 <TextField
-                disabled={!isAdmin}
+                  sx={MuiSelectPadding}
                   select
                   fullWidth
                   name="assigned_to"
