@@ -301,7 +301,7 @@ export default function CreateLead() {
                   name="status"
                   value={formData.status}
                   onChange={(e) => {
-                    const selectedId = e.target.value === "None" || e.target.value === "" ? null : parseInt(e.target.value);
+                    const selectedId =e.target.value === "" ? null : parseInt(e.target.value);
                     setFormData({ ...formData, status: selectedId });
                   }}
                   disabled={loadingMeta}
