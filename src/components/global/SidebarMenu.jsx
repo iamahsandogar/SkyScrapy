@@ -56,27 +56,93 @@ export default function SidebarMenu({ user }) {
           rowGap: 2,
         }}
       >
-        {/* LOGO */}
+        {/* LOGO & EMPLOYEE DETAILS */}
         <Box
           sx={{
             display: "flex",
-            alignItems: "center",
-            gap: 1,
+            flexDirection: "column",
+            gap: 1.5,
+            pb: 2,
+            borderBottom: `1px solid ${colors.grey[800]}`,
           }}
         >
-          <img
-            src="/SLCW Icon.png"
-            alt="SLCW Icon"
-            style={{ width: "35px", height: "35px", objectFit: "contain" }}
-          />
-          <Typography
-            variant="h1"
-            fontWeight={"bold"}
-            lineHeight={1}
-            fontSize={25}
+          {/* LOGO */}
+          <Box
+            sx={{
+              display: "flex",
+              alignItems: "center",
+              gap: 1,
+            }}
           >
-            SLCW CRM
-          </Typography>
+            <img
+              src="/SLCW Icon.png"
+              alt="SLCW Icon"
+              style={{ width: "35px", height: "35px", objectFit: "contain" }}
+            />
+            <Typography
+              variant="h1"
+              fontWeight={"bold"}
+              lineHeight={1}
+              fontSize={25}
+            >
+              SLCW CRM
+            </Typography>
+          </Box>
+
+          {/* EMPLOYEE DETAILS */}
+          {user && (
+            <Box
+              sx={{
+                display: "flex",
+                flexDirection: "column",
+                gap: 0.5,
+                p: 1.5,
+                borderRadius: 2,
+                bgcolor: colors.grey[800],
+              }}
+            >
+              <Typography
+                variant="body2"
+                fontWeight="bold"
+                sx={{ color: colors.grey[300], mb: 0.5 }}
+              >
+                Employee Detail
+              </Typography>
+              <Typography
+                variant="body1"
+                fontWeight="600"
+                sx={{ color: colors.grey[100] }}
+              >
+                {user.name || 
+                 `${user.first_name || ""} ${user.last_name || ""}`.trim() || 
+                 user.email || 
+                 "Guest"}
+              </Typography>
+              <Box
+                sx={{
+                  display: "inline-flex",
+                  alignItems: "center",
+                  gap: 0.5,
+                  mt: 0.5,
+                }}
+              >
+                <Typography
+                  variant="caption"
+                  sx={{
+                    color: colors.blueAccent[300],
+                    fontWeight: "500",
+                    fontSize: "12px",
+                  }}
+                >
+                  {user.is_staff || user.is_admin || user.is_superuser
+                    ? "Admin"
+                    : user.role === "admin" || user.role === "Admin"
+                    ? "Admin"
+                    : "Employee"}
+                </Typography>
+              </Box>
+            </Box>
+          )}
         </Box>
 
         {/* SEARCH */}
@@ -187,34 +253,14 @@ export default function SidebarMenu({ user }) {
           })}
         </Box>
 
-        {/* SETTINGS & LOGOUT */}
+        {/* LOGOUT */}
         <Box>
-          <Box
-            sx={{
-              display: "flex",
-              alignItems: "center",
-              justifyContent: "center",
-              borderRadius: 2,
-              height: "40px",
-              color: colors.blueAccent[100],
-              px: 1,
-            }}
-          >
-            <p
-              style={{
-                fontSize: "14px",
-                fontWeight: "500",
-                textAlign: "center",
-              }}
-            >
-              Logged In as {user ? user.name || user.email : "Guest"}
-            </p>
-          </Box>
           <Box
             sx={{
               height: "1px",
               backgroundImage:
                 "repeating-linear-gradient(to right, grey 0, grey 2px, transparent 2px, transparent 6px)",
+              mb: 1,
             }}
           />
           <ListItemButton
