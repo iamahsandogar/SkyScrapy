@@ -116,7 +116,7 @@ export default function CreateLead() {
         const userId = userData.id || userData.pk || userData.uuid;
         if (userId) {
           // Set the assigned_to to the employee's own ID
-          setFormData((prev) => ({ ...prev, assigned_to: String(userId) }));
+          setFormData((prev) => ({ ...prev, assigned_to: userId }));
         }
       }
     }
@@ -374,18 +374,21 @@ export default function CreateLead() {
                   select
                   fullWidth
                   name="assigned_to"
-                  value={formData.assigned_to ? String(formData.assigned_to) : ""}
+                  value={formData.assigned_to || ""}
                   onChange={(e) => {
-                    const value = e.target.value === "" ? null : e.target.value;
-                    setFormData({ ...formData, assigned_to: value });
+                    const selectedValue = e.target.value;
+                    setFormData({ ...formData, assigned_to: selectedValue === "" ? null : selectedValue });
                   }}
                   disabled={!isAdmin && !editId} // Disable for employees (auto-assigned)
                 >
                   {isAdmin || editId ? (
                     <>
-                      <MenuItem value="">Select Employee</MenuItem>
+                      <MenuItem value="">
+                        <em>Select Employee</em>
+                      </MenuItem>
                       {employees.map((emp) => {
-                        const empId = String(emp.id || emp.pk || emp.uuid);
+                        const empId = emp.id || emp.pk || emp.uuid;
+                        if (!empId) return null; // Skip if no ID
                         const firstName = emp.firstName || emp.first_name || "";
                         const lastName = emp.lastName || emp.last_name || "";
                         return (
@@ -396,7 +399,7 @@ export default function CreateLead() {
                       })}
                     </>
                   ) : (
-                    <MenuItem value={formData.assigned_to ? String(formData.assigned_to) : ""}>
+                    <MenuItem value={formData.assigned_to || ""}>
                       {user
                         ? `${user.first_name || ""} ${user.last_name || ""}`.trim() ||
                           user.name ||
