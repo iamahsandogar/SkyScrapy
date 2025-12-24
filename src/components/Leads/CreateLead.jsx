@@ -299,14 +299,17 @@ export default function CreateLead() {
                   select
                   fullWidth
                   name="status"
-                  value={formData.status}
+                  value={formData.status || ""}
                   onChange={(e) => {
-                    const selectedId =e.target.value === "" ? null : parseInt(e.target.value);
+                    const selectedId = e.target.value === "" ? null : parseInt(e.target.value);
                     setFormData({ ...formData, status: selectedId });
                   }}
                   disabled={loadingMeta}
+                  displayEmpty
                 >
-                  <MenuItem value="">None</MenuItem>
+                  <MenuItem value="" disabled>
+                    <em>Select Status</em>
+                  </MenuItem>
                   {meta.status.map((item, index) => {
                     const statusId = typeof item === "object" ? (item.id || item.pk) : null;
                     const statusName = typeof item === "string" ? item : item.name;
