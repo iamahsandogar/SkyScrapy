@@ -119,6 +119,7 @@ export default function SidebarMenu({ user }) {
                     "&:hover": { bgcolor: "action.hover" },
                     display: "flex",
                     gap: 1,
+                    
                     minHeight: 40,
                   }}
                 >
@@ -135,7 +136,7 @@ export default function SidebarMenu({ user }) {
                     primary={item.label}
                     sx={{
                       "& .MuiListItemText-primary": {
-                        fontSize: "14px",
+                        fontSize: "15px",
                       },
                     }}
                   />
@@ -177,7 +178,7 @@ export default function SidebarMenu({ user }) {
                               primary={child.label}
                               sx={{
                                 "& .MuiListItemText-primary": {
-                                  fontSize: 13,
+                                  fontSize: 14,
                                 },
                               }}
                             />
