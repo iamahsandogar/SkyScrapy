@@ -9,6 +9,9 @@ import {
 import { useState, useEffect } from "react";
 import Topbar from "../global/Topbar";
 import { useParams, useNavigate } from "react-router-dom";
+import { LocalizationProvider, DatePicker } from "@mui/x-date-pickers";
+import { AdapterDayjs } from "@mui/x-date-pickers/AdapterDayjs";
+import dayjs from "dayjs";
 import apiRequest from "../services/api";
 
 const MuiSelectPadding = {
@@ -30,25 +33,42 @@ const MuiTextFieldPadding = {
   },
 };
 
+const MuiDatePickerPadding = {
+  "& .MuiOutlinedInput-root": {
+    padding: 0,
+  },
+  "& .MuiPickersInputBase-sectionsContainer": {
+    padding: "7px",
+  },
+  "& .MuiPickersSectionList-sectionContent": {
+    padding: 0,
+  },
+};
+
 export default function CreateLead() {
   const { editId } = useParams();
   const navigate = useNavigate();
   const [employees, setEmployees] = useState([]);
   const [meta, setMeta] = useState({ status: [], source: [] });
   const [loadingMeta, setLoadingMeta] = useState(false);
+  const [user, setUser] = useState(null);
+  const [isAdmin, setIsAdmin] = useState(false);
 
   const [formData, setFormData] = useState({
     title: "",
+    status: null,
+    source: "",
+    description: "",
     company_name: "",
     contact_first_name: "",
     contact_last_name: "",
     contact_email: "",
     contact_phone: "",
-    description: "",
-    status: null, // Will store status ID
-    source: "",
-    assigned_to: null, // Will store employee UUID
-    is_active: true,
+    contact_position_title: "",
+    contact_linkedin_url: "",
+    assigned_to: null,
+    follow_up_at: null,
+    follow_up_status: "",
   });
 
   /* ------------------------------------
@@ -76,6 +96,29 @@ export default function CreateLead() {
   };
 
   useEffect(() => {
+    // Get current user from localStorage
+    const storedUser = localStorage.getItem("user");
+    if (storedUser) {
+      const userData = JSON.parse(storedUser);
+      setUser(userData);
+      // Check if user is admin/manager
+      const admin = 
+        userData.is_staff || 
+        userData.is_admin || 
+        userData.is_superuser ||
+        userData.role === "admin" || 
+        userData.role === "Admin";
+      setIsAdmin(admin);
+
+      // If employee (not admin), auto-assign to themselves
+      if (!admin && !editId) {
+        const userId = userData.id || userData.pk || userData.uuid;
+        if (userId) {
+          setFormData((prev) => ({ ...prev, assigned_to: userId }));
+        }
+      }
+    }
+
     // Fetch employees from API
     const fetchEmployees = async () => {
       try {
@@ -99,16 +142,19 @@ export default function CreateLead() {
           if (leadToEdit) {
             setFormData({
               title: leadToEdit.title || "",
+              status: leadToEdit.status || null,
+              source: leadToEdit.source || "",
+              description: leadToEdit.description || "",
               company_name: leadToEdit.company_name || "",
               contact_first_name: leadToEdit.contact_first_name || "",
               contact_last_name: leadToEdit.contact_last_name || "",
               contact_email: leadToEdit.contact_email || "",
               contact_phone: leadToEdit.contact_phone || "",
-              description: leadToEdit.description || "",
-              status: leadToEdit.status || null,
-              source: leadToEdit.source || "",
+              contact_position_title: leadToEdit.contact_position_title || "",
+              contact_linkedin_url: leadToEdit.contact_linkedin_url || "",
               assigned_to: leadToEdit.assigned_to || null,
-              is_active: leadToEdit.is_active !== false,
+              follow_up_at: leadToEdit.follow_up_at ? dayjs(leadToEdit.follow_up_at) : null,
+              follow_up_status: leadToEdit.follow_up_status || "",
             });
           }
         } catch (error) {
@@ -124,46 +170,66 @@ export default function CreateLead() {
     setFormData({ ...formData, [e.target.name]: e.target.value });
   };
 
+  const handleDateChange = (date) => {
+    setFormData({ ...formData, follow_up_at: date });
+  };
+
+  const isValidLinkedInURL = (url) => {
+    const regex = /^https:\/\/(www\.)?linkedin\.com\/(in|company)\/[A-Za-z0-9_-]+\/?$/i;
+    return regex.test(url);
+  };
+
   const validateForm = () => {
     const requiredFields = [
       "title",
+      "status",
       "contact_first_name",
+      "assigned_to",
       "contact_email",
+      "contact_position_title",
+      "contact_linkedin_url",
     ];
+    
     for (let field of requiredFields) {
-      if (!formData[field] || formData[field].trim() === "") return false;
+      if (!formData[field] || (typeof formData[field] === "string" && formData[field].trim() === "")) {
+        return false;
+      }
     }
+
+    // Validate LinkedIn URL format
+    if (formData.contact_linkedin_url && !isValidLinkedInURL(formData.contact_linkedin_url)) {
+      alert("Please enter a valid LinkedIn URL.");
+      return false;
+    }
+
     return true;
   };
 
   const handleSubmit = async () => {
     if (!validateForm()) {
-      alert("Please fill all required fields (Title, First Name, Email).");
+      alert("Please fill all required fields (Title, Status, First Name, Assigned To, Email, Position Title, LinkedIn URL).");
       return;
     }
 
     // Prepare payload according to API structure
     const payload = {
       title: formData.title.trim(),
+      status: formData.status,
+      source: formData.source?.trim() || "",
+      description: formData.description?.trim() || "",
       company_name: formData.company_name?.trim() || "",
       contact_first_name: formData.contact_first_name.trim(),
       contact_last_name: formData.contact_last_name?.trim() || "",
       contact_email: formData.contact_email.trim(),
       contact_phone: formData.contact_phone?.trim() || "",
-      description: formData.description?.trim() || "",
-      is_active: formData.is_active !== false, // Default to true
+      contact_position_title: formData.contact_position_title.trim(),
+      contact_linkedin_url: formData.contact_linkedin_url.trim(),
+      assigned_to: formData.assigned_to,
+      follow_up_at: formData.follow_up_at
+        ? dayjs(formData.follow_up_at).format("YYYY-MM-DD")
+        : null,
+      follow_up_status: formData.follow_up_status?.trim() || "",
     };
-
-    // Add optional fields only if they have values
-    if (formData.status) {
-      payload.status = formData.status; // status ID
-    }
-    if (formData.source && formData.source.trim() !== "") {
-      payload.source = formData.source.trim();
-    }
-    if (formData.assigned_to) {
-      payload.assigned_to = formData.assigned_to;
-    }
 
     try {
       if (editId) {
@@ -223,15 +289,17 @@ export default function CreateLead() {
                 />
               </Box>
               <Box flex={1} minWidth={200}>
-                <Typography fontWeight="bold" sx={{ mb: 0.5 }}>
+                {/* <Typography fontWeight="bold" sx={{ mb: 0.5 }}>
                   Status
-                </Typography>
+                </Typography> */}
+                                <RequiredLabel text="Status" />
+
                 <TextField
                   sx={MuiSelectPadding}
                   select
                   fullWidth
                   name="status"
-                  value={formData.status || ""}
+                  value={formData.status}
                   onChange={(e) => {
                     const selectedId = e.target.value === "None" || e.target.value === "" ? null : parseInt(e.target.value);
                     setFormData({ ...formData, status: selectedId });
@@ -297,9 +365,7 @@ export default function CreateLead() {
             {/* ROW 2 */}
             <Box display="flex" gap={2} flexWrap="wrap">
               <Box flex={1} minWidth={200}>
-                <Typography fontWeight="bold" sx={{ mb: 0.5 }}>
-                  Assigned To
-                </Typography>
+                <RequiredLabel text="Assigned To" />
                 <TextField
                   sx={MuiSelectPadding}
                   select
@@ -310,18 +376,65 @@ export default function CreateLead() {
                     const value = e.target.value === "None" || e.target.value === "" ? null : e.target.value;
                     setFormData({ ...formData, assigned_to: value });
                   }}
+                  disabled={!isAdmin && !editId} // Disable for employees (auto-assigned)
+                >
+                  {isAdmin || editId ? (
+                    <>
+                      <MenuItem value="">None</MenuItem>
+                      {employees.map((emp) => {
+                        const empId = emp.id || emp.pk || emp.uuid;
+                        const firstName = emp.firstName || emp.first_name || "";
+                        const lastName = emp.lastName || emp.last_name || "";
+                        return (
+                          <MenuItem key={empId} value={empId}>
+                            {firstName} {lastName}
+                          </MenuItem>
+                        );
+                      })}
+                    </>
+                  ) : (
+                    <MenuItem value={formData.assigned_to || ""}>
+                      {user
+                        ? `${user.first_name || ""} ${user.last_name || ""}`.trim() ||
+                          user.name ||
+                          user.email
+                        : "Current User"}
+                    </MenuItem>
+                  )}
+                </TextField>
+              </Box>
+              <Box flex={1} minWidth={200}>
+                <Typography fontWeight="bold" sx={{ mb: 0.5 }}>
+                  Follow Up At
+                </Typography>
+                <LocalizationProvider dateAdapter={AdapterDayjs}>
+                  <DatePicker
+                    value={formData.follow_up_at}
+                    onChange={handleDateChange}
+                    slotProps={{
+                      textField: {
+                        fullWidth: true,
+                        sx: MuiDatePickerPadding,
+                      },
+                    }}
+                  />
+                </LocalizationProvider>
+              </Box>
+              <Box flex={1} minWidth={200}>
+                <Typography fontWeight="bold" sx={{ mb: 0.5 }}>
+                  Follow Up Status
+                </Typography>
+                <TextField
+                  sx={MuiSelectPadding}
+                  select
+                  fullWidth
+                  name="follow_up_status"
+                  value={formData.follow_up_status || ""}
+                  onChange={handleChange}
                 >
                   <MenuItem value="">None</MenuItem>
-                  {employees.map((emp) => {
-                    const empId = emp.id || emp.pk || emp.uuid;
-                    const firstName = emp.firstName || emp.first_name || "";
-                    const lastName = emp.lastName || emp.last_name || "";
-                    return (
-                      <MenuItem key={empId} value={empId}>
-                        {firstName} {lastName}
-                      </MenuItem>
-                    );
-                  })}
+                  <MenuItem value="Completed">Completed</MenuItem>
+                  <MenuItem value="Pending">Pending</MenuItem>
                 </TextField>
               </Box>
             </Box>
@@ -389,6 +502,37 @@ export default function CreateLead() {
                   onChange={handleChange}
                 />
               </Box>
+              <Box flex={1} minWidth={200}>
+                <RequiredLabel text="Contact Position Title" />
+                <TextField
+                  sx={MuiTextFieldPadding}
+                  fullWidth
+                  name="contact_position_title"
+                  value={formData.contact_position_title}
+                  onChange={handleChange}
+                />
+              </Box>
+            </Box>
+
+            {/* ROW 5 - LinkedIn URL */}
+            <Box>
+              <RequiredLabel text="Contact LinkedIn URL" />
+              <TextField
+                sx={MuiTextFieldPadding}
+                fullWidth
+                name="contact_linkedin_url"
+                value={formData.contact_linkedin_url}
+                onChange={handleChange}
+                placeholder="https://linkedin.com/in/username"
+                onBlur={() => {
+                  if (
+                    formData.contact_linkedin_url &&
+                    !isValidLinkedInURL(formData.contact_linkedin_url)
+                  ) {
+                    alert("Please enter a valid LinkedIn URL (e.g., https://linkedin.com/in/username)");
+                  }
+                }}
+              />
             </Box>
 
             {/* Submit */}
