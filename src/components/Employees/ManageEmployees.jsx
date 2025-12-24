@@ -30,7 +30,7 @@ const getActionButtonStyles = (action) => {
     case "deactivate":
       return {
         backgroundColor: colors.yellowAccent[800],
-        color: colors.yellowAccent[400],
+        color: colors.grey[100],
         border: `1px solid ${colors.yellowAccent[400]}`,
         "&:hover": {
           backgroundColor: colors.yellowAccent[700],
