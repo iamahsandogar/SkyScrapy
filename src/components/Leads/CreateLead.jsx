@@ -77,7 +77,7 @@ export default function CreateLead() {
   const fetchAllData = async () => {
     try {
       setLoadingMeta(true);
-      
+
       // Fetch all three APIs in parallel for better performance
       const [statusesResponse, sourcesResponse, employeesResponse] = await Promise.all([
         apiRequest("/ui/options/statuses/"),
@@ -112,11 +112,11 @@ export default function CreateLead() {
       setUser(userData);
       // Check if user is admin/manager
       // role 0 = Admin/Manager, role 1 = Employee
-      const admin = 
-        userData.is_staff || 
-        userData.is_admin || 
+      const admin =
+        userData.is_staff ||
+        userData.is_admin ||
         userData.is_superuser ||
-        userData.role === 0 || 
+        userData.role === 0 ||
         userData.role === "0";
       setIsAdmin(admin);
 
@@ -188,7 +188,7 @@ export default function CreateLead() {
       "contact_position_title",
       "contact_linkedin_url",
     ];
-    
+
     for (let field of requiredFields) {
       if (!formData[field] || (typeof formData[field] === "string" && formData[field].trim() === "")) {
         return false;
@@ -291,7 +291,7 @@ export default function CreateLead() {
                 {/* <Typography fontWeight="bold" sx={{ mb: 0.5 }}>
                   Status
                 </Typography> */}
-                                <RequiredLabel text="Status" />
+                <RequiredLabel text="Status" />
 
                 <TextField
                   sx={MuiSelectPadding}
@@ -306,7 +306,7 @@ export default function CreateLead() {
                   disabled={loadingMeta}
                   displayEmpty
                 >
-                 
+
                   {meta.status.map((item, index) => {
                     const statusId = typeof item === "object" ? (item.id || item.pk) : null;
                     const statusName = typeof item === "string" ? item : item.name;
@@ -367,44 +367,34 @@ export default function CreateLead() {
               <Box flex={1} minWidth={200}>
                 <RequiredLabel text="Assigned To" />
                 <TextField
-                  sx={MuiSelectPadding}
                   select
                   fullWidth
                   name="assigned_to"
-                  value={formData.assigned_to || ""}
+                  value={formData.assigned_to ? String(formData.assigned_to) : ""}
                   onChange={(e) => {
-                    const selectedValue = e.target.value;
-                    setFormData({ ...formData, assigned_to: selectedValue === "" ? null : selectedValue });
+                    setFormData({
+                      ...formData,
+                      assigned_to: e.target.value || null,
+                    });
                   }}
-                  disabled={!isAdmin && !editId} // Disable for employees (auto-assigned)
                 >
-                  {isAdmin || editId ? (
-                    <>
-                      <MenuItem value="">
-                        <em>Select Employee</em>
+                  <MenuItem value="">
+                    <em>Select Employee</em>
+                  </MenuItem>
+
+                  {employees.map((emp) => {
+                    const empId = emp.id || emp.pk || emp.uuid;
+                    if (!empId) return null;
+
+                    return (
+                      <MenuItem key={empId} value={String(empId)}>
+                        {(emp.firstName || emp.first_name || "")}{" "}
+                        {(emp.lastName || emp.last_name || "")}
                       </MenuItem>
-                      {employees.map((emp) => {
-                        const empId = emp.id || emp.pk || emp.uuid;
-                        if (!empId) return null; // Skip if no ID
-                        const firstName = emp.firstName || emp.first_name || "";
-                        const lastName = emp.lastName || emp.last_name || "";
-                        return (
-                          <MenuItem key={empId} value={empId}>
-                            {firstName} {lastName}
-                          </MenuItem>
-                        );
-                      })}
-                    </>
-                  ) : (
-                    <MenuItem value={formData.assigned_to || ""}>
-                      {user
-                        ? `${user.first_name || ""} ${user.last_name || ""}`.trim() ||
-                          user.name ||
-                          user.email
-                        : "Current User"}
-                    </MenuItem>
-                  )}
+                    );
+                  })}
                 </TextField>
+
               </Box>
               <Box flex={1} minWidth={200}>
                 <Typography fontWeight="bold" sx={{ mb: 0.5 }}>
