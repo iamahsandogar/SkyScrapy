@@ -7,9 +7,9 @@ import {
   Collapse,
   Divider,
   Box,
-  InputBase,
-  IconButton,
   Typography,
+  Avatar,
+  Chip,
 } from "@mui/material";
 import { dividerClasses } from "@mui/material/Divider";
 
@@ -54,116 +54,43 @@ export default function SidebarMenu({ user }) {
           height: "100%",
           color: colors.grey[100],
           rowGap: 2,
+          overflow: "hidden",
         }}
       >
-        {/* LOGO & EMPLOYEE DETAILS */}
+        {/* LOGO */}
         <Box
           sx={{
             display: "flex",
-            flexDirection: "column",
-            gap: 1.5,
+            alignItems: "center",
+            gap: 1,
             pb: 2,
             borderBottom: `1px solid ${colors.grey[800]}`,
           }}
         >
-          {/* LOGO */}
-          <Box
-            sx={{
-              display: "flex",
-              alignItems: "center",
-              gap: 1,
-            }}
+          <img
+            src="/SLCW Icon.png"
+            alt="SLCW Icon"
+            style={{ width: "35px", height: "35px", objectFit: "contain" }}
+          />
+          <Typography
+            variant="h1"
+            fontWeight={"bold"}
+            lineHeight={1}
+            fontSize={25}
           >
-            <img
-              src="/SLCW Icon.png"
-              alt="SLCW Icon"
-              style={{ width: "35px", height: "35px", objectFit: "contain" }}
-            />
-            <Typography
-              variant="h1"
-              fontWeight={"bold"}
-              lineHeight={1}
-              fontSize={25}
-            >
-              SLCW CRM
-            </Typography>
-          </Box>
-
-          {/* EMPLOYEE DETAILS */}
-          {user && (
-            <Box
-              sx={{
-                display: "flex",
-                flexDirection: "column",
-                gap: 0.5,
-                p: 1.5,
-                borderRadius: 2,
-                bgcolor: colors.grey[800],
-              }}
-            >
-              <Typography
-                variant="body2"
-                fontWeight="bold"
-                sx={{ color: colors.grey[300], mb: 0.5 }}
-              >
-                Employee Detail
-              </Typography>
-              <Typography
-                variant="body1"
-                fontWeight="600"
-                sx={{ color: colors.grey[100] }}
-              >
-                {user.name || 
-                 `${user.first_name || ""} ${user.last_name || ""}`.trim() || 
-                 user.email || 
-                 "Guest"}
-              </Typography>
-              <Box
-                sx={{
-                  display: "inline-flex",
-                  alignItems: "center",
-                  gap: 0.5,
-                  mt: 0.5,
-                }}
-              >
-                <Typography
-                  variant="caption"
-                  sx={{
-                    color: colors.blueAccent[300],
-                    fontWeight: "500",
-                    fontSize: "12px",
-                  }}
-                >
-                  {user.is_staff || user.is_admin || user.is_superuser
-                    ? "Admin"
-                    : user.role === "admin" || user.role === "Admin"
-                    ? "Admin"
-                    : "Employee"}
-                </Typography>
-              </Box>
-            </Box>
-          )}
+            SLCW CRM
+          </Typography>
         </Box>
 
-        {/* SEARCH */}
-        <Box>
-          <Box
-            sx={{
-              display: "flex",
-              alignItems: "center",
-              gap: 1,
-              border: `1px solid ${colors.grey[700]}`,
-              borderRadius: 10,
-            }}
-          >
-            <IconButton>
-              <Icons.SearchRounded />
-            </IconButton>
-            <InputBase placeholder="Search" />
-          </Box>
-        </Box>
         {/* SIDEBAR MENU */}
-        <Box sx={{ flexGrow: 1 }}>
+        <Box 
+          sx={{ 
+            flexGrow: 1,
+            overflowY: "auto",
+            overflowX: "hidden",
+            minHeight: 0,
+          }}
+        >
           {sidebarMenu.map((item, index) => {
             if (item.type === "divider")
               return <Divider key={index} sx={{ my: 1 }} />;
@@ -253,16 +180,82 @@ export default function SidebarMenu({ user }) {
           })}
         </Box>
 
-        {/* LOGOUT */}
-        <Box>
-          <Box
-            sx={{
-              height: "1px",
-              backgroundImage:
-                "repeating-linear-gradient(to right, grey 0, grey 2px, transparent 2px, transparent 6px)",
-              mb: 1,
-            }}
-          />
+        {/* USER PROFILE & LOGOUT */}
+        <Box sx={{ mt: "auto", pt: 2, borderTop: `1px solid ${colors.grey[800]}` }}>
+          {/* USER PROFILE */}
+          {user && (
+            <Box
+              sx={{
+                display: "flex",
+                alignItems: "center",
+                gap: 1.5,
+                p: 1.5,
+                mb: 1.5,
+                borderRadius: 2,
+              }}
+            >
+              <Avatar
+                sx={{
+                  width: 40,
+                  height: 40,
+                  bgcolor: colors.blueAccent[700],
+                  fontSize: "16px",
+                  fontWeight: "bold",
+                }}
+              >
+                {user.name
+                  ? user.name.charAt(0).toUpperCase()
+                  : user.first_name
+                  ? user.first_name.charAt(0).toUpperCase()
+                  : user.email
+                  ? user.email.charAt(0).toUpperCase()
+                  : "G"}
+              </Avatar>
+              <Box sx={{ flex: 1, minWidth: 0 }}>
+                <Typography
+                  variant="body2"
+                  fontWeight="600"
+                  sx={{
+                    color: colors.grey[100],
+                    fontSize: "14px",
+                    overflow: "hidden",
+                    textOverflow: "ellipsis",
+                    whiteSpace: "nowrap",
+                  }}
+                >
+                  {user.name ||
+                    `${user.first_name || ""} ${user.last_name || ""}`.trim() ||
+                    user.email ||
+                    "Guest"}
+                </Typography>
+                <Chip
+                  label={
+                    user.is_staff || user.is_admin || user.is_superuser
+                      ? "Admin"
+                      : user.role === "admin" || user.role === "Admin"
+                      ? "Admin"
+                      : "Employee"
+                  }
+                  size="small"
+                  sx={{
+                    height: 20,
+                    fontSize: "11px",
+                    fontWeight: "600",
+                    bgcolor:
+                      user.is_staff || user.is_admin || user.is_superuser
+                        ? colors.blueAccent[600]
+                        : user.role === "admin" || user.role === "Admin"
+                        ? colors.blueAccent[600]
+                        : colors.grey[700],
+                    color: colors.grey[100],
+                    mt: 0.5,
+                  }}
+                />
+              </Box>
+            </Box>
+          )}
+
+          {/* LOGOUT */}
           <ListItemButton
             sx={{ color: colors.redAccent[500] }}
             onClick={handleLogout}
