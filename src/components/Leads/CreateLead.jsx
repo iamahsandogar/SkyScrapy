@@ -102,12 +102,13 @@ export default function CreateLead() {
       const userData = JSON.parse(storedUser);
       setUser(userData);
       // Check if user is admin/manager
+      // role 0 = Admin/Manager, role 1 = Employee
       const admin = 
         userData.is_staff || 
         userData.is_admin || 
         userData.is_superuser ||
-        userData.role === "admin" || 
-        userData.role === "Admin";
+        userData.role === 0 || 
+        userData.role === "0";
       setIsAdmin(admin);
 
       // If employee (not admin), auto-assign to themselves

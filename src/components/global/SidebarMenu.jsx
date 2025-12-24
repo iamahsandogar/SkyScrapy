@@ -245,7 +245,7 @@ export default function SidebarMenu({ user }) {
                   label={
                     user.is_staff || user.is_admin || user.is_superuser
                       ? "Admin"
-                      : user.role === "admin" || user.role === "Admin"
+                      : user.role === 0 || user.role === "0"
                       ? "Admin"
                       : "Employee"
                   }
@@ -257,7 +257,7 @@ export default function SidebarMenu({ user }) {
                     bgcolor:
                       user.is_staff || user.is_admin || user.is_superuser
                         ? colors.blueAccent[600]
-                        : user.role === "admin" || user.role === "Admin"
+                        : user.role === 0 || user.role === "0"
                         ? colors.blueAccent[600]
                         : colors.grey[700],
                     color: colors.grey[100],
