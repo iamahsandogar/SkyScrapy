@@ -111,11 +111,12 @@ export default function CreateLead() {
         userData.role === "0";
       setIsAdmin(admin);
 
-      // If employee (not admin), auto-assign to themselves
+      // If employee (not admin), auto-assign to themselves when creating new lead
       if (!admin && !editId) {
         const userId = userData.id || userData.pk || userData.uuid;
         if (userId) {
-          setFormData((prev) => ({ ...prev, assigned_to: userId }));
+          // Set the assigned_to to the employee's own ID
+          setFormData((prev) => ({ ...prev, assigned_to: String(userId) }));
         }
       }
     }
@@ -382,13 +383,13 @@ export default function CreateLead() {
                 >
                   {isAdmin || editId ? (
                     <>
-                      <MenuItem value="">None</MenuItem>
+                      <MenuItem value="">Select Employee</MenuItem>
                       {employees.map((emp) => {
-                        const empId = emp.id || emp.pk || emp.uuid;
+                        const empId = String(emp.id || emp.pk || emp.uuid);
                         const firstName = emp.firstName || emp.first_name || "";
                         const lastName = emp.lastName || emp.last_name || "";
                         return (
-                          <MenuItem key={empId} value={String(empId)}>
+                          <MenuItem key={empId} value={empId}>
                             {firstName} {lastName}
                           </MenuItem>
                         );
