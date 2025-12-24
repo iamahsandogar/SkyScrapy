@@ -373,9 +373,9 @@ export default function CreateLead() {
                   select
                   fullWidth
                   name="assigned_to"
-                  value={formData.assigned_to || ""}
+                  value={formData.assigned_to ? String(formData.assigned_to) : ""}
                   onChange={(e) => {
-                    const value = e.target.value === "None" || e.target.value === "" ? null : e.target.value;
+                    const value = e.target.value === "" ? null : e.target.value;
                     setFormData({ ...formData, assigned_to: value });
                   }}
                   disabled={!isAdmin && !editId} // Disable for employees (auto-assigned)
@@ -388,14 +388,14 @@ export default function CreateLead() {
                         const firstName = emp.firstName || emp.first_name || "";
                         const lastName = emp.lastName || emp.last_name || "";
                         return (
-                          <MenuItem key={empId} value={empId}>
+                          <MenuItem key={empId} value={String(empId)}>
                             {firstName} {lastName}
                           </MenuItem>
                         );
                       })}
                     </>
                   ) : (
-                    <MenuItem value={formData.assigned_to || ""}>
+                    <MenuItem value={formData.assigned_to ? String(formData.assigned_to) : ""}>
                       {user
                         ? `${user.first_name || ""} ${user.last_name || ""}`.trim() ||
                           user.name ||
