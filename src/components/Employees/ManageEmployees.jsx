@@ -19,7 +19,7 @@ const getActionButtonStyles = (action) => {
   switch (action) {
     case "activate":
       return {
-        backgroundColor: colors.greenAccent[900],
+        backgroundColor: colors.greenAccent[800],
         color: colors.grey[100],
         border: `1px solid ${colors.greenAccent[400]}`,
         "&:hover": {
@@ -200,7 +200,7 @@ export default function ManageEmployees() {
                             : colors.grey[900],
                             color:
                             (emp.status === "Active" || emp.is_active)
-                              ? colors.greenAccent[500]
+                              ? colors.greenAccent[400]
                               : colors.grey[500],
                         fontWeight: "bold",
                       }}
