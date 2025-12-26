@@ -71,6 +71,11 @@ export const tokens = (mode = "light") =>
           800: "#b38a00",
           900: "#997000", // darkest
         },
+        bg: {
+          500: "#141b2d", // dark background
+          100: "#101624", // dark paper
+          900: "#0c101b", // dark surface
+        },
       }
     : {
         grey: {

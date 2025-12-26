@@ -18,9 +18,12 @@ import * as Icons from "@mui/icons-material";
 import { sidebarMenu } from "../../data/sidebarMenu";
 import { useNavigate } from "react-router-dom";
 import { authAPI } from "../services/api";
-import { colors } from "../../design-system/tokens";
+import { useTheme } from "../../contexts/ThemeContext";
+import { getColors } from "../../design-system/tokens";
 export default function SidebarMenu({ user }) {
   const navigate = useNavigate();
+  const { mode } = useTheme();
+  const colors = getColors(mode);
   const [open, setOpen] = useState({});
 
   const toggle = (index) =>
@@ -52,7 +55,7 @@ export default function SidebarMenu({ user }) {
           display: "flex",
           flexDirection: "column",
           height: "100%",
-          color: colors.grey[100],
+          color: mode === "dark" ? colors.grey[100] : colors.grey[100],
           rowGap: 1,
           overflow: "hidden",
         }}
@@ -64,7 +67,6 @@ export default function SidebarMenu({ user }) {
             alignItems: "center",
             gap: 1,
             pb: 2,
-            borderBottom: `1px solid ${colors.grey[800]}`,
           }}
         >
           <img
@@ -77,6 +79,9 @@ export default function SidebarMenu({ user }) {
             fontWeight={"bold"}
             lineHeight={1}
             fontSize={25}
+            sx={{
+              color: mode === "dark" ? colors.grey[100] : colors.grey[100],
+            }}
           >
             SLCW CRM
           </Typography>
@@ -136,7 +141,7 @@ export default function SidebarMenu({ user }) {
                     primary={item.label}
                     sx={{
                       "& .MuiListItemText-primary": {
-                        fontSize: "15px",
+                        fontSize: 16,
                       },
                     }}
                   />
@@ -178,7 +183,7 @@ export default function SidebarMenu({ user }) {
                               primary={child.label}
                               sx={{
                                 "& .MuiListItemText-primary": {
-                                  fontSize: 14,
+                                  fontSize: 15,
                                 },
                               }}
                             />
@@ -194,7 +199,9 @@ export default function SidebarMenu({ user }) {
         </Box>
 
         {/* USER PROFILE & LOGOUT */}
-        <Box sx={{ mt: "auto", pt: 2, borderTop: `1px solid ${colors.grey[800]}` }}>
+        <Box
+          
+        >
           {/* USER PROFILE */}
           {user && (
             <Box
@@ -211,9 +218,10 @@ export default function SidebarMenu({ user }) {
                 sx={{
                   width: 40,
                   height: 40,
-                  bgcolor: colors.blueAccent[700],
+                  bgcolor: colors.blueAccent[500],
                   fontSize: "16px",
                   fontWeight: "bold",
+                  color: mode === "dark" ? colors.grey[100] : colors.bg[100],
                 }}
               >
                 {user.name
@@ -229,7 +237,7 @@ export default function SidebarMenu({ user }) {
                   variant="body2"
                   fontWeight="600"
                   sx={{
-                    color: colors.grey[100],
+                    color: mode === "dark" ? colors.grey[100] : colors.grey[100],
                     fontSize: "14px",
                     overflow: "hidden",
                     textOverflow: "ellipsis",
@@ -259,8 +267,10 @@ export default function SidebarMenu({ user }) {
                         ? colors.blueAccent[500]
                         : user.role === 0 || user.role === "0"
                         ? colors.blueAccent[500]
+                        : mode === "dark"
+                        ? colors.grey[700]
                         : colors.grey[300],
-                    color: colors.bg[100],
+                    color: mode === "dark" ? colors.grey[100] : colors.bg[100],
                     mt: 0.5,
                   }}
                 />
@@ -270,13 +280,26 @@ export default function SidebarMenu({ user }) {
 
           {/* LOGOUT */}
           <ListItemButton
-            sx={{ color: colors.redAccent[500] }}
+            sx={{
+              color: colors.redAccent[500],
+              "&:hover": {
+                backgroundColor:
+                  mode === "dark" ? colors.primary[700] : colors.grey[200],
+              },
+            }}
             onClick={handleLogout}
           >
             <ListItemIcon sx={{ color: colors.redAccent[500] }}>
               <Icons.LogoutRounded fontSize="small" />
             </ListItemIcon>
-            <ListItemText primary="Logout" />
+            <ListItemText
+              primary="Logout"
+              sx={{
+                "& .MuiListItemText-primary": {
+                  color: colors.redAccent[500],
+                },
+              }}
+            />
           </ListItemButton>
         </Box>
       </List>

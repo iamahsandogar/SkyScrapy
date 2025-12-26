@@ -7,15 +7,23 @@ import {
   Button,
   IconButton,
   InputAdornment,
+  useTheme as useMUITheme
 } from "@mui/material";
 import { Link, useNavigate } from "react-router-dom";
 import Visibility from "@mui/icons-material/Visibility";
 import VisibilityOff from "@mui/icons-material/VisibilityOff";
-import { colors } from "../../design-system/tokens";
+import { useTheme } from "../../contexts/ThemeContext";
+import { getColors } from "../../design-system/tokens";
 import { authAPI } from "../services/api";
+import LightModeIcon from "@mui/icons-material/LightMode";
+import DarkModeIcon from "@mui/icons-material/DarkMode";
 
 export default function Login() {
+
+  const muiTheme = useMUITheme();
   const navigate = useNavigate();
+  const { mode, toggleTheme } = useTheme();
+  const colors = getColors(mode);
 
   const [showPassword, setShowPassword] = useState(false);
   const [error, setError] = useState("");
@@ -64,10 +72,39 @@ export default function Login() {
         display: "flex",
         justifyContent: "center",
         alignItems: "center",
-        backgroundColor: "#f5f5f5",
+        backgroundColor:
+          mode === "dark" ? colors.primary[500] : colors.bg[500],
+        position: "relative",
       }}
     >
-      <Paper elevation={3} sx={{ width: 380, padding: 4, borderRadius: 4 }}>
+      <IconButton
+        onClick={toggleTheme}
+        sx={{
+          position: "absolute",
+          top: 20,
+          right: 20,
+          color: mode === "dark" ? colors.grey[100] : colors.grey[100],
+          backgroundColor:
+            mode === "dark" ? colors.primary[600] : colors.bg[100],
+          "&:hover": {
+            backgroundColor:
+              mode === "dark" ? colors.primary[700] : colors.grey[200],
+          },
+        }}
+      >
+        {mode === "dark" ? <LightModeIcon /> : <DarkModeIcon />}
+      </IconButton>
+      <Paper
+        elevation={3}
+        sx={{
+          width: 380,
+          padding: 4,
+          borderRadius: 4,
+          backgroundColor:
+            mode === "dark" ? colors.primary[600] : colors.bg[100],
+          color: mode === "dark" ? colors.grey[100] : colors.grey[100],
+        }}
+      >
         {/* Logo */}
         <Box
           sx={{
@@ -82,14 +119,21 @@ export default function Login() {
             alt="SLCW Icon"
             style={{ width: "180px", height: "55px" }}
           />
-          <Typography variant="h5" fontWeight="bold" mt={1}>
+          <Typography
+            variant="h5"
+            fontWeight="bold"
+            mt={1}
+            sx={{
+              color: mode === "dark" ? colors.grey[100] : colors.grey[100],
+            }}
+          >
             Login
           </Typography>
         </Box>
 
         {/* Email */}
-        <Typography fontWeight="bold" mb={0.5}>
-          Email <span style={{ color: colors.redAccent[500] }}>*</span>
+        <Typography fontWeight="bold" mb={0.5} sx={{ color: muiTheme.palette.text.primary }}>
+          Email <span style={{ color: muiTheme.palette.error.main }}>*</span>
         </Typography>
         <TextField
           fullWidth
@@ -101,8 +145,8 @@ export default function Login() {
         />
 
         {/* Password */}
-        <Typography fontWeight="bold" mb={0.5}>
-          Password <span style={{ color: colors.redAccent[500] }}>*</span>
+        <Typography fontWeight="bold" mb={0.5} sx={{ color: muiTheme.palette.text.primary }}>
+          Password <span style={{ color: muiTheme.palette.error.main }}>*</span>
         </Typography>
         <TextField
           fullWidth
@@ -135,7 +179,7 @@ export default function Login() {
           <Link
             to="/forgot-password"
             style={{
-              color: "#1152C2",
+              color: colors.blueAccent[500],
               fontSize: "14px",
               textDecoration: "none",
               fontWeight: "500",
@@ -157,8 +201,8 @@ export default function Login() {
             textTransform: "none",
             fontWeight: "bold",
             fontSize: "16px",
-            backgroundColor: "#1152C2",
-            "&:hover": { backgroundColor: "#0E3AA8" },
+            backgroundColor: colors.blueAccent[500],
+            "&:hover": { backgroundColor: colors.blueAccent[600] },
           }}
         >
           {loading ? "Logging in..." : "Login"}

@@ -3,8 +3,13 @@ import React from "react";
 import Sidebar from "./global/Sidebar";
 import { Outlet } from "react-router-dom";
 import { useState, useEffect } from "react";
+import { useTheme } from "../contexts/ThemeContext";
+import { getColors } from "../design-system/tokens";
+
 function Layout({ children }) {
   const [user, setUser] = useState(null);
+  const { mode } = useTheme();
+  const colors = getColors(mode);
 
   useEffect(() => {
     const storedUser = localStorage.getItem("user");
@@ -18,6 +23,8 @@ function Layout({ children }) {
       sx={{
         minHeight: "100vh",
         width: "100%",
+        backgroundColor:
+          mode === "dark" ? colors.primary[500] : colors.bg[500],
       }}
     >
       <Box

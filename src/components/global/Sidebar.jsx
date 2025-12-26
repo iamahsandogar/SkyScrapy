@@ -1,18 +1,21 @@
 import { Box } from "@mui/material";
 import React from "react";
-import { colors } from "../../design-system/tokens";
+import { useTheme } from "../../contexts/ThemeContext";
+import { getColors } from "../../design-system/tokens";
 import SidebarMenu from "./SidebarMenu";
 
 function Sidebar({ user }) {
+  const { mode } = useTheme();
+  const colors = getColors(mode);
+
   return (
     <Box
       sx={{
         maxWidth: "220px",
         width: "220px",
-        bgcolor: colors.bg[100],
+        bgcolor: mode === "dark" ? colors.primary[600] : colors.bg[100],
         borderRadius: "12px",
         height: "100%",
-        border: `1px solid ${colors.grey[900]}`,
       }}
     >
       <SidebarMenu user={user} />

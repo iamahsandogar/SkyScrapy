@@ -20,6 +20,7 @@ const getActionButtonStyles = (action) => {
     case "activate":
       return {
         backgroundColor: colors.greenAccent[800],
+        borderRadius: 1,
         color: colors.grey[100],
         border: `1px solid ${colors.greenAccent[400]}`,
         "&:hover": {

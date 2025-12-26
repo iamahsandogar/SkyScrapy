@@ -10,7 +10,6 @@ function UnreadNotes() {
       justifyContent="flex-start"
       alignItems="flex-start"
       bgcolor={colors.bg[100]}
-      border={0.5}
       borderColor={colors.grey[900]}
       borderRadius="12px"
       padding={3}
