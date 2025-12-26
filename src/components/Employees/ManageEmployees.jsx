@@ -197,7 +197,7 @@ export default function ManageEmployees() {
                       sx={{
                         backgroundColor:
                           (emp.status === "Active" || emp.is_active)
-                            ? colors.greenAccent[900]
+                            ? colors.greenAccent[900] 
                             : colors.grey[900],
                             color:
                             (emp.status === "Active" || emp.is_active)

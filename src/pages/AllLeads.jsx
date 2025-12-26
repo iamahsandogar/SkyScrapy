@@ -248,7 +248,7 @@ export default function AllLeads() {
 
   const handleOpenCustomize = (e) => setAnchorEl(e.currentTarget);
   const handleCloseCustomize = () => setAnchorEl(null);
-
+   
   const toggleColumn = (key) => {
     const updated = visibleColumns.includes(key)
       ? visibleColumns.filter((c) => c !== key)
@@ -257,6 +257,15 @@ export default function AllLeads() {
     localStorage.setItem("leadColumns", JSON.stringify(updated));
   };
 
+  const handleResetColumns = () => {
+    setVisibleColumns(DEFAULT_COLUMNS);
+    localStorage.setItem("leadColumns", JSON.stringify(DEFAULT_COLUMNS));
+  };
+
+  const handleClearColumns = () => {
+    setVisibleColumns([]);
+    localStorage.setItem("leadColumns", JSON.stringify([]));
+  };
   // ===== FILTER LOGIC =====
   const filteredLeads = leads.filter((l) => {
     const qLower = q.trim().toLowerCase();
@@ -320,24 +329,55 @@ export default function AllLeads() {
 
       {/* Customize Columns Menu */}
       <Menu
-        anchorEl={anchorEl}
-        open={Boolean(anchorEl)}
-        onClose={handleCloseCustomize}
-      >
-        {ALL_COLUMNS.map((col) => (
-          <MenuItem key={col.key}>
-            <FormControlLabel
-              control={
-                <Checkbox
-                  checked={visibleColumns.includes(col.key)}
-                  onChange={() => toggleColumn(col.key)}
-                />
-              }
-              label={col.label}
-            />
-          </MenuItem>
-        ))}
-      </Menu>
+  anchorEl={anchorEl}
+  open={Boolean(anchorEl)}
+  onClose={handleCloseCustomize}
+  PaperProps={{ sx: { minWidth: 240 } }}
+>
+  {/* Actions */}
+  <Box
+    display="flex"
+    justifyContent="space-between"
+    px={2}
+    py={1}
+    gap={1}
+  >
+    <Button
+      size="small"
+      variant="outlined"
+      onClick={handleResetColumns}
+    >
+      Reset
+    </Button>
+
+    <Button
+      size="small"
+      color="error"
+      variant="outlined"
+      onClick={handleClearColumns}
+    >
+      Clear
+    </Button>
+  </Box>
+
+  <Box sx={{ borderTop: "1px solid #eee", my: 1 }} />
+
+  {/* Column Checkboxes */}
+  {ALL_COLUMNS.map((col) => (
+    <MenuItem key={col.key} dense>
+      <FormControlLabel
+        control={
+          <Checkbox
+            checked={visibleColumns.includes(col.key)}
+            onChange={() => toggleColumn(col.key)}
+          />
+        }
+        label={col.label}
+      />
+    </MenuItem>
+  ))}
+</Menu>
+
 
       {/* Search & Filter */}
       <Box display="flex" gap={2} mt={2} mb={2}>
@@ -383,50 +423,50 @@ export default function AllLeads() {
           <TableHead>
             <TableRow>
               {visibleColumns.includes("title") && (
-                <TableCell sx={tableBodyCellStyles}>Lead Title</TableCell>
+                <TableCell sx={tableHeaderCellStyles}>Lead Title</TableCell>
               )}
 
               {visibleColumns.includes("linkedIn") && (
-                <TableCell sx={tableBodyCellStyles}>LinkedIn</TableCell>
+                <TableCell sx={tableHeaderCellStyles}>LinkedIn</TableCell>
               )}
               {visibleColumns.includes("status") && (
-                <TableCell sx={tableBodyCellStyles}>Status</TableCell>
+                <TableCell sx={tableHeaderCellStyles}>Status</TableCell>
               )}
               {visibleColumns.includes("assignedTo") && (
-                <TableCell sx={tableBodyCellStyles}>Assigned To</TableCell>
+                <TableCell sx={tableHeaderCellStyles}>Assigned To</TableCell>
               )}
               {visibleColumns.includes("followUpAt") && (
-                <TableCell sx={tableBodyCellStyles}>Follow-up At</TableCell>
+                <TableCell sx={tableHeaderCellStyles}>Follow-up At</TableCell>
               )}
               {visibleColumns.includes("followupStatus") && (
-                <TableCell sx={tableBodyCellStyles}>Follow-up Status</TableCell>
+                <TableCell sx={tableHeaderCellStyles}>Follow-up Status</TableCell>
               )}
               {visibleColumns.includes("source") && (
-                <TableCell sx={tableBodyCellStyles}>Source</TableCell>
+                <TableCell sx={tableHeaderCellStyles}>Source</TableCell>
               )}
               {visibleColumns.includes("description") && (
-                <TableCell sx={{ tableBodyCellStyles }}>Description</TableCell>
+                <TableCell sx={{ tableHeaderCellStyles }}>Description</TableCell>
               )}
               {visibleColumns.includes("company") && (
-                <TableCell sx={tableBodyCellStyles}>Company</TableCell>
+                <TableCell sx={tableHeaderCellStyles}>Company</TableCell>
               )}
               {visibleColumns.includes("firstName") && (
-                <TableCell sx={tableBodyCellStyles}>First Name</TableCell>
+                <TableCell sx={tableHeaderCellStyles}>First Name</TableCell>
               )}
               {visibleColumns.includes("lastName") && (
-                <TableCell sx={tableBodyCellStyles}>Last Name</TableCell>
+                <TableCell sx={tableHeaderCellStyles}>Last Name</TableCell>
               )}
               {visibleColumns.includes("email") && (
-                <TableCell sx={tableBodyCellStyles}>Email</TableCell>
+                <TableCell sx={tableHeaderCellStyles}>Email</TableCell>
               )}
               {visibleColumns.includes("phone") && (
-                <TableCell sx={tableBodyCellStyles}>Phone</TableCell>
+                <TableCell sx={tableHeaderCellStyles}>Phone</TableCell>
               )}
               {visibleColumns.includes("positionTitle") && (
-                <TableCell sx={tableBodyCellStyles}>Position Title</TableCell>
+                <TableCell sx={tableHeaderCellStyles}>Position Title</TableCell>
               )}
 
-              <TableCell sx={{ ...tableBodyCellStyles, textAlign: "center" }}>
+              <TableCell sx={{ ...tableHeaderCellStyles, textAlign: "center" }}>
                 Actions
               </TableCell>
             </TableRow>

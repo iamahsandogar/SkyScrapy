@@ -356,7 +356,7 @@ export default function CreateLead() {
                 Description
               </Typography>
               <TextField
-                sx={MuiSelectPadding}
+                sx={MuiTextFieldPadding}
                 fullWidth
                 multiline
                 rows={3}

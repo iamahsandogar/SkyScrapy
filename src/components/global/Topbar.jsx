@@ -49,7 +49,7 @@ function Topbar({ children }) {
             color: mode === "dark" ? colors.grey[100] : colors.grey[100],
             "&:hover": {
               backgroundColor:
-                mode === "dark" ? colors.primary[700] : colors.grey[200],
+                mode === "dark" ? colors.bg[100] : colors.bg[900],
             },
           }}
         >
