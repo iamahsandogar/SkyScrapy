@@ -37,7 +37,7 @@ export default function Cards() {
           setLeads(leadsList);
         }
         setLoading(false);
-        
+
         // Only refresh if cache is older than 30 seconds (to avoid duplicate calls right after login)
         const cacheAge = Date.now() - cachedData.timestamp;
         if (cacheAge > 30000) {
@@ -59,7 +59,7 @@ export default function Cards() {
         }
         return;
       }
-      
+
       // No cache, fetch fresh
       try {
         setLoading(true);
