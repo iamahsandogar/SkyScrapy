@@ -49,7 +49,7 @@ async function apiRequest(endpoint, options = {}) {
       "/api/common/auth/password-reset-request/",
       "/api/common/auth/password-reset-confirm/",
     ];
-    
+
     const isAuthEndpoint = authEndpoints.some((authPath) =>
       endpoint.includes(authPath)
     );
@@ -61,7 +61,7 @@ async function apiRequest(endpoint, options = {}) {
         if (!refreshSuccess) {
           throw new Error("Token refresh failed");
         }
-        
+
         // Retry the original request after refresh
         const retryResponse = await fetch(url, {
           ...defaultOptions,
@@ -82,7 +82,10 @@ async function apiRequest(endpoint, options = {}) {
 
         // Process retry response
         const retryContentType = retryResponse.headers.get("content-type");
-        if (!retryContentType || !retryContentType.includes("application/json")) {
+        if (
+          !retryContentType ||
+          !retryContentType.includes("application/json")
+        ) {
           if (!retryResponse.ok) {
             throw new Error(`HTTP error! status: ${retryResponse.status}`);
           }
@@ -91,7 +94,9 @@ async function apiRequest(endpoint, options = {}) {
 
         const retryData = await retryResponse.json();
         if (!retryResponse.ok) {
-          throw new Error(retryData.error || `HTTP error! status: ${retryResponse.status}`);
+          throw new Error(
+            retryData.error || `HTTP error! status: ${retryResponse.status}`
+          );
         }
 
         return retryData;
@@ -124,6 +129,8 @@ async function apiRequest(endpoint, options = {}) {
 }
 
 // Authentication API methods
+const AUTH_BASE = "/api/common/auth";
+
 export const authAPI = {
   login: async (email, password) => {
     return apiRequest("/api/common/auth/login/", {
@@ -141,6 +148,20 @@ export const authAPI = {
   refreshToken: async () => {
     return apiRequest("/api/common/auth/refresh-token/", {
       method: "POST",
+    });
+  },
+
+  passwordResetRequest: async (email) => {
+    return apiRequest(`${AUTH_BASE}/password-reset-request/`, {
+      method: "POST",
+      body: JSON.stringify({ email }),
+    });
+  },
+
+  passwordResetConfirm: async (data) => {
+    return apiRequest(`${AUTH_BASE}/password-reset-request/`, {
+      method: "POST",
+      body: JSON.stringify(data),
     });
   },
 

@@ -11,7 +11,8 @@ import {
   Avatar,
   Chip,
 } from "@mui/material";
-import { dividerClasses } from "@mui/material/Divider";
+import CloseIcon from "@mui/icons-material/Close";
+import IconButton from "@mui/material/IconButton";
 
 import { useState } from "react";
 import * as Icons from "@mui/icons-material";
@@ -20,7 +21,7 @@ import { useNavigate } from "react-router-dom";
 import { authAPI } from "../services/api";
 import { useTheme } from "../../contexts/ThemeContext";
 import { getColors } from "../../design-system/tokens";
-export default function SidebarMenu({ user }) {
+export default function SidebarMenu({ user, onItemClick, onClose, isMobile }) {
   const navigate = useNavigate();
   const { mode } = useTheme();
   const colors = getColors(mode);
@@ -50,6 +51,19 @@ export default function SidebarMenu({ user }) {
         height: "100%",
       }}
     >
+      {isMobile && (
+        <Box sx={{ display: "flex", justifyContent: "flex-end" }}>
+          <IconButton
+            onClick={onClose}
+            sx={{
+              color: mode === "dark" ? colors.grey[100] : colors.grey[100],
+            }}
+          >
+            <CloseIcon />
+          </IconButton>
+        </Box>
+      )}
+
       <List
         sx={{
           display: "flex",
@@ -88,8 +102,8 @@ export default function SidebarMenu({ user }) {
         </Box>
 
         {/* SIDEBAR MENU */}
-        <Box 
-          sx={{ 
+        <Box
+          sx={{
             flexGrow: 1,
             overflowY: "auto",
             overflowX: "hidden",
@@ -107,7 +121,10 @@ export default function SidebarMenu({ user }) {
             const hasChildren = Boolean(item.children);
 
             return (
-              <Box key={item.label} sx={{ display: "flex", flexDirection: "column" }}>
+              <Box
+                key={item.label}
+                sx={{ display: "flex", flexDirection: "column" }}
+              >
                 {/* PARENT ITEM */}
                 <ListItemButton
                   onClick={() => {
@@ -116,16 +133,7 @@ export default function SidebarMenu({ user }) {
                       return;
                     }
                     navigate(item.path);
-                  }}
-                  sx={{
-                    pl: 1,
-                    py: 0.75,
-                    borderRadius: 1,
-                    "&:hover": { bgcolor: "action.hover" },
-                    display: "flex",
-                    gap: 1,
-                    
-                    minHeight: 40,
+                    onItemClick?.(); // closes drawer on mobile
                   }}
                 >
                   {Icon && (
@@ -137,7 +145,7 @@ export default function SidebarMenu({ user }) {
                     </ListItemIcon>
                   )}
 
-                  <ListItemText 
+                  <ListItemText
                     primary={item.label}
                     sx={{
                       "& .MuiListItemText-primary": {
@@ -164,7 +172,10 @@ export default function SidebarMenu({ user }) {
                         return (
                           <ListItemButton
                             key={child.label}
-                            onClick={() => navigate(child.path)}
+                            onClick={() => {
+                              navigate(child.path);
+                              onItemClick?.();
+                            }}
                             sx={{
                               pl: 3,
                               py: 0.5,
@@ -199,9 +210,7 @@ export default function SidebarMenu({ user }) {
         </Box>
 
         {/* USER PROFILE & LOGOUT */}
-        <Box
-          
-        >
+        <Box>
           {/* USER PROFILE */}
           {user && (
             <Box
@@ -237,7 +246,8 @@ export default function SidebarMenu({ user }) {
                   variant="body2"
                   fontWeight="600"
                   sx={{
-                    color: mode === "dark" ? colors.grey[100] : colors.grey[100],
+                    color:
+                      mode === "dark" ? colors.grey[100] : colors.grey[100],
                     fontSize: "14px",
                     overflow: "hidden",
                     textOverflow: "ellipsis",
@@ -284,7 +294,7 @@ export default function SidebarMenu({ user }) {
               color: colors.redAccent[500],
               "&:hover": {
                 backgroundColor:
-                  mode === "dark" ? colors.primary[700] : colors.grey[200],
+                  mode === "dark" ? colors.primary[700] : colors.grey[900],
               },
             }}
             onClick={handleLogout}

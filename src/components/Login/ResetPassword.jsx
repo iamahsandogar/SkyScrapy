@@ -1,22 +1,49 @@
 import { useState } from "react";
-import { Box, Typography, TextField, Button, Link, Alert } from "@mui/material";
+import {
+  Box,
+  Typography,
+  TextField,
+  Button,
+  Paper,
+  IconButton,
+  InputAdornment,
+  Alert,
+} from "@mui/material";
+import { useSearchParams } from "react-router-dom";
+import Visibility from "@mui/icons-material/Visibility";
+import VisibilityOff from "@mui/icons-material/VisibilityOff";
 import { authAPI } from "../services/api";
 
-export default function ForgotPassword() {
-  const [email, setEmail] = useState("");
+export default function ResetPassword() {
+  const [search] = useSearchParams();
+  const uid = search.get("uid") || undefined;
+  const token = search.get("token") || undefined;
+
+  const [passwords, setPasswords] = useState({
+    password: "",
+    confirmPassword: "",
+  });
+  const [showPassword, setShowPassword] = useState(false);
+  const [showConfirm, setShowConfirm] = useState(false);
   const [loading, setLoading] = useState(false);
   const [message, setMessage] = useState("");
   const [error, setError] = useState("");
 
   const handleChange = (e) => {
-    setEmail(e.target.value);
+    setPasswords((p) => ({ ...p, [e.target.name]: e.target.value }));
     setMessage("");
     setError("");
   };
 
-  const handleSubmit = async () => {
-    if (!email) {
-      setError("Please enter your email");
+  const handleUpdate = async () => {
+    const { password, confirmPassword } = passwords;
+
+    if (!password || !confirmPassword) {
+      setError("Please fill both password fields");
+      return;
+    }
+    if (password !== confirmPassword) {
+      setError("Passwords do not match");
       return;
     }
 
@@ -25,13 +52,19 @@ export default function ForgotPassword() {
     setMessage("");
 
     try {
-      const response = await authAPI.passwordResetRequest(email);
+      // Send what your backend expects; uid/token are optional if your link encodes them
+      const payload = {
+        password,
+        confirm_password: confirmPassword,
+        ...(uid ? { uid } : {}),
+        ...(token ? { token } : {}),
+      };
+      const res = await authAPI.passwordResetConfirm(payload);
       setMessage(
-        response.message ||
-          "If an account with this email exists, a password reset link has been sent."
+        res?.message || "Your password has been updated successfully."
       );
     } catch (err) {
-      setError(err.message || "Failed to send reset link. Please try again.");
+      setError(err?.message || "Failed to reset password. Please try again.");
     } finally {
       setLoading(false);
     }
@@ -60,15 +93,7 @@ export default function ForgotPassword() {
         backgroundColor: "#f5f5f5",
       }}
     >
-      <Paper
-        elevation={3}
-        sx={{
-          width: 380,
-          padding: 4,
-          borderRadius: 4,
-        }}
-      >
-        {/* Logo + Heading */}
+      <Paper elevation={3} sx={{ width: 380, padding: 4, borderRadius: 4 }}>
         <Box
           sx={{
             display: "flex",
@@ -80,23 +105,27 @@ export default function ForgotPassword() {
           <img
             src="/White Orange SLCW.png"
             alt="SLCW Icon"
-            style={{
-              width: "180px",
-              height: "55px",
-              objectFit: "contain",
-            }}
+            style={{ width: "180px", height: "55px", objectFit: "contain" }}
           />
-
           <Typography variant="h5" fontWeight="bold" mt={1}>
             Reset Password
           </Typography>
         </Box>
 
-        {/* New Password */}
+        {message && (
+          <Alert severity="success" sx={{ mb: 2 }}>
+            {message}
+          </Alert>
+        )}
+        {error && (
+          <Alert severity="error" sx={{ mb: 2 }}>
+            {error}
+          </Alert>
+        )}
+
         <Typography fontWeight="bold" mb={0.5}>
           New Password <span style={{ color: "red" }}>*</span>
         </Typography>
-
         <TextField
           fullWidth
           variant="outlined"
@@ -110,7 +139,7 @@ export default function ForgotPassword() {
             endAdornment: (
               <InputAdornment position="end">
                 <IconButton
-                  onClick={() => setShowPassword(!showPassword)}
+                  onClick={() => setShowPassword((s) => !s)}
                   sx={{
                     backgroundColor: "#d0ebff",
                     borderRadius: 1,
@@ -125,17 +154,15 @@ export default function ForgotPassword() {
           sx={{ mb: 3 }}
         />
 
-        {/* Confirm Password */}
         <Typography fontWeight="bold" mb={0.5}>
           Confirm Password <span style={{ color: "red" }}>*</span>
         </Typography>
-
         <TextField
           fullWidth
           variant="outlined"
           type={showConfirm ? "text" : "password"}
           placeholder="Confirm your password"
-          name="confirmPassword" // ✅ Correct field name
+          name="confirmPassword"
           value={passwords.confirmPassword}
           onChange={handleChange}
           InputProps={{
@@ -143,7 +170,7 @@ export default function ForgotPassword() {
             endAdornment: (
               <InputAdornment position="end">
                 <IconButton
-                  onClick={() => setShowConfirm(!showConfirm)}
+                  onClick={() => setShowConfirm((s) => !s)}
                   sx={{
                     backgroundColor: "#d0ebff",
                     borderRadius: 1,
@@ -158,7 +185,6 @@ export default function ForgotPassword() {
           sx={{ mb: 3 }}
         />
 
-        {/* Update Button */}
         <Button
           variant="contained"
           fullWidth

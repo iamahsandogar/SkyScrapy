@@ -15,6 +15,7 @@ import { useEffect, useState } from "react";
 import Topbar from "../global/Topbar";
 import { colors } from "../../design-system/tokens";
 import apiRequest from "../services/api";
+import { getCachedLeadData } from "../../utils/prefetchData";
 const getActionButtonStyles = (action) => {
   switch (action) {
     case "activate":
@@ -62,12 +63,34 @@ export default function ManageEmployees() {
 
   /* ------------------------------------
      FETCH EMPLOYEES FROM BACKEND
+     Uses cached data first for instant loading
   -------------------------------------*/
   useEffect(() => {
     fetchEmployees();
   }, []);
 
   const fetchEmployees = async () => {
+    // Try cached data first
+    const cachedData = getCachedLeadData();
+
+    if (cachedData?.employees) {
+      console.log("Using cached employees for instant loading");
+      setEmployees(cachedData.employees);
+      setLoading(false);
+
+      // Refresh in background
+      try {
+        const data = await apiRequest("/ui/employees/");
+        const employeesList = data?.employees || data || [];
+        setEmployees(employeesList);
+      } catch (error) {
+        console.error("Failed to refresh employees", error);
+        // Keep using cached data if refresh fails
+      }
+      return;
+    }
+
+    // No cache, fetch fresh
     try {
       setLoading(true);
       const data = await apiRequest("/ui/employees/");
@@ -81,12 +104,24 @@ export default function ManageEmployees() {
     }
   };
 
+  const getAvatarStyles = (emp) => {
+    const isActive = emp.status === "Active" || emp.is_active;
+
+    return {
+      bgcolor: isActive
+        ? colors.blueAccent[700]
+        : colors.grey[700],
+      color: colors.bg[100],
+      fontWeight: "bold",
+    };
+  };
+
   /* ------------------------------------
      TOGGLE ACTIVE STATUS
   -------------------------------------*/
   const toggleStatus = async (employee) => {
-    const pk = employee.id 
-    
+    const pk = employee.id;
+
     if (!pk) {
       alert("Cannot toggle status: Employee missing ID");
       return;
@@ -114,8 +149,8 @@ export default function ManageEmployees() {
      DELETE EMPLOYEE
   -------------------------------------*/
   const handleDelete = async (employee) => {
-    const pk = employee.id 
-    
+    const pk = employee.id;
+
     if (!pk) {
       alert("Cannot delete: Employee missing ID");
       return;
@@ -145,7 +180,7 @@ export default function ManageEmployees() {
         </Typography>
       </Topbar>
 
-      <Paper sx={{ p: 2, borderRadius: 3, mt: 2 }}>
+      <Paper sx={{ p: 2, borderRadius: 3, mt: 2, boxShadow: "none" }}>
         {loading && (
           <Typography color="text.secondary" sx={{ p: 2 }}>
             Loading employees...
@@ -182,10 +217,12 @@ export default function ManageEmployees() {
                 <TableRow key={emp.id || emp.pk || emp.uuid}>
                   <TableCell>
                     <Box display="flex" alignItems="center" gap={1}>
-                      <Avatar>
+                      <Avatar sx={getAvatarStyles(emp)}>
                         {emp.firstName?.[0] || emp.first_name?.[0] || "?"}
                       </Avatar>
-                      {emp.firstName || emp.first_name} {emp.lastName || emp.last_name}
+
+                      {emp.firstName || emp.first_name}{" "}
+                      {emp.lastName || emp.last_name}
                     </Box>
                   </TableCell>
 
@@ -193,16 +230,22 @@ export default function ManageEmployees() {
 
                   <TableCell>
                     <Chip
-                      label={emp.status || (emp.is_active ? "Active" : "Deactivated")}
+                      label={
+                        emp.status || (emp.is_active ? "Active" : "Deactivated")
+                      }
                       sx={{
                         backgroundColor:
-                          (emp.status === "Active" || emp.is_active)
-                            ? colors.greenAccent[900] 
+                          emp.status === "Active" || emp.is_active
+                            ? colors.greenAccent[900]
                             : colors.grey[900],
-                            color:
-                            (emp.status === "Active" || emp.is_active)
-                              ? colors.greenAccent[400]
-                              : colors.grey[500],
+                        color:
+                          emp.status === "Active" || emp.is_active
+                            ? colors.greenAccent[400]
+                            : colors.grey[500],
+                        border: `1px solid ${emp.status === "Active" || emp.is_active
+                            ? colors.greenAccent[400]
+                            : colors.grey[500]
+                          }`,
                         fontWeight: "bold",
                       }}
                     />
@@ -217,7 +260,9 @@ export default function ManageEmployees() {
                         disabled={loading}
                         sx={{
                           ...getActionButtonStyles(
-                            (emp.status === "Active" || emp.is_active) ? "deactivate" : "activate"
+                            emp.status === "Active" || emp.is_active
+                              ? "deactivate"
+                              : "activate"
                           ),
                           textTransform: "none",
                           fontWeight: "bold",
@@ -225,7 +270,9 @@ export default function ManageEmployees() {
                           boxShadow: "none",
                         }}
                       >
-                        {(emp.status === "Active" || emp.is_active) ? "Deactivate" : "Activate"}
+                        {emp.status === "Active" || emp.is_active
+                          ? "Deactivate"
+                          : "Activate"}
                       </Button>
 
                       <Button

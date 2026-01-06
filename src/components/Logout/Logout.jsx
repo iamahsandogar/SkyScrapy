@@ -19,10 +19,12 @@ const LogoutButton = () => {
 
   return (
     <ListItemButton
-      sx={{ color: colors.redAccent[500],
+      sx={{
+        color: colors.redAccent[500],
         "&:hover": {
-      backgroundColor: colors.blueAccent[600]     },
-       }}
+          backgroundColor: colors.blueAccent[600],
+        },
+      }}
       onClick={handleLogout}
     >
       <ListItemIcon sx={{ minWidth: 36, color: colors.redAccent[500] }}>

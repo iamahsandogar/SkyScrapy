@@ -2,10 +2,10 @@ import { useState } from "react";
 import {
   Box,
   Typography,
+  Paper,
   TextField,
   Button,
   Alert,
-  Paper,
 } from "@mui/material";
 import { authAPI } from "../services/api";
 
@@ -20,18 +20,16 @@ export default function ForgotPassword() {
       setError("Please enter your email");
       return;
     }
-
     setLoading(true);
     setError("");
     setMessage("");
-
     try {
-      const response = await authAPI.passwordResetRequest(email);
+      const res = await authAPI.passwordResetRequest(email);
       setMessage(
-        response.message || "If an account exists, a reset link has been sent."
+        res?.message || "If an account exists, a reset link has been sent."
       );
     } catch (err) {
-      setError(err.message || "Failed to send reset link.");
+      setError(err?.message || "Failed to send reset link. Please try again.");
     } finally {
       setLoading(false);
     }
@@ -47,7 +45,7 @@ export default function ForgotPassword() {
         backgroundColor: "#f5f5f5",
       }}
     >
-      <Paper elevation={3} sx={{ width: 380, p: 4, borderRadius: 4 }}>
+      <Paper elevation={3} sx={{ width: 380, padding: 4, borderRadius: 4 }}>
         <Box
           sx={{
             display: "flex",
@@ -59,40 +57,54 @@ export default function ForgotPassword() {
           <img
             src="/White Orange SLCW.png"
             alt="SLCW Icon"
-            style={{ width: "180px", height: "55px" }}
+            style={{ width: "180px", height: "55px", objectFit: "contain" }}
           />
-          <Typography variant="h5" fontWeight="bold" mb={2} textAlign="center">
+          <Typography variant="h5" fontWeight="bold" mt={1}>
             Forgot Password
           </Typography>
         </Box>
 
-        <TextField
-          fullWidth
-          label="Email"
-          value={email}
-          onChange={(e) => setEmail(e.target.value)}
-          sx={{ mb: 3 }}
-        />
-
-        <Button
-          fullWidth
-          variant="contained"
-          onClick={handleSubmit}
-          disabled={loading}
-        >
-          {loading ? "Sending..." : "Send Reset Link"}
-        </Button>
-
         {message && (
-          <Alert severity="success" sx={{ mt: 2 }}>
+          <Alert severity="success" sx={{ mb: 2 }}>
             {message}
           </Alert>
         )}
         {error && (
-          <Alert severity="error" sx={{ mt: 2 }}>
+          <Alert severity="error" sx={{ mb: 2 }}>
             {error}
           </Alert>
         )}
+
+        <Typography fontWeight="bold" mb={0.5}>
+          Email <span style={{ color: "red" }}>*</span>
+        </Typography>
+        <TextField
+          fullWidth
+          placeholder="Enter your email"
+          value={email}
+          onChange={(e) => {
+            setEmail(e.target.value);
+            setError("");
+            setMessage("");
+          }}
+          sx={{ mb: 3 }}
+        />
+
+        <Button
+          variant="contained"
+          fullWidth
+          onClick={handleSubmit}
+          disabled={loading}
+          sx={{
+            py: 1.3,
+            borderRadius: 2,
+            textTransform: "none",
+            fontWeight: "bold",
+            fontSize: "16px",
+          }}
+        >
+          {loading ? "Sending..." : "Send Reset Link"}
+        </Button>
       </Paper>
     </Box>
   );

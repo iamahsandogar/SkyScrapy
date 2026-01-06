@@ -224,9 +224,9 @@ export default function AllProjects() {
     <Box>
       <Topbar>
         <Typography variant="h5" fontWeight="bold">
-          All Leads & Projects
+          All Projects
         </Typography>
-        <Box display="flex" gap={2}>
+        {/* <Box display="flex" gap={2}>
           <Button
             variant="outlined"
             startIcon={<CloudDownloadIcon />}
@@ -241,7 +241,7 @@ export default function AllProjects() {
           >
             Add New Lead
           </Button>
-        </Box>
+        </Box> */}
       </Topbar>
 
       {/* Search & Filter */}

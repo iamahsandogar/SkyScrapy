@@ -46,22 +46,32 @@ export default function CreateEmployee() {
       !formData.first_name ||
       !formData.last_name ||
       !formData.email ||
-      !formData.password) {
+      !formData.password ||
+      !formData.phone
+    ) {
       alert("Please fill all required fields");
+      return;
+    }
+
+    // Phone must start with country code
+    const phoneRegex = /^\+[1-9]\d{7,14}$/;
+    if (!phoneRegex.test(formData.phone.trim())) {
+      alert("Phone number must start with a country code (e.g. +92XXXXXXXXXX)");
       return;
     }
 
     try {
       setLoading(true);
 
-      // Prepare payload - only send fields that have values
       const payload = {
         first_name: formData.first_name.trim(),
         last_name: formData.last_name.trim(),
         email: formData.email.trim(),
         password: formData.password,
-        ...(formData.phone && { phone: formData.phone.trim() }),
-        ...(formData.alternate_phone && { alternate_phone: formData.alternate_phone.trim() }),
+        phone: formData.phone.trim(),
+        ...(formData.alternate_phone && {
+          alternate_phone: formData.alternate_phone.trim(),
+        }),
       };
 
       await apiRequest("/api/common/users/create-employee/", {
@@ -71,7 +81,6 @@ export default function CreateEmployee() {
 
       alert("Employee Created Successfully");
 
-      // Reset form
       setFormData({
         first_name: "",
         last_name: "",
@@ -80,9 +89,6 @@ export default function CreateEmployee() {
         phone: "",
         alternate_phone: "",
       });
-
-      // Optionally navigate to employees list
-      // navigate("/management/employees");
     } catch (error) {
       console.error("Failed to create employee", error);
       alert(error.message || "Failed to create employee. Please try again.");
@@ -173,9 +179,7 @@ export default function CreateEmployee() {
 
           <Box display="flex" gap={2}>
             <Box flex={1}>
-              <Typography fontWeight="bold" sx={{ mb: 0.5 }}>
-                Phone
-              </Typography>
+              <RequiredLabel text="Phone" />
               <TextField
                 sx={MuiTextFieldPadding}
                 fullWidth

@@ -13,6 +13,7 @@ import OngoingProjects from "../components/Dashboard/OngoingProjects";
 import ChartBox from "../components/Dashboard/ChartBox";
 import { useNavigate } from "react-router-dom";
 import ProjectCompletionTable from "../components/Dashboard/ProjectCompletionChart";
+import Cards from "../components/Dashboard/Cards";
 
 export default function Dashboard() {
   const navigate = useNavigate();
@@ -54,11 +55,23 @@ export default function Dashboard() {
           </Box>
         ))}
       </Box> */}
+      <Cards />
       {/* Ongoing Projects + Chart */}
       <Box display={"grid"} gridTemplateColumns="1fr 1fr" gap={2} mt={2}>
         <ProjectCompletionTable />
       </Box>
-      <Box display={"grid"} gridTemplateColumns="1fr 1fr" gap={2} mt={2}>
+      <Box
+        display="grid"
+        gap={2}
+        mt={2}
+        sx={{
+          gridTemplateColumns: {
+            xs: "1fr", // Mobile → 1 column
+            sm: "1fr", // Small tablets → 1 column
+            md: "1fr 1fr", // Desktop → 2 columns
+          },
+        }}
+      >
         <OngoingProjects />
         <ChartBox />
       </Box>
