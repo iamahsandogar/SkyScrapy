@@ -24,31 +24,54 @@ export const prefetchLeadData = async () => {
     return getCachedLeadData(); // Return existing cache if available
   }
   
+  // Check if user is employee (not admin) - employees can't access employees API
+  const storedUser = localStorage.getItem("user");
+  let isCurrentUserAdmin = false;
+  
+  if (storedUser) {
+    try {
+      const userData = JSON.parse(storedUser);
+      isCurrentUserAdmin = 
+        userData.is_staff ||
+        userData.is_admin ||
+        userData.is_superuser ||
+        userData.role === 0 ||
+        userData.role === "0";
+    } catch (e) {
+      console.warn("Error parsing user data:", e);
+    }
+  }
+  
   try {
     isPrefetching = true;
     lastPrefetchTime = now;
     console.log("Pre-fetching lead data (statuses, sources, employees, leads)...");
 
-    // Fetch all four APIs in parallel
+    // Fetch APIs in parallel, but skip employees API for employees (they get 403)
+    const apiPromises = [
+      apiRequest("/ui/options/statuses/").catch((err) => {
+        console.error("Failed to prefetch statuses:", err);
+        return null;
+      }),
+      apiRequest("/ui/options/sources/").catch((err) => {
+        console.error("Failed to prefetch sources:", err);
+        return null;
+      }),
+      // Only fetch employees API if user is admin
+      isCurrentUserAdmin 
+        ? apiRequest("/ui/employees/").catch((err) => {
+            console.error("Failed to prefetch employees:", err);
+            return null;
+          })
+        : Promise.resolve(null), // Skip for employees
+      apiRequest("/api/leads/").catch((err) => {
+        console.error("Failed to prefetch leads:", err);
+        return null;
+      }),
+    ];
+    
     const [statusesResponse, sourcesResponse, employeesResponse, leadsResponse] =
-      await Promise.all([
-        apiRequest("/ui/options/statuses/").catch((err) => {
-          console.error("Failed to prefetch statuses:", err);
-          return null;
-        }),
-        apiRequest("/ui/options/sources/").catch((err) => {
-          console.error("Failed to prefetch sources:", err);
-          return null;
-        }),
-        apiRequest("/ui/employees/").catch((err) => {
-          console.error("Failed to prefetch employees:", err);
-          return null;
-        }),
-        apiRequest("/api/leads/").catch((err) => {
-          console.error("Failed to prefetch leads:", err);
-          return null;
-        }),
-      ]);
+      await Promise.all(apiPromises);
 
     // Parse statuses
     let statusesList = [];
@@ -169,5 +192,56 @@ export const getCachedLeadData = () => {
  */
 export const clearLeadDataCache = () => {
   localStorage.removeItem("leadDataCache");
+};
+
+/**
+ * Add a new lead to the cached leads data
+ * This is used after creating a lead to update the cache without making an API call
+ */
+export const addLeadToCache = (newLead) => {
+  try {
+    const cached = localStorage.getItem("leadDataCache");
+    if (cached) {
+      const cacheData = JSON.parse(cached);
+      if (cacheData.leads && Array.isArray(cacheData.leads)) {
+        // Check if lead already exists (by ID) to avoid duplicates
+        const existingIndex = cacheData.leads.findIndex(
+          (lead) => 
+            (lead.id && newLead.id && String(lead.id) === String(newLead.id)) ||
+            (lead.pk && newLead.pk && String(lead.pk) === String(newLead.pk)) ||
+            (lead.uuid && newLead.uuid && String(lead.uuid) === String(newLead.uuid))
+        );
+        
+        if (existingIndex >= 0) {
+          // Update existing lead
+          cacheData.leads[existingIndex] = newLead;
+        } else {
+          // Add new lead to the beginning of the array
+          cacheData.leads.unshift(newLead);
+        }
+        
+        // Update timestamp
+        cacheData.timestamp = Date.now();
+        localStorage.setItem("leadDataCache", JSON.stringify(cacheData));
+        console.log("Added new lead to cache:", newLead);
+        return cacheData;
+      }
+    } else {
+      // No cache exists, create new one with just this lead
+      const newCache = {
+        statuses: [],
+        sources: [],
+        employees: [],
+        leads: [newLead],
+        timestamp: Date.now(),
+      };
+      localStorage.setItem("leadDataCache", JSON.stringify(newCache));
+      console.log("Created new cache with lead:", newLead);
+      return newCache;
+    }
+  } catch (error) {
+    console.error("Error adding lead to cache:", error);
+    return null;
+  }
 };
 

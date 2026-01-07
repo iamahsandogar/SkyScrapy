@@ -36,6 +36,7 @@ import MoreHorizIcon from "@mui/icons-material/MoreHoriz";
 import apiRequest from "../components/services/api";
 import { getCachedLeadData } from "../utils/prefetchData";
 import MoreVertIcon from "@mui/icons-material/MoreVert";
+
 const getChipStyles = (status) => {
   switch (status) {
     case "Completed":
@@ -96,19 +97,20 @@ const DEFAULT_COLUMNS = [
   "followUpAt",
   "followupStatus",
 ];
+
 const tableHeaderCellStyles = {
-  whiteSpace: "nowrap", // correct value
+  whiteSpace: "nowrap",
   fontWeight: 700,
 };
 
 const tableBodyCellStyles = {
-  maxWidth: 150, // adjust based on preference
+  maxWidth: 150,
   overflow: "hidden",
   textOverflow: "ellipsis",
   whiteSpace: "nowrap",
 };
 
-export default function AllLeads() {
+export default function EmployeeAllLeads() {
   const location = useLocation();
   const [leads, setLeads] = useState([]);
   const [q, setQ] = useState("");
@@ -119,318 +121,219 @@ export default function AllLeads() {
   });
   const [selectedLead, setSelectedLead] = useState(null);
   const [isModalOpen, setIsModalOpen] = useState(false);
-  const [statuses, setStatuses] = useState([]); // Store statuses for mapping
-  const [employees, setEmployees] = useState([]); // Store employees for mapping
-  // Lead actions menu
+  const [statuses, setStatuses] = useState([]);
   const [actionAnchorEl, setActionAnchorEl] = useState(null);
   const [menuLead, setMenuLead] = useState(null);
   const [mobileMenuAnchorEl, setMobileMenuAnchorEl] = useState(null);
+  const [currentUserId, setCurrentUserId] = useState(null);
 
   const actionOpen = Boolean(actionAnchorEl);
 
-  // Fetch statuses and employees to map IDs to names - use cache first for instant loading
+  // Get current user info on mount
   useEffect(() => {
-    const fetchStatusesAndEmployees = async () => {
-      // Check if user is admin
-      const storedUser = localStorage.getItem("user");
-      let isAdmin = false;
-      if (storedUser) {
-        try {
-          const userData = JSON.parse(storedUser);
-          isAdmin =
-            userData.is_staff ||
-            userData.is_admin ||
-            userData.is_superuser ||
-            userData.role === 0 ||
-            userData.role === "0";
-        } catch (e) {
-          console.error("Error parsing user data:", e);
-        }
-      }
-
-      // Try cached data first
-      const cachedData = getCachedLeadData();
-
-      if (cachedData?.statuses) {
-        console.log("Using cached statuses for instant loading");
-        setStatuses(cachedData.statuses);
-      }
-
-      if (cachedData?.employees && isAdmin) {
-        console.log("Using cached employees for instant loading");
-        setEmployees(cachedData.employees);
-      }
-
-      // For admins: fetch both statuses and employees in parallel for faster loading
-      // For employees: only fetch statuses (employees API not needed)
-      if (isAdmin) {
-        // Refresh in background - parallel calls for faster loading
-        try {
-          const [statusesData, employeesData] = await Promise.all([
-            apiRequest("/ui/options/statuses/").catch(() => null),
-            apiRequest("/ui/employees/").catch(() => null),
-          ]);
-
-          if (statusesData) {
-            let statusesList = [];
-            if (Array.isArray(statusesData)) {
-              statusesList = statusesData;
-            } else if (statusesData?.statuses) {
-              statusesList = statusesData.statuses;
-            } else if (statusesData?.data) {
-              statusesList = Array.isArray(statusesData.data)
-                ? statusesData.data
-                : statusesData.data?.statuses || [];
-            }
-            setStatuses(statusesList);
-          }
-
-          if (employeesData) {
-            let employeesList = [];
-            if (Array.isArray(employeesData)) {
-              employeesList = employeesData;
-            } else if (employeesData?.employees) {
-              employeesList = employeesData.employees;
-            } else if (employeesData?.data) {
-              employeesList = Array.isArray(employeesData.data)
-                ? employeesData.data
-                : employeesData.data?.employees || [];
-            }
-            // Don't filter - show all employees for lookup (leads might be assigned to inactive employees)
-            setEmployees(employeesList);
-            console.log("Loaded employees for lookup:", employeesList.length);
-          }
-        } catch (err) {
-          console.error("Failed to refresh statuses/employees:", err);
-        }
-
-        // If no cache, fetch fresh in parallel
-        if (!cachedData?.statuses || !cachedData?.employees) {
-          try {
-            const promises = [];
-            const promiseTypes = [];
-            
-            if (!cachedData?.statuses) {
-              promises.push(apiRequest("/ui/options/statuses/"));
-              promiseTypes.push("statuses");
-            }
-            if (!cachedData?.employees) {
-              promises.push(apiRequest("/ui/employees/"));
-              promiseTypes.push("employees");
-            }
-
-            const results = await Promise.all(promises);
-
-            // Process results based on what was requested
-            results.forEach((data, index) => {
-              const type = promiseTypes[index];
-              
-              if (type === "statuses" && data) {
-                let statusesList = [];
-                if (Array.isArray(data)) {
-                  statusesList = data;
-                } else if (data?.statuses) {
-                  statusesList = data.statuses;
-                } else if (data?.data) {
-                  statusesList = Array.isArray(data.data)
-                    ? data.data
-                    : data.data?.statuses || [];
-                }
-                setStatuses(statusesList);
-              } else if (type === "employees" && data) {
-                let employeesList = [];
-                if (Array.isArray(data)) {
-                  employeesList = data;
-                } else if (data?.employees) {
-                  employeesList = data.employees;
-                } else if (data?.data) {
-                  employeesList = Array.isArray(data.data)
-                    ? data.data
-                    : data.data?.employees || [];
-                }
-                setEmployees(employeesList);
-                console.log("Loaded employees for lookup:", employeesList.length);
-              }
-            });
-          } catch (err) {
-            console.error("Failed to fetch statuses/employees:", err);
-          }
-        }
-      } else {
-        // For employees: only fetch statuses (no employees API call)
-        // Refresh in background
-        try {
-          const statusesData = await apiRequest("/ui/options/statuses/").catch(() => null);
-
-          if (statusesData) {
-            let statusesList = [];
-            if (Array.isArray(statusesData)) {
-              statusesList = statusesData;
-            } else if (statusesData?.statuses) {
-              statusesList = statusesData.statuses;
-            } else if (statusesData?.data) {
-              statusesList = Array.isArray(statusesData.data)
-                ? statusesData.data
-                : statusesData.data?.statuses || [];
-            }
-            setStatuses(statusesList);
-          }
-        } catch (err) {
-          console.error("Failed to refresh statuses:", err);
-        }
-
-        // If no cache, fetch fresh
-        if (!cachedData?.statuses) {
-          try {
-            const data = await apiRequest("/ui/options/statuses/");
-            let statusesList = [];
-            if (Array.isArray(data)) {
-              statusesList = data;
-            } else if (data?.statuses) {
-              statusesList = data.statuses;
-            } else if (data?.data) {
-              statusesList = Array.isArray(data.data)
-                ? data.data
-                : data.data?.statuses || [];
-            }
-            setStatuses(statusesList);
-          } catch (err) {
-            console.error("Failed to fetch statuses:", err);
-          }
-        }
-      }
-    };
-    fetchStatusesAndEmployees();
+    const storedUser = localStorage.getItem("user");
+    if (storedUser) {
+      const userData = JSON.parse(storedUser);
+      const userId = userData.id || userData.pk || userData.uuid;
+      setCurrentUserId(userId);
+    }
   }, []);
 
+  // Fetch statuses - use cache first, similar to CreateLead.jsx pattern
+  useEffect(() => {
+    const fetchStatuses = async () => {
+      // Try cached data first for instant loading
+      const cachedData = getCachedLeadData();
+      const CACHE_MAX_AGE = 5 * 60 * 1000; // 5 minutes
+
+      if (cachedData && cachedData.timestamp) {
+        const cacheAge = Date.now() - cachedData.timestamp;
+        const isCacheFresh = cacheAge < CACHE_MAX_AGE;
+
+        if (isCacheFresh && cachedData.statuses) {
+          console.log("Using cached statuses for instant loading");
+          setStatuses(cachedData.statuses);
+        }
+
+        // Only refresh in background if cache is older than 5 minutes
+        if (cacheAge > CACHE_MAX_AGE) {
+          console.log("Cache is stale, refreshing statuses in background...");
+          refreshStatusesInBackground();
+        } else {
+          console.log("Cache is fresh, skipping statuses API call");
+        }
+      } else {
+        console.log("No cache available, fetching fresh statuses...");
+        await refreshStatusesInBackground();
+      }
+    };
+
+    const refreshStatusesInBackground = async () => {
+      try {
+        console.log("Fetching statuses from /ui/options/statuses/");
+        const statusesResponse = await apiRequest("/ui/options/statuses/");
+        console.log("Statuses API response:", statusesResponse);
+
+        // Handle multiple response structures
+        let statusesList = [];
+        if (Array.isArray(statusesResponse)) {
+          statusesList = statusesResponse;
+        } else if (statusesResponse?.statuses) {
+          statusesList = statusesResponse.statuses;
+        } else if (statusesResponse?.data) {
+          statusesList = Array.isArray(statusesResponse.data)
+            ? statusesResponse.data
+            : statusesResponse.data?.statuses || [];
+        }
+
+        console.log("Parsed statuses:", statusesList);
+        setStatuses(statusesList);
+
+        // Update cache with fresh statuses data
+        const currentCache = getCachedLeadData();
+        if (currentCache) {
+          currentCache.statuses = statusesList;
+          currentCache.timestamp = Date.now();
+          localStorage.setItem("leadDataCache", JSON.stringify(currentCache));
+        } else {
+          const newCache = {
+            statuses: statusesList,
+            sources: [],
+            employees: [],
+            leads: [],
+            timestamp: Date.now(),
+          };
+          localStorage.setItem("leadDataCache", JSON.stringify(newCache));
+        }
+      } catch (error) {
+        console.error("Failed to fetch statuses:", error);
+        // Don't set empty array, keep cached data if available
+      }
+    };
+
+    fetchStatuses();
+  }, []);
+
+  // Fetch leads - use cache first, then API
   useEffect(() => {
     const fetchLeads = async () => {
       // Get current user to filter leads
-      let currentUserId = null;
-      let isCurrentUserAdmin = false;
       const storedUser = localStorage.getItem("user");
-      const user = storedUser ? JSON.parse(storedUser) : null;
-
-      const isAdmin =
-        user?.is_staff ||
-        user?.is_admin ||
-        user?.is_superuser ||
-        user?.role === 0 ||
-        user?.role === "0";
+      let employeeId = null;
 
       if (storedUser) {
         const userData = JSON.parse(storedUser);
-        currentUserId = userData.id || userData.pk || userData.uuid;
-        isCurrentUserAdmin =
-          userData.is_staff ||
-          userData.is_admin ||
-          userData.is_superuser ||
-          userData.role === 0 ||
-          userData.role === "0";
+        employeeId = userData.id || userData.pk || userData.uuid;
       }
 
-      // Helper function to filter leads based on user role
-      const filterLeadsByUser = (leadsList) => {
-        console.log("Filtering leads - Total leads:", leadsList.length);
-        console.log("Current user ID:", currentUserId);
-        console.log("Is Admin:", isCurrentUserAdmin);
+      if (!employeeId) {
+        console.error("⚠️ Employee ID is missing! Cannot fetch leads.");
+        return;
+      }
 
-        if (isCurrentUserAdmin) {
-          // Admin sees all leads
-          console.log("Admin user - showing all leads");
-          return leadsList;
-        } else {
-          // Employee sees only their own leads (where assigned_to matches their ID)
-          console.log("=== EMPLOYEE FILTERING DEBUG ===");
-          console.log("Employee ID:", currentUserId);
-          console.log("Employee ID type:", typeof currentUserId);
-          console.log("Total leads to filter:", leadsList.length);
+      // Helper function to filter leads assigned to this employee
+      const filterLeadsByEmployee = (leadsList) => {
+        console.log("=== EMPLOYEE FILTERING DEBUG ===");
+        console.log("Employee ID:", employeeId);
+        console.log("Total leads to filter:", leadsList.length);
 
-          if (!currentUserId) {
-            console.error("⚠️ Employee ID is missing! Cannot filter leads.");
-            return [];
-          }
+        const filtered = leadsList.filter((lead) => {
+          // Try multiple field name variations
+          let assignedTo =
+            lead.assigned_to ||
+            lead.assignedTo ||
+            lead.assigned_to_id ||
+            lead.assignedToId;
 
-          const filtered = leadsList.filter((lead) => {
-            // Try multiple field name variations
-            let assignedTo =
-              lead.assigned_to ||
-              lead.assignedTo ||
-              lead.assigned_to_id ||
-              lead.assignedToId;
-
-            // Handle case where assigned_to might be an object with id property
-            if (
-              assignedTo &&
-              typeof assignedTo === "object" &&
-              assignedTo !== null
-            ) {
+          // Handle case where assigned_to might be an object with nested structure
+          // API returns: assigned_to.user_details.id (user ID) or assigned_to.id (profile ID)
+          if (
+            assignedTo &&
+            typeof assignedTo === "object" &&
+            assignedTo !== null
+          ) {
+            // CRITICAL: Check user_details.id first (this is the actual user ID)
+            // The API structure is: assigned_to.user_details.id
+            if (assignedTo.user_details && assignedTo.user_details.id) {
+              assignedTo = assignedTo.user_details.id;
+              console.log("Extracted user ID from user_details:", assignedTo);
+            } else {
+              // Fallback to other possible ID fields
               assignedTo =
-                assignedTo.id || assignedTo.pk || assignedTo.uuid || assignedTo;
+                assignedTo.id ||
+                assignedTo.pk ||
+                assignedTo.uuid ||
+                assignedTo.user_id ||
+                assignedTo.userId ||
+                assignedTo.profile_id ||
+                assignedTo.profileId;
             }
 
-            // If assigned_to is null/undefined, this lead won't match - skip it
-            if (!assignedTo && assignedTo !== 0) {
+            // If still an object or null, log for debugging
+            if (
+              !assignedTo ||
+              (typeof assignedTo === "object" && assignedTo !== null)
+            ) {
+              console.warn(
+                "Could not extract ID from assigned_to object:",
+                lead.assigned_to
+              );
+              console.warn("Object keys:", Object.keys(lead.assigned_to || {}));
+              if (lead.assigned_to && lead.assigned_to.user_details) {
+                console.warn("user_details:", lead.assigned_to.user_details);
+              }
               return false;
             }
-
-            // Convert both to strings for comparison (handles number/string mismatches)
-            const assignedToStr = String(assignedTo).trim();
-            const currentUserIdStr = String(currentUserId).trim();
-
-            // Also try comparing as numbers if both are numeric
-            let matches = assignedToStr === currentUserIdStr;
-
-            // If string comparison fails, try numeric comparison
-            if (!matches) {
-              const assignedToNum = Number(assignedTo);
-              const currentUserIdNum = Number(currentUserId);
-              if (!isNaN(assignedToNum) && !isNaN(currentUserIdNum)) {
-                matches = assignedToNum === currentUserIdNum;
-              }
-            }
-
-            // Debug all leads to see what's happening
-            console.log("Lead check:", {
-              leadId: lead.id,
-              leadTitle: lead.title,
-              assigned_to: lead.assigned_to,
-              assignedTo: lead.assignedTo,
-              extractedAssignedTo: assignedTo,
-              assignedToStr: assignedToStr,
-              currentUserIdStr: currentUserIdStr,
-              matches: matches,
-              assignedToType: typeof assignedTo,
-              currentUserIdType: typeof currentUserId,
-            });
-
-            return matches;
-          });
-
-          console.log(`=== FILTERING RESULT ===`);
-          console.log(
-            `Filtered leads: ${filtered.length} out of ${leadsList.length} total`
-          );
-
-          if (filtered.length === 0 && leadsList.length > 0) {
-            console.warn("⚠️ NO LEADS MATCHED! Employee ID:", currentUserId);
-            console.warn(
-              "Sample leads from API:",
-              leadsList.slice(0, 5).map((l) => ({
-                id: l.id,
-                title: l.title,
-                assigned_to: l.assigned_to,
-                assignedTo: l.assignedTo,
-                assigned_to_type: typeof l.assigned_to,
-                allKeys: Object.keys(l).filter((k) =>
-                  k.toLowerCase().includes("assign")
-                ),
-              }))
-            );
           }
 
-          return filtered;
+          // If assigned_to is null/undefined, this lead won't match - skip it
+          if (!assignedTo && assignedTo !== 0) {
+            return false;
+          }
+
+          // Convert both to strings for comparison (handles number/string mismatches and UUIDs)
+          const assignedToStr = String(assignedTo).trim();
+          const employeeIdStr = String(employeeId).trim();
+
+          // Compare as strings (UUIDs are strings)
+          const matches = assignedToStr === employeeIdStr;
+
+          // Debug all leads to see what's happening
+          console.log("Lead check:", {
+            leadId: lead.id,
+            leadTitle: lead.title,
+            assigned_to_original: lead.assigned_to,
+            assigned_to_is_object: typeof lead.assigned_to === "object",
+            user_details_id: lead.assigned_to?.user_details?.id,
+            extractedAssignedTo: assignedTo,
+            extractedAssignedToStr: assignedToStr,
+            employeeIdStr: employeeIdStr,
+            matches: matches,
+          });
+
+          return matches;
+        });
+
+        console.log(`=== FILTERING RESULT ===`);
+        console.log(
+          `Filtered leads: ${filtered.length} out of ${leadsList.length} total`
+        );
+
+        if (filtered.length === 0 && leadsList.length > 0) {
+          console.warn("⚠️ NO LEADS MATCHED! Employee ID:", employeeId);
+          console.warn(
+            "Sample leads from API:",
+            leadsList.slice(0, 5).map((l) => ({
+              id: l.id,
+              title: l.title,
+              assigned_to: l.assigned_to,
+              assignedTo: l.assignedTo,
+              assigned_to_type: typeof l.assigned_to,
+            }))
+          );
         }
+
+        return filtered;
       };
 
       // Try cached data first - use it without making API call
@@ -438,25 +341,12 @@ export default function AllLeads() {
       if (cachedData?.leads) {
         console.log("=== USING CACHED LEADS ===");
         console.log("Cached leads count:", cachedData.leads.length);
-        if (cachedData.leads.length > 0) {
-          console.log("Sample cached lead:", cachedData.leads[0]);
-          console.log(
-            "Sample lead assigned_to:",
-            cachedData.leads[0].assigned_to
-          );
-          console.log(
-            "Sample lead assignedTo:",
-            cachedData.leads[0].assignedTo
-          );
-        }
-        const filteredLeads = filterLeadsByUser(cachedData.leads);
+        const filteredLeads = filterLeadsByEmployee(cachedData.leads);
         console.log(
           "Filtered leads count after filtering:",
           filteredLeads.length
         );
-
         setLeads(filteredLeads);
-        // Don't make API call - just use cached data
         return;
       }
 
@@ -469,21 +359,17 @@ export default function AllLeads() {
         console.log("Cache available after delay, using it");
         const leadsList = cachedDataAfterDelay.leads;
         if (Array.isArray(leadsList)) {
-          const filteredLeads = filterLeadsByUser(leadsList);
+          const filteredLeads = filterLeadsByEmployee(leadsList);
           setLeads(filteredLeads);
         }
         return;
       }
 
-      // Still no cache, fetch fresh
+      // Still no cache, fetch fresh from API
       try {
         console.log("Fetching leads from API...");
         const data = await apiRequest("/api/leads/");
         console.log("=== API RESPONSE RAW ===", data);
-        console.log("API response type:", typeof data);
-        console.log("Is array?", Array.isArray(data));
-        console.log("Has leads property?", data?.leads);
-        console.log("Has data property?", data?.data);
 
         // Handle different response formats
         let leadsList = [];
@@ -500,8 +386,6 @@ export default function AllLeads() {
           } else if (data.data?.leads && Array.isArray(data.data.leads)) {
             leadsList = data.data.leads;
             console.log("Using data.data.leads array");
-        } else {
-            console.log("data.data is not an array:", data.data);
           }
         } else {
           console.warn(
@@ -512,15 +396,9 @@ export default function AllLeads() {
 
         console.log("=== PARSED LEADS LIST ===");
         console.log("Total leads count:", leadsList.length);
-        if (leadsList.length > 0) {
-          console.log("First lead:", leadsList[0]);
-          console.log("First lead keys:", Object.keys(leadsList[0]));
-          console.log("First lead assigned_to:", leadsList[0].assigned_to);
-          console.log("First lead assignedTo:", leadsList[0].assignedTo);
-        }
 
-        // Filter leads based on user role
-        const filteredLeads = filterLeadsByUser(leadsList);
+        // Filter leads to show only those assigned to this employee
+        const filteredLeads = filterLeadsByEmployee(leadsList);
         console.log("=== AFTER FILTERING ===");
         console.log("Filtered leads count:", filteredLeads.length);
         console.log("Original leads count:", leadsList.length);
@@ -552,7 +430,7 @@ export default function AllLeads() {
     };
 
     fetchLeads();
-  }, [location.pathname]); // Refresh when navigating to this page
+  }, [location.pathname, currentUserId]);
 
   // Function to get status name from ID
   const getStatusName = (statusId) => {
@@ -580,7 +458,6 @@ export default function AllLeads() {
     const statusObj = statuses.find((s) => {
       // Handle different status object structures
       if (typeof s === "string") {
-        // If status is just a string, we can't match by ID
         return false;
       }
 
@@ -615,13 +492,7 @@ export default function AllLeads() {
       }
     }
 
-    // If not found, log for debugging and return the ID as string (fallback)
-    console.warn(
-      "Status not found for ID:",
-      statusId,
-      "Available statuses:",
-      statuses
-    );
+    // If not found, return the ID as string (fallback)
     return String(statusIdNum);
   };
 
@@ -657,24 +528,28 @@ export default function AllLeads() {
       case "status":
         return getStatusName(lead.status);
       case "assignedTo":
-        return getEmployeeName(lead.assigned_to || lead.assignedTo);
+        // For employees, assigned_to should always be themselves
+        const storedUser = localStorage.getItem("user");
+        if (storedUser) {
+          const userData = JSON.parse(storedUser);
+          const firstName = userData.first_name || userData.firstName || "";
+          const lastName = userData.last_name || userData.lastName || "";
+          return `${firstName} ${lastName}`.trim() || "Me";
+        }
+        return "Me";
       case "followUpAt":
         // follow_up_at now contains combined date and time as ISO datetime string
         const followUpDateTime = lead.follow_up_at || lead.followUpAt;
         if (followUpDateTime) {
-          // Parse as datetime and show both date and time in a proper format
+          // Parse as datetime and show both date and time
           const dateTime = new Date(followUpDateTime);
-          const dateStr = dateTime.toLocaleDateString("en-US", {
-            year: "numeric",
-            month: "short",
-            day: "numeric",
-          });
-          const timeStr = dateTime.toLocaleTimeString("en-US", {
+          const dateStr = dateTime.toLocaleDateString();
+          const timeStr = dateTime.toLocaleTimeString([], {
             hour: "2-digit",
             minute: "2-digit",
             hour12: true, // 12-hour format with AM/PM
           });
-          return `${dateStr}, ${timeStr}`;
+          return `${dateStr} ${timeStr}`;
         }
         return "";
       case "followUpTime":
@@ -713,45 +588,15 @@ export default function AllLeads() {
   };
 
   const getEmployeeName = (assignedTo) => {
-    // Handle null, undefined, empty string, or "None"
-    if (!assignedTo && assignedTo !== 0) {
-      return "None";
+    // For employees, assigned_to should always be themselves
+    const storedUser = localStorage.getItem("user");
+    if (storedUser) {
+      const userData = JSON.parse(storedUser);
+      const firstName = userData.first_name || userData.firstName || "";
+      const lastName = userData.last_name || userData.lastName || "";
+      return `${firstName} ${lastName}`.trim() || "Me";
     }
-
-    // Handle if assigned_to is an object (like status can be)
-    let assignedToId = assignedTo;
-    if (typeof assignedTo === "object" && assignedTo !== null) {
-      assignedToId = assignedTo.id || assignedTo.pk || assignedTo.uuid || null;
-      if (!assignedToId) {
-        return "None";
-      }
-    }
-
-    // If no employees loaded yet, return "Loading..."
-    if (!employees || employees.length === 0) {
-      return "Loading...";
-    }
-
-    // Convert to string for comparison
-    const assignedToIdStr = String(assignedToId);
-
-    // Use employees from state (from cache or API)
-    const emp = employees.find((e) => {
-      const empId = e.id || e.pk || e.uuid;
-      if (!empId) return false;
-      const empIdStr = String(empId);
-      return empIdStr === assignedToIdStr;
-    });
-
-    if (emp) {
-      const firstName = emp.firstName || emp.first_name || "";
-      const lastName = emp.lastName || emp.last_name || "";
-      const name = `${firstName} ${lastName}`.trim();
-      return name || "Unknown";
-    }
-
-    // If not found, return "None"
-    return "None";
+    return "Me";
   };
 
   const handleDeleteLead = async (id) => {
@@ -772,7 +617,6 @@ export default function AllLeads() {
     }
 
     // Export ALL columns regardless of customization
-    // Map all column keys to CSV column definitions with proper labels
     const csvColumns = ALL_COLUMNS.map((col) => ({
       key: col.key,
       label: col.label,
@@ -783,7 +627,6 @@ export default function AllLeads() {
     const headerRow = headers.join(",");
 
     // Create data rows using the same helper function as the table
-    // Export all leads (not just filtered ones) to get complete data
     const dataRows = leads.map((lead) => {
       return csvColumns
         .map((col) => {
@@ -811,7 +654,7 @@ export default function AllLeads() {
     try {
       console.log("Converting lead to project:", lead);
 
-      // Map lead fields to project fields (handle both API response formats)
+      // Map lead fields to project fields
       const leadTitle =
         lead.title ||
         (lead.contact_first_name && lead.contact_last_name
@@ -830,7 +673,7 @@ export default function AllLeads() {
         status: leadStatus,
         description: leadDescription,
         assigned_to: leadAssignedTo,
-        start_date: new Date().toISOString().split("T")[0], // Format as YYYY-MM-DD
+        start_date: new Date().toISOString().split("T")[0],
         end_date: null,
       };
 
@@ -851,10 +694,6 @@ export default function AllLeads() {
       navigate(`/management/projects`);
     } catch (err) {
       console.error("Failed to convert lead:", err);
-      console.error("Error details:", {
-        message: err.message,
-        lead: lead,
-      });
       alert("Failed to convert lead: " + (err.message || "Unknown error"));
     }
   };
@@ -879,7 +718,8 @@ export default function AllLeads() {
     setVisibleColumns([]);
     localStorage.setItem("leadColumns", JSON.stringify([]));
   };
-  // ===== FILTER LOGIC =====
+
+  // Filter logic
   const filteredLeads = leads.filter((l) => {
     const qLower = q.trim().toLowerCase();
 
@@ -956,9 +796,8 @@ export default function AllLeads() {
             anchorEl={mobileMenuAnchorEl}
             open={Boolean(mobileMenuAnchorEl)}
             onClose={() => setMobileMenuAnchorEl(null)}
-            PaperProps={{ sx: { minWidth: 200, p: 1 } }} // optional padding for better spacing
+            PaperProps={{ sx: { minWidth: 200, p: 1 } }}
           >
-            {/* Export Leads CSV */}
             <MenuItem>
               <Button
                 fullWidth
@@ -966,14 +805,13 @@ export default function AllLeads() {
                 startIcon={<CloudDownloadIcon />}
                 onClick={() => {
                   handleExportLeadsCSV();
-                  setMobileMenuAnchorEl(null); // close menu
+                  setMobileMenuAnchorEl(null);
                 }}
               >
                 Export Leads CSV
               </Button>
             </MenuItem>
 
-            {/* Add New Lead */}
             <MenuItem>
               <Button
                 fullWidth
@@ -988,7 +826,6 @@ export default function AllLeads() {
               </Button>
             </MenuItem>
 
-            {/* Customize Columns */}
             <MenuItem>
               <Button
                 fullWidth
@@ -1012,7 +849,6 @@ export default function AllLeads() {
         onClose={handleCloseCustomize}
         PaperProps={{ sx: { minWidth: 240 } }}
       >
-        {/* Actions */}
         <Box
           display="flex"
           justifyContent="space-between"
@@ -1036,7 +872,6 @@ export default function AllLeads() {
 
         <Box sx={{ borderTop: "1px solid #eee", my: 1 }} />
 
-        {/* Column Checkboxes */}
         {ALL_COLUMNS.map((col) => (
           <MenuItem key={col.key} dense>
             <FormControlLabel
@@ -1156,21 +991,6 @@ export default function AllLeads() {
               </TableRow>
             ) : (
               filteredLeads.map((lead) => {
-                // Debug: Log lead data to understand structure
-                if (lead.assigned_to || lead.assignedTo) {
-                  console.log("Lead assigned_to data:", {
-                    leadId: lead.id,
-                    assigned_to: lead.assigned_to,
-                    assignedTo: lead.assignedTo,
-                    employeesCount: employees.length,
-                    employees: employees.map((e) => ({
-                      id: e.id || e.pk || e.uuid,
-                      name: `${e.firstName || e.first_name} ${
-                        e.lastName || e.last_name
-                      }`,
-                    })),
-                  });
-                }
                 return (
                   <TableRow key={lead.id}>
                     {visibleColumns.includes("title") && (
@@ -1185,19 +1005,19 @@ export default function AllLeads() {
                           const linkedInUrl =
                             lead.contact_linkedin_url || lead.linkedIn;
                           return linkedInUrl ? (
-                          <a
+                            <a
                               href={linkedInUrl}
-                            target="_blank"
-                            rel="noopener noreferrer"
+                              target="_blank"
+                              rel="noopener noreferrer"
                               style={{
                                 textDecoration: "none",
                                 color: "#0A66C2",
                               }}
-                          >
-                            <FaLinkedin size={24} />
-                          </a>
-                        ) : (
-                          "-"
+                            >
+                              <FaLinkedin size={24} />
+                            </a>
+                          ) : (
+                            "-"
                           );
                         })()}
                       </TableCell>
@@ -1358,3 +1178,4 @@ export default function AllLeads() {
     </Box>
   );
 }
+
