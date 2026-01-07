@@ -209,7 +209,7 @@ export default function AllLeads() {
           try {
             const promises = [];
             const promiseTypes = [];
-            
+
             if (!cachedData?.statuses) {
               promises.push(apiRequest("/ui/options/statuses/"));
               promiseTypes.push("statuses");
@@ -224,7 +224,7 @@ export default function AllLeads() {
             // Process results based on what was requested
             results.forEach((data, index) => {
               const type = promiseTypes[index];
-              
+
               if (type === "statuses" && data) {
                 let statusesList = [];
                 if (Array.isArray(data)) {
@@ -249,7 +249,10 @@ export default function AllLeads() {
                     : data.data?.employees || [];
                 }
                 setEmployees(employeesList);
-                console.log("Loaded employees for lookup:", employeesList.length);
+                console.log(
+                  "Loaded employees for lookup:",
+                  employeesList.length
+                );
               }
             });
           } catch (err) {
@@ -260,7 +263,9 @@ export default function AllLeads() {
         // For employees: only fetch statuses (no employees API call)
         // Refresh in background
         try {
-          const statusesData = await apiRequest("/ui/options/statuses/").catch(() => null);
+          const statusesData = await apiRequest("/ui/options/statuses/").catch(
+            () => null
+          );
 
           if (statusesData) {
             let statusesList = [];
@@ -500,7 +505,7 @@ export default function AllLeads() {
           } else if (data.data?.leads && Array.isArray(data.data.leads)) {
             leadsList = data.data.leads;
             console.log("Using data.data.leads array");
-        } else {
+          } else {
             console.log("data.data is not an array:", data.data);
           }
         } else {
@@ -1185,19 +1190,19 @@ export default function AllLeads() {
                           const linkedInUrl =
                             lead.contact_linkedin_url || lead.linkedIn;
                           return linkedInUrl ? (
-                          <a
+                            <a
                               href={linkedInUrl}
-                            target="_blank"
-                            rel="noopener noreferrer"
+                              target="_blank"
+                              rel="noopener noreferrer"
                               style={{
                                 textDecoration: "none",
                                 color: "#0A66C2",
                               }}
-                          >
-                            <FaLinkedin size={24} />
-                          </a>
-                        ) : (
-                          "-"
+                            >
+                              <FaLinkedin size={24} />
+                            </a>
+                          ) : (
+                            "-"
                           );
                         })()}
                       </TableCell>
