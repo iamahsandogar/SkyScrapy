@@ -920,13 +920,13 @@ export default function EmployeeAllLeads() {
         </Typography>
         {/* Desktop Buttons */}
         <Box sx={{ display: { xs: "none", md: "flex" } }} gap={2}>
-          <Button
+          {/* <Button
             variant="outlined"
             startIcon={<CloudDownloadIcon />}
             onClick={handleExportLeadsCSV}
           >
             Export Leads CSV
-          </Button>
+          </Button> */}
           <Button
             variant="contained"
             startIcon={<AddIcon />}
