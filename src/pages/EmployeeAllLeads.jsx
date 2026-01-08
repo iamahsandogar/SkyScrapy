@@ -763,45 +763,45 @@ export default function EmployeeAllLeads() {
     }
   };
 
-  const handleExportLeadsCSV = () => {
-    if (!leads.length) {
-      alert("No leads to export");
-      return;
-    }
+  // const handleExportLeadsCSV = () => {
+  //   if (!leads.length) {
+  //     alert("No leads to export");
+  //     return;
+  //   }
 
-    // Export ALL columns regardless of customization
-    const csvColumns = ALL_COLUMNS.map((col) => ({
-      key: col.key,
-      label: col.label,
-    }));
+  //   // Export ALL columns regardless of customization
+  //   const csvColumns = ALL_COLUMNS.map((col) => ({
+  //     key: col.key,
+  //     label: col.label,
+  //   }));
 
-    // Create header row
-    const headers = csvColumns.map((col) => col.label);
-    const headerRow = headers.join(",");
+  //   // Create header row
+  //   const headers = csvColumns.map((col) => col.label);
+  //   const headerRow = headers.join(",");
 
-    // Create data rows using the same helper function as the table
-    const dataRows = leads.map((lead) => {
-      return csvColumns
-        .map((col) => {
-          const value = getLeadFieldValue(lead, col.key);
-          // Escape quotes and wrap in quotes for CSV
-          return `"${String(value || "").replace(/"/g, '""')}"`;
-        })
-        .join(",");
-    });
+  //   // Create data rows using the same helper function as the table
+  //   const dataRows = leads.map((lead) => {
+  //     return csvColumns
+  //       .map((col) => {
+  //         const value = getLeadFieldValue(lead, col.key);
+  //         // Escape quotes and wrap in quotes for CSV
+  //         return `"${String(value || "").replace(/"/g, '""')}"`;
+  //       })
+  //       .join(",");
+  //   });
 
-    // Combine header and data rows
-    const csvContent = [headerRow, ...dataRows].join("\n");
+  //   // Combine header and data rows
+  //   const csvContent = [headerRow, ...dataRows].join("\n");
 
-    // Create and download CSV file
-    const blob = new Blob([csvContent], { type: "text/csv;charset=utf-8;" });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement("a");
-    a.href = url;
-    a.download = `leads_${new Date().toISOString().split("T")[0]}.csv`;
-    a.click();
-    URL.revokeObjectURL(url);
-  };
+  //   // Create and download CSV file
+  //   const blob = new Blob([csvContent], { type: "text/csv;charset=utf-8;" });
+  //   const url = URL.createObjectURL(blob);
+  //   const a = document.createElement("a");
+  //   a.href = url;
+  //   a.download = `leads_${new Date().toISOString().split("T")[0]}.csv`;
+  //   a.click();
+  //   URL.revokeObjectURL(url);
+  // };
 
   const handleConvertToProject = async (lead) => {
     try {
@@ -951,7 +951,7 @@ export default function EmployeeAllLeads() {
             onClose={() => setMobileMenuAnchorEl(null)}
             PaperProps={{ sx: { minWidth: 200, p: 1 } }}
           >
-            <MenuItem>
+            {/* <MenuItem>
               <Button
                 fullWidth
                 variant="outlined"
@@ -963,7 +963,7 @@ export default function EmployeeAllLeads() {
               >
                 Export Leads CSV
               </Button>
-            </MenuItem>
+            </MenuItem> */}
 
             <MenuItem>
               <Button
