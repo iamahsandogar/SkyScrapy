@@ -25,7 +25,10 @@ export default function KanbanColumn({ title, leads, onMarkAsDone, setColumns, g
         minHeight: 400,
         maxHeight: "calc(100vh - 100px)",
         overflowY: "auto",
-        transition: "background-color 0.2s",
+        transition: "all 0.3s ease-in-out",
+        border: isOver ? "2px dashed #2196f3" : "2px solid transparent",
+        transform: isOver ? "scale(1.02)" : "scale(1)",
+        boxShadow: isOver ? 4 : 1,
       }}
     >
       <Typography variant="h6" mb={2} fontWeight={600}>

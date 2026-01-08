@@ -34,7 +34,7 @@ import VisibilityIcon from "@mui/icons-material/Visibility";
 import LeadDetailsModal from "../components/Leads/LeadDetailsModal";
 import MoreHorizIcon from "@mui/icons-material/MoreHoriz";
 import apiRequest from "../components/services/api";
-import { getCachedLeadData } from "../utils/prefetchData";
+import { getCachedLeadData, addLeadToCache } from "../utils/prefetchData";
 import MoreVertIcon from "@mui/icons-material/MoreVert";
 const getChipStyles = (status) => {
   switch (status) {
@@ -127,27 +127,12 @@ export default function AllLeads() {
   const [mobileMenuAnchorEl, setMobileMenuAnchorEl] = useState(null);
 
   const actionOpen = Boolean(actionAnchorEl);
+// src/pages/AllLeads.jsx
+
 
   // Fetch statuses and employees to map IDs to names - use cache first for instant loading
   useEffect(() => {
     const fetchStatusesAndEmployees = async () => {
-      // Check if user is admin
-      const storedUser = localStorage.getItem("user");
-      let isAdmin = false;
-      if (storedUser) {
-        try {
-          const userData = JSON.parse(storedUser);
-          isAdmin =
-            userData.is_staff ||
-            userData.is_admin ||
-            userData.is_superuser ||
-            userData.role === 0 ||
-            userData.role === "0";
-        } catch (e) {
-          console.error("Error parsing user data:", e);
-        }
-      }
-
       // Try cached data first
       const cachedData = getCachedLeadData();
 
@@ -156,152 +141,88 @@ export default function AllLeads() {
         setStatuses(cachedData.statuses);
       }
 
-      if (cachedData?.employees && isAdmin) {
+      if (cachedData?.employees) {
         console.log("Using cached employees for instant loading");
         setEmployees(cachedData.employees);
       }
 
-      // For admins: fetch both statuses and employees in parallel for faster loading
-      // For employees: only fetch statuses (employees API not needed)
-      if (isAdmin) {
-        // Refresh in background - parallel calls for faster loading
+      // Refresh in background
+      try {
+        const [statusesData, employeesData] = await Promise.all([
+          apiRequest("/ui/options/statuses/").catch(() => null),
+        ]);
+
+        if (statusesData) {
+          let statusesList = [];
+          if (Array.isArray(statusesData)) {
+            statusesList = statusesData;
+          } else if (statusesData?.statuses) {
+            statusesList = statusesData.statuses;
+          } else if (statusesData?.data) {
+            statusesList = Array.isArray(statusesData.data)
+              ? statusesData.data
+              : statusesData.data?.statuses || [];
+          }
+          setStatuses(statusesList);
+        }
+
+        if (employeesData) {
+          let employeesList = [];
+          if (Array.isArray(employeesData)) {
+            employeesList = employeesData;
+          } else if (employeesData?.employees) {
+            employeesList = employeesData.employees;
+          } else if (employeesData?.data) {
+            employeesList = Array.isArray(employeesData.data)
+              ? employeesData.data
+              : employeesData.data?.employees || [];
+          }
+          // Don't filter - show all employees for lookup (leads might be assigned to inactive employees)
+          setEmployees(employeesList);
+          console.log("Loaded employees for lookup:", employeesList.length);
+        }
+      } catch (err) {
+        console.error("Failed to refresh statuses/employees:", err);
+      }
+
+      // If no cache, fetch fresh
+      if (!cachedData?.statuses) {
         try {
-          const [statusesData, employeesData] = await Promise.all([
-            apiRequest("/ui/options/statuses/").catch(() => null),
-            apiRequest("/ui/employees/").catch(() => null),
-          ]);
-
-          if (statusesData) {
-            let statusesList = [];
-            if (Array.isArray(statusesData)) {
-              statusesList = statusesData;
-            } else if (statusesData?.statuses) {
-              statusesList = statusesData.statuses;
-            } else if (statusesData?.data) {
-              statusesList = Array.isArray(statusesData.data)
-                ? statusesData.data
-                : statusesData.data?.statuses || [];
-            }
-            setStatuses(statusesList);
+          const data = await apiRequest("/ui/options/statuses/");
+          let statusesList = [];
+          if (Array.isArray(data)) {
+            statusesList = data;
+          } else if (data?.statuses) {
+            statusesList = data.statuses;
+          } else if (data?.data) {
+            statusesList = Array.isArray(data.data)
+              ? data.data
+              : data.data?.statuses || [];
           }
-
-          if (employeesData) {
-            let employeesList = [];
-            if (Array.isArray(employeesData)) {
-              employeesList = employeesData;
-            } else if (employeesData?.employees) {
-              employeesList = employeesData.employees;
-            } else if (employeesData?.data) {
-              employeesList = Array.isArray(employeesData.data)
-                ? employeesData.data
-                : employeesData.data?.employees || [];
-            }
-            // Don't filter - show all employees for lookup (leads might be assigned to inactive employees)
-            setEmployees(employeesList);
-            console.log("Loaded employees for lookup:", employeesList.length);
-          }
+          setStatuses(statusesList);
         } catch (err) {
-          console.error("Failed to refresh statuses/employees:", err);
+          console.error("Failed to fetch statuses:", err);
         }
+      }
 
-        // If no cache, fetch fresh in parallel
-        if (!cachedData?.statuses || !cachedData?.employees) {
-          try {
-            const promises = [];
-            const promiseTypes = [];
-
-            if (!cachedData?.statuses) {
-              promises.push(apiRequest("/ui/options/statuses/"));
-              promiseTypes.push("statuses");
-            }
-            if (!cachedData?.employees) {
-              promises.push(apiRequest("/ui/employees/"));
-              promiseTypes.push("employees");
-            }
-
-            const results = await Promise.all(promises);
-
-            // Process results based on what was requested
-            results.forEach((data, index) => {
-              const type = promiseTypes[index];
-
-              if (type === "statuses" && data) {
-                let statusesList = [];
-                if (Array.isArray(data)) {
-                  statusesList = data;
-                } else if (data?.statuses) {
-                  statusesList = data.statuses;
-                } else if (data?.data) {
-                  statusesList = Array.isArray(data.data)
-                    ? data.data
-                    : data.data?.statuses || [];
-                }
-                setStatuses(statusesList);
-              } else if (type === "employees" && data) {
-                let employeesList = [];
-                if (Array.isArray(data)) {
-                  employeesList = data;
-                } else if (data?.employees) {
-                  employeesList = data.employees;
-                } else if (data?.data) {
-                  employeesList = Array.isArray(data.data)
-                    ? data.data
-                    : data.data?.employees || [];
-                }
-                setEmployees(employeesList);
-                console.log(
-                  "Loaded employees for lookup:",
-                  employeesList.length
-                );
-              }
-            });
-          } catch (err) {
-            console.error("Failed to fetch statuses/employees:", err);
-          }
-        }
-      } else {
-        // For employees: only fetch statuses (no employees API call)
-        // Refresh in background
+      if (!cachedData?.employees) {
         try {
-          const statusesData = await apiRequest("/ui/options/statuses/").catch(
-            () => null
-          );
-
-          if (statusesData) {
-            let statusesList = [];
-            if (Array.isArray(statusesData)) {
-              statusesList = statusesData;
-            } else if (statusesData?.statuses) {
-              statusesList = statusesData.statuses;
-            } else if (statusesData?.data) {
-              statusesList = Array.isArray(statusesData.data)
-                ? statusesData.data
-                : statusesData.data?.statuses || [];
-            }
-            setStatuses(statusesList);
+          const data = await apiRequest("/ui/employees/");
+          let employeesList = [];
+          if (Array.isArray(data)) {
+            employeesList = data;
+          } else if (data?.employees) {
+            employeesList = data.employees;
+          } else if (data?.data) {
+            employeesList = Array.isArray(data.data)
+              ? data.data
+              : data.data?.employees || [];
           }
+          // Don't filter - show all employees for lookup (leads might be assigned to inactive employees)
+          setEmployees(employeesList);
+          console.log("Loaded employees for lookup:", employeesList.length);
         } catch (err) {
-          console.error("Failed to refresh statuses:", err);
-        }
-
-        // If no cache, fetch fresh
-        if (!cachedData?.statuses) {
-          try {
-            const data = await apiRequest("/ui/options/statuses/");
-            let statusesList = [];
-            if (Array.isArray(data)) {
-              statusesList = data;
-            } else if (data?.statuses) {
-              statusesList = data.statuses;
-            } else if (data?.data) {
-              statusesList = Array.isArray(data.data)
-                ? data.data
-                : data.data?.statuses || [];
-            }
-            setStatuses(statusesList);
-          } catch (err) {
-            console.error("Failed to fetch statuses:", err);
-          }
+          console.error("Failed to fetch employees:", err);
         }
       }
     };
@@ -505,7 +426,7 @@ export default function AllLeads() {
           } else if (data.data?.leads && Array.isArray(data.data.leads)) {
             leadsList = data.data.leads;
             console.log("Using data.data.leads array");
-          } else {
+        } else {
             console.log("data.data is not an array:", data.data);
           }
         } else {
@@ -558,6 +479,160 @@ export default function AllLeads() {
 
     fetchLeads();
   }, [location.pathname]); // Refresh when navigating to this page
+
+  // Handler to update lead status
+  const handleStatusChange = async (lead, newStatusId) => {
+    try {
+      const leadId = lead.id;
+      
+      // Get the current lead data to preserve all fields
+      const currentLead = leads.find(l => l.id === leadId);
+      if (!currentLead) {
+        console.error("Lead not found:", leadId);
+        return;
+      }
+
+      // Prepare payload with all lead fields, updating only status
+      // Note: Status is independent of follow_up_at and follow_up_status
+      const payload = {
+        title: currentLead.title || "",
+        status: newStatusId || null,
+        source: currentLead.source || "",
+        description: currentLead.description || "",
+        company_name: currentLead.company_name || "",
+        contact_first_name: currentLead.contact_first_name || "",
+        contact_last_name: currentLead.contact_last_name || "",
+        contact_email: currentLead.contact_email || "",
+        contact_phone: currentLead.contact_phone || "",
+        contact_position_title: currentLead.contact_position_title || "",
+        contact_linkedin_url: currentLead.contact_linkedin_url || "",
+        // Only include follow_up_at and follow_up_status if they have valid values
+        // Status is independent of follow_up_at and follow_up_status, so we only include them if they exist
+        ...((currentLead.follow_up_at || currentLead.followUpAt) && 
+            (currentLead.follow_up_at || currentLead.followUpAt) !== null && 
+            (currentLead.follow_up_at || currentLead.followUpAt) !== "" ? {
+          follow_up_at: currentLead.follow_up_at || currentLead.followUpAt
+        } : {}),
+        ...((currentLead.follow_up_status || currentLead.followupStatus) && 
+            (currentLead.follow_up_status || currentLead.followupStatus) !== null && 
+            (currentLead.follow_up_status || currentLead.followupStatus) !== "" ? {
+          follow_up_status: currentLead.follow_up_status || currentLead.followupStatus
+        } : {}),
+      };
+
+      // Update via API
+      await apiRequest(`/api/leads/${leadId}/`, {
+        method: "PUT",
+        body: JSON.stringify(payload),
+      });
+
+      // Update local state
+      const updatedLead = {
+        ...currentLead,
+        status: newStatusId || null,
+      };
+
+      setLeads((prevLeads) => {
+        const leadIndex = prevLeads.findIndex((l) => l.id === leadId);
+        if (leadIndex >= 0) {
+          const newLeads = [...prevLeads];
+          newLeads[leadIndex] = updatedLead;
+          return newLeads;
+        }
+        return prevLeads;
+      });
+
+      // Update cache so Kanban board reflects changes
+      addLeadToCache(updatedLead);
+    } catch (error) {
+      console.error("Failed to update lead status:", error);
+      alert("Failed to update lead status");
+    }
+  };
+
+  // Handler to update follow-up status
+  const handleFollowUpStatusChange = async (lead, newFollowUpStatus) => {
+    try {
+      const leadId = lead.id;
+
+      // Handle "None" - try null instead of empty string if API doesn't accept empty strings
+      const statusValue = newFollowUpStatus === "" || newFollowUpStatus === null || newFollowUpStatus === undefined 
+        ? null 
+        : newFollowUpStatus;
+
+      // If setting to "None" (null), use PUT endpoint with full lead data
+      // Otherwise use PATCH endpoint for follow-up-status
+      if (statusValue === null) {
+        // Get the current lead data to preserve all fields
+        const currentLead = leads.find(l => l.id === leadId);
+        if (!currentLead) {
+          console.error("Lead not found:", leadId);
+          return;
+        }
+
+        // Use PUT endpoint to update the lead with null follow_up_status
+        const payload = {
+          title: currentLead.title || "",
+          status: currentLead.status || null,
+          source: currentLead.source || "",
+          description: currentLead.description || "",
+          company_name: currentLead.company_name || "",
+          contact_first_name: currentLead.contact_first_name || "",
+          contact_last_name: currentLead.contact_last_name || "",
+          contact_email: currentLead.contact_email || "",
+          contact_phone: currentLead.contact_phone || "",
+          contact_position_title: currentLead.contact_position_title || "",
+          contact_linkedin_url: currentLead.contact_linkedin_url || "",
+          follow_up_at: currentLead.follow_up_at || currentLead.followUpAt || null,
+          follow_up_status: null, // Explicitly set to null for "None"
+        };
+
+        await apiRequest(`/api/leads/${leadId}/`, {
+          method: "PUT",
+          body: JSON.stringify(payload),
+        });
+      } else {
+        // Use the dedicated follow-up-status endpoint for non-null values
+        await apiRequest(`/api/leads/${leadId}/follow-up-status/`, {
+          method: "PATCH",
+          body: JSON.stringify({
+            follow_up_status: statusValue,
+          }),
+        });
+      }
+
+      // Update local state - use empty string for display purposes when null
+      const displayValue = statusValue === null ? "" : statusValue;
+      const updatedLead = {
+        ...lead,
+        follow_up_status: displayValue,
+        followupStatus: displayValue,
+      };
+
+      setLeads((prevLeads) => {
+        const leadIndex = prevLeads.findIndex((l) => l.id === leadId);
+        if (leadIndex >= 0) {
+          const newLeads = [...prevLeads];
+          newLeads[leadIndex] = updatedLead;
+          return newLeads;
+        }
+        return prevLeads;
+      });
+
+      // Update cache so Kanban board reflects changes
+      addLeadToCache(updatedLead);
+    } catch (error) {
+      console.error("Failed to update follow-up status:", error);
+      console.error("Error details:", {
+        leadId: lead.id,
+        newFollowUpStatus: newFollowUpStatus,
+        statusValue: statusValue,
+        errorMessage: error?.message,
+        errorResponse: error?.response,
+      });
+      alert(`Failed to update follow-up status: ${error?.message || "Unknown error"}`);
+    }
+  };
 
   // Function to get status name from ID
   const getStatusName = (statusId) => {
@@ -902,21 +977,24 @@ export default function AllLeads() {
 
     if (!qLower) return true;
 
+    // Get assigned employee name for searching
+    const assignedEmployeeName = getEmployeeName(l.assigned_to || l.assignedTo);
+
     // All searchable fields
     const fieldsToSearch = [
       l.title || "",
-      l.firstName || "",
-      l.lastName || "",
-      l.email || "",
-      l.phone || "",
-      l.company || "",
-      l.positionTitle || "",
+      l.firstName || l.contact_first_name || "",
+      l.lastName || l.contact_last_name || "",
+      l.email || l.contact_email || "",
+      l.phone || l.contact_phone || "",
+      l.company || l.company_name || "",
+      l.positionTitle || l.contact_position_title || "",
       l.source || "",
       l.description || "",
-      l.followUpAt ? new Date(l.followUpAt).toLocaleDateString() : "",
-      l.followupStatus || "",
-      l.assignedTo || "",
-      l.linkedIn || "",
+      l.followUpAt || l.follow_up_at ? new Date(l.followUpAt || l.follow_up_at).toLocaleDateString() : "",
+      l.followupStatus || l.follow_up_status || "",
+      assignedEmployeeName, // Include employee name in search
+      l.linkedIn || l.contact_linkedin_url || "",
     ];
 
     return fieldsToSearch.some((field) =>
@@ -1060,7 +1138,7 @@ export default function AllLeads() {
       {/* Search & Filter */}
       <Box display="flex" gap={2} mt={2} mb={2}>
         <TextField
-          placeholder="Search by title, name, email, company, source, description, or date..."
+          placeholder="Search by title, name, email, company, assigned to, source, description, or date..."
           value={q}
           onChange={(e) => setQ(e.target.value)}
           size="small"
@@ -1074,10 +1152,18 @@ export default function AllLeads() {
           >
             <MenuItem value="All">All</MenuItem>
             <MenuItem value="None">None</MenuItem>
-            <MenuItem value="In Progress">In Progress</MenuItem>
-            <MenuItem value="Pending">Pending</MenuItem>
-            <MenuItem value="Completed">Completed</MenuItem>
-            <MenuItem value="Rejected">Rejected</MenuItem>
+            {statuses.map((status, index) => {
+              // Handle different status structures
+              const statusName = typeof status === "string" 
+                ? status 
+                : (status.name || status.label || status.status_name || String(status.id || status.pk || index));
+              
+              return (
+                <MenuItem key={status.id || status.pk || statusName || index} value={statusName}>
+                  {statusName}
+                </MenuItem>
+              );
+            })}
           </Select>
         </FormControl>
       </Box>
@@ -1190,19 +1276,19 @@ export default function AllLeads() {
                           const linkedInUrl =
                             lead.contact_linkedin_url || lead.linkedIn;
                           return linkedInUrl ? (
-                            <a
+                          <a
                               href={linkedInUrl}
-                              target="_blank"
-                              rel="noopener noreferrer"
+                            target="_blank"
+                            rel="noopener noreferrer"
                               style={{
                                 textDecoration: "none",
                                 color: "#0A66C2",
                               }}
-                            >
-                              <FaLinkedin size={24} />
-                            </a>
-                          ) : (
-                            "-"
+                          >
+                            <FaLinkedin size={24} />
+                          </a>
+                        ) : (
+                          "-"
                           );
                         })()}
                       </TableCell>
@@ -1210,11 +1296,68 @@ export default function AllLeads() {
 
                     {visibleColumns.includes("status") && (
                       <TableCell>
-                        <Chip
-                          label={getLeadFieldValue(lead, "status") || "None"}
-                          sx={getChipStyles(getLeadFieldValue(lead, "status"))}
+                        <Select
+                          value={(() => {
+                            // Get the status ID from the lead
+                            // Status cannot be None, so if empty, use first available status
+                            const statusId = lead.status;
+                            if (statusId === null || statusId === undefined || statusId === "") {
+                              // If no status, default to first available status
+                              if (statuses.length > 0) {
+                                const firstStatus = statuses[0];
+                                return typeof firstStatus === "object" && firstStatus !== null 
+                                  ? (firstStatus.id || firstStatus.pk) 
+                                  : firstStatus;
+                              }
+                              return "";
+                            }
+                            // If status is an object, extract the ID
+                            if (typeof statusId === "object" && statusId !== null) {
+                              return statusId.id || statusId.pk || "";
+                            }
+                            return String(statusId);
+                          })()}
+                          onChange={(e) => {
+                            // Convert to integer - status cannot be null/empty
+                            const selectedId = parseInt(e.target.value, 10);
+                            if (!isNaN(selectedId)) {
+                              handleStatusChange(lead, selectedId);
+                            }
+                          }}
                           size="small"
-                        />
+                          sx={{
+                            minWidth: 120,
+                            height: 32,
+                            "& .MuiSelect-select": {
+                              padding: "4px 8px",
+                              fontSize: "0.875rem",
+                            },
+                          }}
+                          MenuProps={{
+                            PaperProps: {
+                              style: {
+                                maxHeight: 300,
+                              },
+                            },
+                          }}
+                        >
+                          {statuses.map((status, index) => {
+                            // Handle different status structures - match CreateLead form logic
+                            const statusId = typeof status === "object" && status !== null 
+                              ? (status.id || status.pk) 
+                              : status;
+                            const statusName = typeof status === "string" 
+                              ? status 
+                              : (status.name || status.label || status.status_name || String(statusId));
+                            const key = statusId || index;
+                            
+                            return (
+                              <MenuItem key={key} value={statusId}>
+                                {statusName}
+                              </MenuItem>
+                            );
+                          })}
+                        </Select>
                       </TableCell>
                     )}
 
@@ -1232,7 +1375,51 @@ export default function AllLeads() {
 
                     {visibleColumns.includes("followupStatus") && (
                       <TableCell>
-                        {getLeadFieldValue(lead, "followupStatus") || "-"}
+                        <Select
+                          value={(() => {
+                            // Explicitly handle null/undefined/empty values for "None"
+                            const status = lead.follow_up_status || lead.followupStatus;
+                            return status === null || status === undefined || status === "" ? "" : status;
+                          })()}
+                          onChange={(e) => {
+                            // Explicitly handle "None" selection (empty string)
+                            // This ensures "None" is easily mutable
+                            const selectedValue = e.target.value === "" ? "" : e.target.value;
+                            handleFollowUpStatusChange(lead, selectedValue);
+                          }}
+                          size="small"
+                          sx={{
+                            minWidth: 120,
+                            height: 32,
+                            "& .MuiSelect-select": {
+                              padding: "4px 8px",
+                              fontSize: "0.875rem",
+                            },
+                          }}
+                          MenuProps={{
+                            PaperProps: {
+                              style: {
+                                maxHeight: 300,
+                              },
+                            },
+                          }}
+                          SelectProps={{
+                            displayEmpty: true,
+                            renderValue: (val) => {
+                              // Show "None" for empty/null/undefined values
+                              if (val === "" || val === null || val === undefined) {
+                                return "None";
+                              }
+                              return val;
+                            },
+                          }}
+                        >
+                          <MenuItem value="">
+                            <em>None</em>
+                          </MenuItem>
+                          <MenuItem value="done">done</MenuItem>
+                          <MenuItem value="pending">pending</MenuItem>
+                        </Select>
                       </TableCell>
                     )}
 

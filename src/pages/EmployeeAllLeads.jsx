@@ -34,7 +34,7 @@ import VisibilityIcon from "@mui/icons-material/Visibility";
 import LeadDetailsModal from "../components/Leads/LeadDetailsModal";
 import MoreHorizIcon from "@mui/icons-material/MoreHoriz";
 import apiRequest from "../components/services/api";
-import { getCachedLeadData } from "../utils/prefetchData";
+import { getCachedLeadData, addLeadToCache } from "../utils/prefetchData";
 import MoreVertIcon from "@mui/icons-material/MoreVert";
 
 const getChipStyles = (status) => {
@@ -431,6 +431,159 @@ export default function EmployeeAllLeads() {
 
     fetchLeads();
   }, [location.pathname, currentUserId]);
+
+  // Handler to update lead status
+  const handleStatusChange = async (lead, newStatusId) => {
+    try {
+      const leadId = lead.id;
+      
+      // Get the current lead data to preserve all fields
+      const currentLead = leads.find(l => l.id === leadId);
+      if (!currentLead) {
+        console.error("Lead not found:", leadId);
+        return;
+      }
+
+      // Prepare payload with all lead fields, updating only status
+      // Note: Status is independent of follow_up_at and follow_up_status
+      const payload = {
+        title: currentLead.title || "",
+        status: newStatusId || null,
+        source: currentLead.source || "",
+        description: currentLead.description || "",
+        company_name: currentLead.company_name || "",
+        contact_first_name: currentLead.contact_first_name || "",
+        contact_last_name: currentLead.contact_last_name || "",
+        contact_email: currentLead.contact_email || "",
+        contact_phone: currentLead.contact_phone || "",
+        contact_position_title: currentLead.contact_position_title || "",
+        contact_linkedin_url: currentLead.contact_linkedin_url || "",
+        // Only include follow_up_at and follow_up_status if they have valid values
+        // Status is independent of follow_up_at and follow_up_status, so we only include them if they exist
+        ...((currentLead.follow_up_at || currentLead.followUpAt) && 
+            (currentLead.follow_up_at || currentLead.followUpAt) !== null && 
+            (currentLead.follow_up_at || currentLead.followUpAt) !== "" ? {
+          follow_up_at: currentLead.follow_up_at || currentLead.followUpAt
+        } : {}),
+        ...((currentLead.follow_up_status || currentLead.followupStatus) && 
+            (currentLead.follow_up_status || currentLead.followupStatus) !== null && 
+            (currentLead.follow_up_status || currentLead.followupStatus) !== "" ? {
+          follow_up_status: currentLead.follow_up_status || currentLead.followupStatus
+        } : {}),
+      };
+
+      // Update via API
+      await apiRequest(`/api/leads/${leadId}/`, {
+        method: "PUT",
+        body: JSON.stringify(payload),
+      });
+
+      // Update local state
+      const updatedLead = {
+        ...currentLead,
+        status: newStatusId || null,
+      };
+
+      setLeads((prevLeads) => {
+        const leadIndex = prevLeads.findIndex((l) => l.id === leadId);
+        if (leadIndex >= 0) {
+          const newLeads = [...prevLeads];
+          newLeads[leadIndex] = updatedLead;
+          return newLeads;
+        }
+        return prevLeads;
+      });
+
+      // Update cache so Kanban board reflects changes
+      addLeadToCache(updatedLead);
+    } catch (error) {
+      console.error("Failed to update lead status:", error);
+      alert("Failed to update lead status");
+    }
+  };
+
+  // Handler to update follow-up status
+  const handleFollowUpStatusChange = async (lead, newFollowUpStatus) => {
+    try {
+      const leadId = lead.id;
+
+      // Handle "None" - try null instead of empty string if API doesn't accept empty strings
+      const statusValue = newFollowUpStatus === "" || newFollowUpStatus === null || newFollowUpStatus === undefined 
+        ? null 
+        : newFollowUpStatus;
+
+      // If setting to "None" (null), use PUT endpoint with full lead data
+      // Otherwise use PATCH endpoint for follow-up-status
+      if (statusValue === null) {
+        // Get the current lead data to preserve all fields
+        const currentLead = leads.find(l => l.id === leadId);
+        if (!currentLead) {
+          console.error("Lead not found:", leadId);
+          return;
+        }
+
+        // Use PUT endpoint to update the lead with null follow_up_status
+        const payload = {
+          title: currentLead.title || "",
+          status: currentLead.status || null,
+          source: currentLead.source || "",
+          description: currentLead.description || "",
+          company_name: currentLead.company_name || "",
+          contact_first_name: currentLead.contact_first_name || "",
+          contact_last_name: currentLead.contact_last_name || "",
+          contact_email: currentLead.contact_email || "",
+          contact_phone: currentLead.contact_phone || "",
+          contact_position_title: currentLead.contact_position_title || "",
+          contact_linkedin_url: currentLead.contact_linkedin_url || "",
+          follow_up_at: currentLead.follow_up_at || currentLead.followUpAt || null,
+          follow_up_status: null, // Explicitly set to null for "None"
+        };
+
+        await apiRequest(`/api/leads/${leadId}/`, {
+          method: "PUT",
+          body: JSON.stringify(payload),
+        });
+      } else {
+        // Use the dedicated follow-up-status endpoint for non-null values
+        await apiRequest(`/api/leads/${leadId}/follow-up-status/`, {
+          method: "PATCH",
+          body: JSON.stringify({
+            follow_up_status: statusValue,
+          }),
+        });
+      }
+
+      // Update local state - use empty string for display purposes when null
+      const displayValue = statusValue === null ? "" : statusValue;
+      const updatedLead = {
+        ...lead,
+        follow_up_status: displayValue,
+        followupStatus: displayValue,
+      };
+
+      setLeads((prevLeads) => {
+        const leadIndex = prevLeads.findIndex((l) => l.id === leadId);
+        if (leadIndex >= 0) {
+          const newLeads = [...prevLeads];
+          newLeads[leadIndex] = updatedLead;
+          return newLeads;
+        }
+        return prevLeads;
+      });
+
+      // Update cache so Kanban board reflects changes
+      addLeadToCache(updatedLead);
+    } catch (error) {
+      console.error("Failed to update follow-up status:", error);
+      console.error("Error details:", {
+        leadId: lead.id,
+        newFollowUpStatus: newFollowUpStatus,
+        errorMessage: error?.message,
+        errorResponse: error?.response,
+      });
+      alert(`Failed to update follow-up status: ${error?.message || "Unknown error"}`);
+    }
+  };
 
   // Function to get status name from ID
   const getStatusName = (statusId) => {
@@ -1025,11 +1178,68 @@ export default function EmployeeAllLeads() {
 
                     {visibleColumns.includes("status") && (
                       <TableCell>
-                        <Chip
-                          label={getLeadFieldValue(lead, "status") || "None"}
-                          sx={getChipStyles(getLeadFieldValue(lead, "status"))}
+                        <Select
+                          value={(() => {
+                            // Get the status ID from the lead
+                            // Status cannot be None, so if empty, use first available status
+                            const statusId = lead.status;
+                            if (statusId === null || statusId === undefined || statusId === "") {
+                              // If no status, default to first available status
+                              if (statuses.length > 0) {
+                                const firstStatus = statuses[0];
+                                return typeof firstStatus === "object" && firstStatus !== null 
+                                  ? (firstStatus.id || firstStatus.pk) 
+                                  : firstStatus;
+                              }
+                              return "";
+                            }
+                            // If status is an object, extract the ID
+                            if (typeof statusId === "object" && statusId !== null) {
+                              return statusId.id || statusId.pk || "";
+                            }
+                            return String(statusId);
+                          })()}
+                          onChange={(e) => {
+                            // Convert to integer - status cannot be null/empty
+                            const selectedId = parseInt(e.target.value, 10);
+                            if (!isNaN(selectedId)) {
+                              handleStatusChange(lead, selectedId);
+                            }
+                          }}
                           size="small"
-                        />
+                          sx={{
+                            minWidth: 120,
+                            height: 32,
+                            "& .MuiSelect-select": {
+                              padding: "4px 8px",
+                              fontSize: "0.875rem",
+                            },
+                          }}
+                          MenuProps={{
+                            PaperProps: {
+                              style: {
+                                maxHeight: 300,
+                              },
+                            },
+                          }}
+                        >
+                          {statuses.map((status, index) => {
+                            // Handle different status structures - match CreateLead form logic
+                            const statusId = typeof status === "object" && status !== null 
+                              ? (status.id || status.pk) 
+                              : status;
+                            const statusName = typeof status === "string" 
+                              ? status 
+                              : (status.name || status.label || status.status_name || String(statusId));
+                            const key = statusId || index;
+                            
+                            return (
+                              <MenuItem key={key} value={statusId}>
+                                {statusName}
+                              </MenuItem>
+                            );
+                          })}
+                        </Select>
                       </TableCell>
                     )}
 
@@ -1047,7 +1257,51 @@ export default function EmployeeAllLeads() {
 
                     {visibleColumns.includes("followupStatus") && (
                       <TableCell>
-                        {getLeadFieldValue(lead, "followupStatus") || "-"}
+                        <Select
+                          value={(() => {
+                            // Explicitly handle null/undefined/empty values for "None"
+                            const status = lead.follow_up_status || lead.followupStatus;
+                            return status === null || status === undefined || status === "" ? "" : status;
+                          })()}
+                          onChange={(e) => {
+                            // Explicitly handle "None" selection (empty string)
+                            // This ensures "None" is easily mutable
+                            const selectedValue = e.target.value === "" ? "" : e.target.value;
+                            handleFollowUpStatusChange(lead, selectedValue);
+                          }}
+                          size="small"
+                          sx={{
+                            minWidth: 120,
+                            height: 32,
+                            "& .MuiSelect-select": {
+                              padding: "4px 8px",
+                              fontSize: "0.875rem",
+                            },
+                          }}
+                          MenuProps={{
+                            PaperProps: {
+                              style: {
+                                maxHeight: 300,
+                              },
+                            },
+                          }}
+                          SelectProps={{
+                            displayEmpty: true,
+                            renderValue: (val) => {
+                              // Show "None" for empty/null/undefined values
+                              if (val === "" || val === null || val === undefined) {
+                                return "None";
+                              }
+                              return val;
+                            },
+                          }}
+                        >
+                          <MenuItem value="">
+                            <em>None</em>
+                          </MenuItem>
+                          <MenuItem value="done">done</MenuItem>
+                          <MenuItem value="pending">pending</MenuItem>
+                        </Select>
                       </TableCell>
                     )}
 
