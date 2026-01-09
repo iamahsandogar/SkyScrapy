@@ -8,7 +8,7 @@ import { stats } from "../data/dashboardData";
 import UpcomingReminders from "../components/Dashboard/UpcomingReminders";
 import QuickActions from "../components/Dashboard/QuickActions";
 import ActiveLeads from "../components/Dashboard/ActiveLeads";
-import UnreadNotes from "../components/Dashboard/UnreadNotes";
+import LeadNotesPanel from "../components/Dashboard/LeadNotesPanel";
 import OngoingProjects from "../components/Dashboard/OngoingProjects";
 import ChartBox from "../components/Dashboard/ChartBox";
 import { useNavigate } from "react-router-dom";
@@ -87,7 +87,7 @@ export default function Dashboard() {
         <QuickActions />
         <UpcomingReminders />
         <ActiveLeads />
-        <UnreadNotes />
+        <LeadNotesPanel />
       </Box>
     </Box>
   );

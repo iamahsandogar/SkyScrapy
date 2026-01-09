@@ -8,8 +8,11 @@ import {
   Typography,
   Box,
 } from "@mui/material";
+import LeadNotesChat from "./LeadNotesChat";
 function LeadDetailsModal({ open, onClose, lead, getEmployeeName, getStatusName }) {
   if (!lead) return null;
+
+  const leadIdentifier = lead.id || lead.pk || lead.uuid;
   
   const formatDate = (date) => {
     if (!date) return "-";
@@ -76,6 +79,9 @@ function LeadDetailsModal({ open, onClose, lead, getEmployeeName, getStatusName 
           <Typography>
             <strong>Description:</strong> {getField("description", "description")}
           </Typography>
+        </Box>
+        <Box mt={4}>
+          <LeadNotesChat leadId={leadIdentifier} />
         </Box>
       </DialogContent>
       <DialogActions>
