@@ -829,7 +829,31 @@ export default function EmployeeAllLeads() {
   };
 
   const getEmployeeName = (assignedTo) => {
-    // For employees, assigned_to should always be themselves
+    // Handle null, undefined, empty string, or "None"
+    if (!assignedTo && assignedTo !== 0) {
+      return "None";
+    }
+
+    // If assigned_to is an object with user_details, extract name directly from it
+    if (typeof assignedTo === "object" && assignedTo !== null) {
+      // Check if user_details exists with first_name and last_name
+      if (assignedTo.user_details) {
+        const firstName =
+          assignedTo.user_details.first_name ||
+          assignedTo.user_details.firstName ||
+          "";
+        const lastName =
+          assignedTo.user_details.last_name ||
+          assignedTo.user_details.lastName ||
+          "";
+        const name = `${firstName} ${lastName}`.trim();
+        if (name) {
+          return name;
+        }
+      }
+    }
+
+    // Fallback: For employees, assigned_to should always be themselves
     const storedUser = localStorage.getItem("user");
     if (storedUser) {
       const userData = JSON.parse(storedUser);

@@ -838,36 +838,65 @@ export default function AllLeads() {
       return "None";
     }
 
-    // Handle if assigned_to is an object (like status can be)
-    let assignedToId = assignedTo;
+    // If assigned_to is an object with user_details, extract name directly from it
     if (typeof assignedTo === "object" && assignedTo !== null) {
-      assignedToId = assignedTo.id || assignedTo.pk || assignedTo.uuid || null;
+      // Check if user_details exists with first_name and last_name
+      if (assignedTo.user_details) {
+        const firstName = assignedTo.user_details.first_name || assignedTo.user_details.firstName || "";
+        const lastName = assignedTo.user_details.last_name || assignedTo.user_details.lastName || "";
+        const name = `${firstName} ${lastName}`.trim();
+        if (name) {
+          return name;
+        }
+      }
+      
+      // Fallback: try to extract ID for lookup
+      const assignedToId = assignedTo.id || assignedTo.pk || assignedTo.uuid || null;
       if (!assignedToId) {
         return "None";
       }
+
+      // Try to find in employees array (for backward compatibility)
+      if (employees && employees.length > 0) {
+        const assignedToIdStr = String(assignedToId);
+        const emp = employees.find((e) => {
+          const empId = e.id || e.pk || e.uuid;
+          if (!empId) return false;
+          const empIdStr = String(empId);
+          return empIdStr === assignedToIdStr;
+        });
+
+        if (emp) {
+          const firstName = emp.firstName || emp.first_name || "";
+          const lastName = emp.lastName || emp.last_name || "";
+          const name = `${firstName} ${lastName}`.trim();
+          if (name) {
+            return name;
+          }
+        }
+      }
+
+      // If no user_details and not found in employees, return "None"
+      return "None";
     }
 
-    // If no employees loaded yet, return "Loading..."
-    if (!employees || employees.length === 0) {
-      return "Loading...";
-    }
+    // If assignedTo is just an ID (string or number), try to find in employees array
+    const assignedToId = assignedTo;
+    if (employees && employees.length > 0) {
+      const assignedToIdStr = String(assignedToId);
+      const emp = employees.find((e) => {
+        const empId = e.id || e.pk || e.uuid;
+        if (!empId) return false;
+        const empIdStr = String(empId);
+        return empIdStr === assignedToIdStr;
+      });
 
-    // Convert to string for comparison
-    const assignedToIdStr = String(assignedToId);
-
-    // Use employees from state (from cache or API)
-    const emp = employees.find((e) => {
-      const empId = e.id || e.pk || e.uuid;
-      if (!empId) return false;
-      const empIdStr = String(empId);
-      return empIdStr === assignedToIdStr;
-    });
-
-    if (emp) {
-      const firstName = emp.firstName || emp.first_name || "";
-      const lastName = emp.lastName || emp.last_name || "";
-      const name = `${firstName} ${lastName}`.trim();
-      return name || "Unknown";
+      if (emp) {
+        const firstName = emp.firstName || emp.first_name || "";
+        const lastName = emp.lastName || emp.last_name || "";
+        const name = `${firstName} ${lastName}`.trim();
+        return name || "None";
+      }
     }
 
     // If not found, return "None"
