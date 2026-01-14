@@ -22,12 +22,39 @@ function LeadDetailsModal({
 
   const formatDate = (date) => {
     if (!date) return "-";
-    return new Date(date).toLocaleDateString();
+    try {
+      return new Date(date).toLocaleDateString("en-US", {
+        year: "numeric",
+        month: "numeric",
+        day: "numeric",
+      });
+    } catch (error) {
+      return "-";
+    }
+  };
+
+  const formatTime = (dateTime) => {
+    if (!dateTime) return "-";
+    try {
+      const date = new Date(dateTime);
+      return date.toLocaleTimeString("en-US", {
+        hour: "2-digit",
+        minute: "2-digit",
+        hour12: true, // AM/PM format
+      });
+    } catch (error) {
+      return "-";
+    }
   };
 
   // Helper to get field value handling both camelCase and snake_case
+  // Returns "-" for null, undefined, or empty strings
   const getField = (camelCase, snakeCase) => {
-    return lead[snakeCase] || lead[camelCase] || "-";
+    const value = lead[snakeCase] || lead[camelCase];
+    if (value === null || value === undefined || value === "") {
+      return "-";
+    }
+    return value;
   };
 
   return (
@@ -72,15 +99,7 @@ function LeadDetailsModal({
           </Typography>
           <Typography>
             <strong>Follow-up Time:</strong>{" "}
-            {(() => {
-              const time = lead.follow_up_time || lead.followUpTime;
-              if (!time) return "-";
-              if (typeof time === "string") return time;
-              return new Date(time).toLocaleTimeString([], {
-                hour: "2-digit",
-                minute: "2-digit",
-              });
-            })()}
+            {formatTime(lead.follow_up_at || lead.followUpAt)}
           </Typography>
           <Typography>
             <strong>Follow-up Status:</strong>{" "}
