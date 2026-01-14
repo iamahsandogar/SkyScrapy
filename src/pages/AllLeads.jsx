@@ -34,7 +34,7 @@ import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { useNavigate, useLocation } from "react-router-dom";
 import Topbar from "../components/global/Topbar";
 import { colors } from "../design-system/tokens";
-import { FaLinkedin } from "react-icons/fa";
+import { FaLinkedin, FaComment } from "react-icons/fa";
 import VisibilityIcon from "@mui/icons-material/Visibility";
 import LeadDetailsModal from "../components/Leads/LeadDetailsModal";
 import LeadNotesChat from "../components/Leads/LeadNotesChat";
@@ -1623,21 +1623,21 @@ export default function AllLeads() {
                       </TableCell>
                     )}
                     <TableCell align="center">
-                      <Button
-                        variant="outlined"
+                      <IconButton
                         size="small"
+                        aria-label="Open lead notes"
                         onClick={() => {
                           setNotesDialogLead(lead);
                           setNotesDialogOpen(true);
                         }}
                         sx={{
-                          textTransform: "none",
-                          display: "flex",
-                          whiteSpace: "nowrap",
+                          color: "#1d57ccff",
+                          transition: "transform 0.2s ease",
+                          "&:hover": { transform: "scale(1.1)" },
                         }}
                       >
-                        Click Note
-                      </Button>
+                        <FaComment size={18} />
+                      </IconButton>
                     </TableCell>
 
                     <TableCell>
