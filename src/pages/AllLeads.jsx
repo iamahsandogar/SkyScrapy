@@ -348,7 +348,7 @@ export default function AllLeads() {
       if (cachedData?.leads) {
         console.log("=== USING CACHED LEADS FOR INSTANT DISPLAY ===");
         console.log("Cached leads count:", cachedData.leads.length);
-        
+
         // Also set statuses and employees from cache if available
         if (cachedData.statuses) {
           setStatuses(cachedData.statuses);
@@ -356,7 +356,7 @@ export default function AllLeads() {
         if (cachedData.employees) {
           setEmployees(cachedData.employees);
         }
-        
+
         const filteredLeads = filterLeadsByUser(cachedData.leads);
         console.log(
           "Filtered leads count after filtering:",
@@ -406,16 +406,22 @@ export default function AllLeads() {
         // Extract statuses and users (employees) from the API response
         let statusesList = [];
         let usersList = [];
-        
+
         if (data?.statuses && Array.isArray(data.statuses)) {
           statusesList = data.statuses;
-          console.log("Extracted statuses from API response:", statusesList.length);
+          console.log(
+            "Extracted statuses from API response:",
+            statusesList.length
+          );
           setStatuses(statusesList);
         }
 
         if (data?.users && Array.isArray(data.users)) {
           usersList = data.users;
-          console.log("Extracted users (employees) from API response:", usersList.length);
+          console.log(
+            "Extracted users (employees) from API response:",
+            usersList.length
+          );
           // Map users to employees format for consistency
           // The users array contains employee profile data
           setEmployees(usersList);
@@ -557,7 +563,7 @@ export default function AllLeads() {
     try {
       const leadId = lead.id;
 
-      // Handle "None" - try null instead of empty string if API doesn't accept empty strings
+      // Handle "None" - convert to null for API
       const statusValue =
         newFollowUpStatus === "" ||
         newFollowUpStatus === null ||
@@ -565,47 +571,13 @@ export default function AllLeads() {
           ? null
           : newFollowUpStatus;
 
-      // If setting to "None" (null), use PUT endpoint with full lead data
-      // Otherwise use PATCH endpoint for follow-up-status
-      if (statusValue === null) {
-        // Get the current lead data to preserve all fields
-        const currentLead = leads.find((l) => l.id === leadId);
-        if (!currentLead) {
-          console.error("Lead not found:", leadId);
-          return;
-        }
-
-        // Use PUT endpoint to update the lead with null follow_up_status
-        const payload = {
-          title: currentLead.title || "",
-          status: currentLead.status || null,
-          source: currentLead.source || "",
-          description: currentLead.description || "",
-          company_name: currentLead.company_name || "",
-          contact_first_name: currentLead.contact_first_name || "",
-          contact_last_name: currentLead.contact_last_name || "",
-          contact_email: currentLead.contact_email || "",
-          contact_phone: currentLead.contact_phone || "",
-          contact_position_title: currentLead.contact_position_title || "",
-          contact_linkedin_url: currentLead.contact_linkedin_url || "",
-          follow_up_at:
-            currentLead.follow_up_at || currentLead.followUpAt || null,
-          follow_up_status: null, // Explicitly set to null for "None"
-        };
-
-        await apiRequest(`/api/leads/${leadId}/`, {
-          method: "PATCH",
-          body: JSON.stringify(payload),
-        });
-      } else {
-        // Use the dedicated follow-up-status endpoint for non-null values
-        await apiRequest(`/api/leads/${leadId}/follow-up-status/`, {
-          method: "PATCH",
-          body: JSON.stringify({
-            follow_up_status: statusValue,
-          }),
-        });
-      }
+      // Always use the dedicated follow-up-status endpoint (even for "None"/null)
+      await apiRequest(`/api/leads/${leadId}/follow-up-status/`, {
+        method: "PATCH",
+        body: JSON.stringify({
+          follow_up_status: statusValue,
+        }),
+      });
 
       // Update local state - use empty string for display purposes when null
       const displayValue = statusValue === null ? "" : statusValue;
@@ -842,16 +814,23 @@ export default function AllLeads() {
     if (typeof assignedTo === "object" && assignedTo !== null) {
       // Check if user_details exists with first_name and last_name
       if (assignedTo.user_details) {
-        const firstName = assignedTo.user_details.first_name || assignedTo.user_details.firstName || "";
-        const lastName = assignedTo.user_details.last_name || assignedTo.user_details.lastName || "";
+        const firstName =
+          assignedTo.user_details.first_name ||
+          assignedTo.user_details.firstName ||
+          "";
+        const lastName =
+          assignedTo.user_details.last_name ||
+          assignedTo.user_details.lastName ||
+          "";
         const name = `${firstName} ${lastName}`.trim();
         if (name) {
           return name;
         }
       }
-      
+
       // Fallback: try to extract ID for lookup
-      const assignedToId = assignedTo.id || assignedTo.pk || assignedTo.uuid || null;
+      const assignedToId =
+        assignedTo.id || assignedTo.pk || assignedTo.uuid || null;
       if (!assignedToId) {
         return "None";
       }

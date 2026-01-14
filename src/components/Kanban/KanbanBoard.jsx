@@ -114,11 +114,19 @@ function KanbanBoard() {
       }
 
       try {
-        const response = await apiRequest("/ui/options/statuses/");
+        // Single API call to get both statuses and sources
+        const response = await apiRequest("/ui/options/");
         if (!isMounted) return;
-        const parsedStatuses = parseStatusesPayload(response);
-        if (parsedStatuses.length) {
-          setStatuses(parsedStatuses);
+        
+        let statusesList = [];
+        if (response?.statuses && Array.isArray(response.statuses)) {
+          statusesList = response.statuses;
+        } else if (response?.data?.statuses && Array.isArray(response.data.statuses)) {
+          statusesList = response.data.statuses;
+        }
+        
+        if (statusesList.length) {
+          setStatuses(statusesList);
         }
       } catch (error) {
         console.error("Failed to load reminder statuses:", error);

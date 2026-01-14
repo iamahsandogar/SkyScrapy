@@ -554,7 +554,7 @@ export default function EmployeeAllLeads() {
     try {
       const leadId = lead.id;
 
-      // Handle "None" - try null instead of empty string if API doesn't accept empty strings
+      // Handle "None" - convert to null for API
       const statusValue =
         newFollowUpStatus === "" ||
         newFollowUpStatus === null ||
@@ -562,47 +562,13 @@ export default function EmployeeAllLeads() {
           ? null
           : newFollowUpStatus;
 
-      // If setting to "None" (null), use PUT endpoint with full lead data
-      // Otherwise use PATCH endpoint for follow-up-status
-      if (statusValue === null) {
-        // Get the current lead data to preserve all fields
-        const currentLead = leads.find((l) => l.id === leadId);
-        if (!currentLead) {
-          console.error("Lead not found:", leadId);
-          return;
-        }
-
-        // Use PUT endpoint to update the lead with null follow_up_status
-        const payload = {
-          title: currentLead.title || "",
-          status: currentLead.status || null,
-          source: currentLead.source || "",
-          description: currentLead.description || "",
-          company_name: currentLead.company_name || "",
-          contact_first_name: currentLead.contact_first_name || "",
-          contact_last_name: currentLead.contact_last_name || "",
-          contact_email: currentLead.contact_email || "",
-          contact_phone: currentLead.contact_phone || "",
-          contact_position_title: currentLead.contact_position_title || "",
-          contact_linkedin_url: currentLead.contact_linkedin_url || "",
-          follow_up_at:
-            currentLead.follow_up_at || currentLead.followUpAt || null,
-          follow_up_status: null, // Explicitly set to null for "None"
-        };
-
-        await apiRequest(`/api/leads/${leadId}/`, {
-          method: "PATCH",
-          body: JSON.stringify(payload),
-        });
-      } else {
-        // Use the dedicated follow-up-status endpoint for non-null values
-        await apiRequest(`/api/leads/${leadId}/follow-up-status/`, {
-          method: "PATCH",
-          body: JSON.stringify({
-            follow_up_status: statusValue,
-          }),
-        });
-      }
+      // Always use the dedicated follow-up-status endpoint (even for "None"/null)
+      await apiRequest(`/api/leads/${leadId}/follow-up-status/`, {
+        method: "PATCH",
+        body: JSON.stringify({
+          follow_up_status: statusValue,
+        }),
+      });
 
       // Update local state - use empty string for display purposes when null
       const displayValue = statusValue === null ? "" : statusValue;

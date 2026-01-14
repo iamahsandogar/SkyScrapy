@@ -274,11 +274,19 @@ function UpcomingReminders({ onLoadingChange }) {
         setStatuses(cached.statuses);
       }
       try {
-        const response = await apiRequest("/ui/options/statuses/");
+        // Single API call to get both statuses and sources
+        const response = await apiRequest("/ui/options/");
         if (!isMounted) return;
-        const parsed = parseStatusesPayload(response);
-        if (parsed.length) {
-          setStatuses(parsed);
+        
+        let statusesList = [];
+        if (response?.statuses && Array.isArray(response.statuses)) {
+          statusesList = response.statuses;
+        } else if (response?.data?.statuses && Array.isArray(response.data.statuses)) {
+          statusesList = response.data.statuses;
+        }
+        
+        if (statusesList.length) {
+          setStatuses(statusesList);
         }
       } catch (err) {
         console.error("Failed to load statuses for reminders", err);

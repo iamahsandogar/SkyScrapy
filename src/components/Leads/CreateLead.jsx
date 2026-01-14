@@ -299,14 +299,20 @@ export default function CreateLead() {
         if (optionsResponse) {
           if (Array.isArray(optionsResponse.statuses)) {
             statusesList = optionsResponse.statuses;
-          } else if (optionsResponse?.data?.statuses && Array.isArray(optionsResponse.data.statuses)) {
+          } else if (
+            optionsResponse?.data?.statuses &&
+            Array.isArray(optionsResponse.data.statuses)
+          ) {
             statusesList = optionsResponse.data.statuses;
           }
 
           // Extract sources from response
           if (Array.isArray(optionsResponse.sources)) {
             sourcesList = optionsResponse.sources;
-          } else if (optionsResponse?.data?.sources && Array.isArray(optionsResponse.data.sources)) {
+          } else if (
+            optionsResponse?.data?.sources &&
+            Array.isArray(optionsResponse.data.sources)
+          ) {
             sourcesList = optionsResponse.data.sources;
           }
         }
@@ -603,7 +609,9 @@ export default function CreateLead() {
         }
 
         const employeesForLookup =
-          latestEmployeesFromApi?.length > 0 ? latestEmployeesFromApi : employees;
+          latestEmployeesFromApi?.length > 0
+            ? latestEmployeesFromApi
+            : employees;
 
         // For admins: Try to match with employees list using both profile ID and user ID
         // Employees list typically uses profile ID (assigned_to.id), so prioritize that
@@ -1016,7 +1024,10 @@ export default function CreateLead() {
           const fallbackDisplayName = getEmployeeDisplayName(
             assignedEmployeeForDisplay || assignedProfile
           );
-          console.log("Assigned to resolved display name:", fallbackDisplayName);
+          console.log(
+            "Assigned to resolved display name:",
+            fallbackDisplayName
+          );
         }
 
         setIsDataLoaded(true);
@@ -1780,6 +1791,7 @@ export default function CreateLead() {
                       renderValue: (val) => (val === "" ? "None" : val),
                     }}
                   >
+                    {/* <MenuItem value="">None</MenuItem> */}
                     {/* <MenuItem value="">None</MenuItem> */}
                     <MenuItem value="done">done</MenuItem>
                     <MenuItem value="pending">pending</MenuItem>

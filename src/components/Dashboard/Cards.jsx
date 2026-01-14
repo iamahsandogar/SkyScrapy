@@ -228,10 +228,18 @@ export default function Cards({ onLoadingChange, mode = "admin" }) {
         setStatuses(cachedData.statuses);
       }
       try {
-        const response = await apiRequest("/ui/options/statuses/");
-        const parsed = parseStatusesPayload(response);
-        if (parsed.length > 0) {
-          setStatuses(parsed);
+        // Single API call to get both statuses and sources
+        const response = await apiRequest("/ui/options/");
+        let statusesList = [];
+        
+        if (response?.statuses && Array.isArray(response.statuses)) {
+          statusesList = response.statuses;
+        } else if (response?.data?.statuses && Array.isArray(response.data.statuses)) {
+          statusesList = response.data.statuses;
+        }
+        
+        if (statusesList.length > 0) {
+          setStatuses(statusesList);
         }
       } catch (error) {
         console.error("Failed to fetch statuses for cards:", error);
