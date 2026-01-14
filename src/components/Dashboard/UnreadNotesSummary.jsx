@@ -310,32 +310,19 @@ export default function UnreadNotesSummary({ onLoadingChange }) {
           leadMap.set(String(leadId), lead);
         }
       });
-      let noteSummaries = [];
-      try {
-        const unreadPayload = await apiRequest("/api/leads/notes/unread/");
-        const unreadNotes = toArray(unreadPayload);
-        const aggregatedSummaries = buildSummariesFromAggregatedData(
-          unreadNotes,
-          leadMap
-        );
-        if (aggregatedSummaries.length) {
-          noteSummaries = aggregatedSummaries;
-        } else {
-          noteSummaries = collectNoteSummaries(unreadNotes, leadMap);
-        }
-      } catch (err) {
-        console.warn("Unread notes endpoint unavailable, falling back", err);
-      }
-      if (!noteSummaries.length) {
-        const results = await Promise.all(
-          leadList.map(async (lead) => {
-            const leadId = normalizeLeadId(lead);
-            if (!leadId) return null;
+      // Fetch unread notes for each lead (API only supports per-lead endpoint)
+      const results = await Promise.all(
+        leadList.map(async (lead) => {
+          const leadId = normalizeLeadId(lead);
+          if (!leadId) return null;
+          
+          try {
             const unreadResponse = await apiRequest(
               `/api/leads/${leadId}/notes/unread/`
-            ).catch(() => []);
+            );
             const unreadList = toArray(unreadResponse);
             if (!unreadList.length) return null;
+            
             const lastUnread = unreadList[unreadList.length - 1];
             return {
               id: leadId,
@@ -343,10 +330,14 @@ export default function UnreadNotesSummary({ onLoadingChange }) {
               unreadCount: unreadList.length,
               lastNote: lastUnread,
             };
-          })
-        );
-        noteSummaries = results.filter(Boolean);
-      }
+          } catch (err) {
+            // Silently skip leads with no unread notes or API errors
+            return null;
+          }
+        })
+      );
+      
+      const noteSummaries = results.filter(Boolean);
       setSummaries(noteSummaries);
     } catch (err) {
       console.error("Failed to load unread notes summary", err);

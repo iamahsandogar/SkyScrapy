@@ -118,13 +118,12 @@ function UnreadNotes({ leadId }) {
         .map((summary) => ({ type: "summary", data: summary }));
 
     const fetchForLead = async () => {
-            console.log("Hello I am ----------====", leadId);
-
       if (!leadId) {
-        return normalizeSummaryEntries(
-          await apiRequest("/api/leads/notes/unread/")
-        );
+        // If no leadId, return empty array (API requires lead_id)
+        return [];
       }
+      
+      // API endpoint: GET /api/leads/<lead_id>/notes/unread/
       const payload = await apiRequest(`/api/leads/${leadId}/notes/unread/`);
       return normalizeLeadNotes(payload);
     };
