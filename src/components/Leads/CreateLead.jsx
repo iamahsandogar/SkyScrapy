@@ -251,14 +251,8 @@ export default function CreateLead() {
         setEmployees(filteredEmployees);
         setLoadingMeta(false);
 
-        // Only refresh in background if cache is older than 5 minutes
-        // This prevents unnecessary API calls when opening the page multiple times
-        if (cacheAge > CACHE_MAX_AGE) {
-          console.log("Cache is stale, refreshing in background...");
-          refreshDataInBackground();
-        } else {
-          console.log("Cache is fresh, skipping API calls");
-        }
+        // Use cache data only - no background API calls (like view modal)
+        console.log("Using cache data only - no API calls");
         return;
       } else {
         console.log("Cache is stale, fetching fresh data...");
@@ -295,57 +289,37 @@ export default function CreateLead() {
       let sourcesList = [];
       let employeesList = [];
 
-      // Fetch statuses - handle errors individually so other calls can still succeed
+      // Single API call to get both statuses and sources
       try {
-        console.log("Fetching statuses from /ui/options/statuses/");
-        const statusesResponse = await apiRequest("/ui/options/statuses/");
-        console.log("Statuses API response:", statusesResponse);
+        console.log("Fetching statuses and sources from /ui/options/");
+        const optionsResponse = await apiRequest("/ui/options/");
+        console.log("Options API response:", optionsResponse);
 
-        // Handle multiple response structures
-        if (Array.isArray(statusesResponse)) {
-          statusesList = statusesResponse;
-        } else if (statusesResponse?.statuses) {
-          statusesList = statusesResponse.statuses;
-        } else if (statusesResponse?.data) {
-          statusesList = Array.isArray(statusesResponse.data)
-            ? statusesResponse.data
-            : statusesResponse.data?.statuses || [];
+        // Extract statuses from response
+        if (optionsResponse) {
+          if (Array.isArray(optionsResponse.statuses)) {
+            statusesList = optionsResponse.statuses;
+          } else if (optionsResponse?.data?.statuses && Array.isArray(optionsResponse.data.statuses)) {
+            statusesList = optionsResponse.data.statuses;
+          }
+
+          // Extract sources from response
+          if (Array.isArray(optionsResponse.sources)) {
+            sourcesList = optionsResponse.sources;
+          } else if (optionsResponse?.data?.sources && Array.isArray(optionsResponse.data.sources)) {
+            sourcesList = optionsResponse.data.sources;
+          }
         }
 
         console.log("Parsed statuses:", statusesList);
-      } catch (error) {
-        console.error("Failed to fetch statuses:", error);
-        console.error("Statuses error details:", {
-          message: error.message,
-          endpoint: "/ui/options/statuses/",
-        });
-        statusesList = [];
-      }
-
-      // Fetch sources - handle errors individually so other calls can still succeed
-      try {
-        console.log("Fetching sources from /ui/options/sources/");
-        const sourcesResponse = await apiRequest("/ui/options/sources/");
-        console.log("Sources API response:", sourcesResponse);
-
-        // Handle multiple response structures
-        if (Array.isArray(sourcesResponse)) {
-          sourcesList = sourcesResponse;
-        } else if (sourcesResponse?.sources) {
-          sourcesList = sourcesResponse.sources;
-        } else if (sourcesResponse?.data) {
-          sourcesList = Array.isArray(sourcesResponse.data)
-            ? sourcesResponse.data
-            : sourcesResponse.data?.sources || [];
-        }
-
         console.log("Parsed sources:", sourcesList);
       } catch (error) {
-        console.error("Failed to fetch sources:", error);
-        console.error("Sources error details:", {
+        console.error("Failed to fetch options:", error);
+        console.error("Options error details:", {
           message: error.message,
-          endpoint: "/ui/options/sources/",
+          endpoint: "/ui/options/",
         });
+        statusesList = [];
         sourcesList = [];
       }
 
@@ -493,20 +467,20 @@ export default function CreateLead() {
   };
 
   const fetchLeadForEdit = async (leadId, allowCacheFallback) => {
+    // First, try to get lead from cache (like view modal does)
+    const cachedLead = findLeadInCache(leadId);
+    if (cachedLead) {
+      console.log("Using cached lead data for edit (no API call needed)");
+      return { lead: cachedLead, fromCache: true };
+    }
+
+    // If not in cache, try API
     try {
       const lead = await fetchLeadFromApi(leadId);
       return { lead, fromCache: false };
     } catch (apiError) {
       if (!allowCacheFallback) {
         throw apiError;
-      }
-      const cachedLead = findLeadInCache(leadId);
-      if (cachedLead) {
-        console.warn(
-          "API failed, but using cached lead data as fallback",
-          apiError
-        );
-        return { lead: cachedLead, fromCache: true };
       }
       throw apiError;
     }
@@ -1278,7 +1252,7 @@ export default function CreateLead() {
       if (editId) {
         // 🔁 UPDATE LEAD
         const response = await apiRequest(`/api/leads/${editId}/`, {
-          method: "PUT",
+          method: "PATCH",
           body: JSON.stringify(payload),
         });
         notifySuccess("Lead updated successfully!");

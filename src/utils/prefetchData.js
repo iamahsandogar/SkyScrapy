@@ -52,14 +52,9 @@ export const prefetchLeadData = async ({ includeLeads = true } = {}) => {
       `Pre-fetching lead data${includeLeads ? "" : " (metadata only)"}...`
     );
 
-    // Fetch APIs in parallel, but skip employees API for employees (they get 403)
-    const statusesPromise = apiRequest("/ui/options/statuses/").catch((err) => {
-      console.error("Failed to prefetch statuses:", err);
-      return null;
-    });
-
-    const sourcesPromise = apiRequest("/ui/options/sources/").catch((err) => {
-      console.error("Failed to prefetch sources:", err);
+    // Single API call to get both statuses and sources
+    const optionsPromise = apiRequest("/ui/options/").catch((err) => {
+      console.error("Failed to prefetch options (statuses & sources):", err);
       return null;
     });
 
@@ -78,42 +73,32 @@ export const prefetchLeadData = async ({ includeLeads = true } = {}) => {
       : Promise.resolve(null);
 
     const [
-      statusesResponse,
-      sourcesResponse,
+      optionsResponse,
       employeesResponse,
       leadsResponse,
     ] = await Promise.all([
-      statusesPromise,
-      sourcesPromise,
+      optionsPromise,
       employeesPromise,
       leadsPromise,
     ]);
 
-    // Parse statuses
+    // Parse statuses and sources from single options response
     let statusesList = [];
-    if (statusesResponse) {
-      if (Array.isArray(statusesResponse)) {
-        statusesList = statusesResponse;
-      } else if (statusesResponse?.statuses) {
-        statusesList = statusesResponse.statuses;
-      } else if (statusesResponse?.data) {
-        statusesList = Array.isArray(statusesResponse.data)
-          ? statusesResponse.data
-          : statusesResponse.data?.statuses || [];
-      }
-    }
-
-    // Parse sources
     let sourcesList = [];
-    if (sourcesResponse) {
-      if (Array.isArray(sourcesResponse)) {
-        sourcesList = sourcesResponse;
-      } else if (sourcesResponse?.sources) {
-        sourcesList = sourcesResponse.sources;
-      } else if (sourcesResponse?.data) {
-        sourcesList = Array.isArray(sourcesResponse.data)
-          ? sourcesResponse.data
-          : sourcesResponse.data?.sources || [];
+    
+    if (optionsResponse) {
+      // Extract statuses
+      if (Array.isArray(optionsResponse.statuses)) {
+        statusesList = optionsResponse.statuses;
+      } else if (optionsResponse?.data?.statuses && Array.isArray(optionsResponse.data.statuses)) {
+        statusesList = optionsResponse.data.statuses;
+      }
+
+      // Extract sources
+      if (Array.isArray(optionsResponse.sources)) {
+        sourcesList = optionsResponse.sources;
+      } else if (optionsResponse?.data?.sources && Array.isArray(optionsResponse.data.sources)) {
+        sourcesList = optionsResponse.data.sources;
       }
     }
 

@@ -516,7 +516,7 @@ export default function EmployeeAllLeads() {
 
       // Update via API
       await apiRequest(`/api/leads/${leadId}/`, {
-        method: "PUT",
+        method: "PATCH",
         body: JSON.stringify(payload),
       });
 
@@ -591,7 +591,7 @@ export default function EmployeeAllLeads() {
         };
 
         await apiRequest(`/api/leads/${leadId}/`, {
-          method: "PUT",
+          method: "PATCH",
           body: JSON.stringify(payload),
         });
       } else {
