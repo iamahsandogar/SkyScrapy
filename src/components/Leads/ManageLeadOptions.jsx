@@ -95,34 +95,32 @@ export default function ManageLeadOptions() {
         setLoading(true);
       }
 
-      const [statuses, sources] = await Promise.all([
-        apiRequest("/ui/options/statuses/"),
-        apiRequest("/ui/options/sources/"),
-      ]);
+      // Single API call to get both statuses and sources
+      const response = await apiRequest("/ui/options/");
+      console.log("=== /ui/options/ API RESPONSE ===", response);
 
-      // Parse statuses
+      // Parse response - extract statuses and sources
       let statusesList = [];
-      if (Array.isArray(statuses)) {
-        statusesList = statuses;
-      } else if (statuses?.statuses) {
-        statusesList = statuses.statuses;
-      } else if (statuses?.data) {
-        statusesList = Array.isArray(statuses.data)
-          ? statuses.data
-          : statuses.data?.statuses || [];
+      let sourcesList = [];
+
+      if (response) {
+        // Extract statuses
+        if (Array.isArray(response.statuses)) {
+          statusesList = response.statuses;
+        } else if (response?.data?.statuses && Array.isArray(response.data.statuses)) {
+          statusesList = response.data.statuses;
+        }
+
+        // Extract sources
+        if (Array.isArray(response.sources)) {
+          sourcesList = response.sources;
+        } else if (response?.data?.sources && Array.isArray(response.data.sources)) {
+          sourcesList = response.data.sources;
+        }
       }
 
-      // Parse sources
-      let sourcesList = [];
-      if (Array.isArray(sources)) {
-        sourcesList = sources;
-      } else if (sources?.sources) {
-        sourcesList = sources.sources;
-      } else if (sources?.data) {
-        sourcesList = Array.isArray(sources.data)
-          ? sources.data
-          : sources.data?.sources || [];
-      }
+      console.log("Extracted statuses:", statusesList.length);
+      console.log("Extracted sources:", sourcesList.length);
 
       setData({
         status: statusesList,
