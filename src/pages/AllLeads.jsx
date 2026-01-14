@@ -191,7 +191,7 @@ export default function AllLeads() {
     };
   }, [focusLeadId, leads]);
 
-  // Fetch statuses and employees to map IDs to names - use cache first for instant loading
+  // Fetch statuses and employees from the single /api/leads response - use cache first for instant loading
   useEffect(() => {
     const fetchStatusesAndEmployees = async () => {
       // Try cached data first
@@ -207,120 +207,10 @@ export default function AllLeads() {
         setEmployees(cachedData.employees);
       }
 
-      // Refresh in background
-      try {
-        const [statusesData, employeesData] = await Promise.all([
-          apiRequest("/ui/options/statuses/").catch(() => null),
-          apiRequest("/ui/employees/").catch(() => null),
-        ]);
-
-        if (statusesData) {
-          let statusesList = [];
-          if (Array.isArray(statusesData)) {
-            statusesList = statusesData;
-          } else if (statusesData?.statuses) {
-            statusesList = statusesData.statuses;
-          } else if (statusesData?.data) {
-            statusesList = Array.isArray(statusesData.data)
-              ? statusesData.data
-              : statusesData.data?.statuses || [];
-          }
-          setStatuses(statusesList);
-        }
-
-        if (employeesData) {
-          let employeesList = [];
-          if (Array.isArray(employeesData)) {
-            employeesList = employeesData;
-          } else if (employeesData?.employees) {
-            employeesList = employeesData.employees;
-          } else if (employeesData?.data) {
-            employeesList = Array.isArray(employeesData.data)
-              ? employeesData.data
-              : employeesData.data?.employees || [];
-          }
-          // Don't filter - show all employees for lookup (leads might be assigned to inactive employees)
-          setEmployees(employeesList);
-          console.log("Loaded employees for lookup:", employeesList.length);
-        }
-      } catch (err) {
-        console.error("Failed to refresh statuses/employees:", err);
-      }
-
-      // If no cache, fetch fresh
-      if (!cachedData?.statuses) {
-        try {
-          const data = await apiRequest("/ui/options/statuses/");
-          let statusesList = [];
-          if (Array.isArray(data)) {
-            statusesList = data;
-          } else if (data?.statuses) {
-            statusesList = data.statuses;
-          } else if (data?.data) {
-            statusesList = Array.isArray(data.data)
-              ? data.data
-              : data.data?.statuses || [];
-          }
-          setStatuses(statusesList);
-        } catch (err) {
-          console.error("Failed to fetch statuses:", err);
-        }
-      }
-
-      if (!cachedData?.employees) {
-        try {
-          const data = await apiRequest("/ui/employees/");
-          let employeesList = [];
-          if (Array.isArray(data)) {
-            employeesList = data;
-          } else if (data?.employees) {
-            employeesList = data.employees;
-          } else if (data?.data) {
-            employeesList = Array.isArray(data.data)
-              ? data.data
-              : data.data?.employees || [];
-          }
-          // Don't filter - show all employees for lookup (leads might be assigned to inactive employees)
-          setEmployees(employeesList);
-          console.log("Loaded employees for lookup:", employeesList.length);
-        } catch (err) {
-          console.error("Failed to fetch employees:", err);
-        }
-      }
+      // If no cache, they will be loaded from the /api/leads response in fetchLeads
     };
     fetchStatusesAndEmployees();
   }, []);
-
-  useEffect(() => {
-    let cancelled = false;
-
-    const refreshEmployeesOnRevisit = async () => {
-      try {
-        const response = await apiRequest("/ui/employees/");
-        if (cancelled) return;
-        const employeesList = parseEmployeesPayload(response);
-        setEmployees(employeesList);
-
-        const cached = getCachedLeadData();
-        if (cached) {
-          const updatedCache = {
-            ...cached,
-            employees: employeesList,
-            timestamp: Date.now(),
-          };
-          localStorage.setItem("leadDataCache", JSON.stringify(updatedCache));
-        }
-      } catch (err) {
-        console.error("Failed to refresh employees on revisit:", err);
-      }
-    };
-
-    refreshEmployeesOnRevisit();
-
-    return () => {
-      cancelled = true;
-    };
-  }, [location.key]);
 
   useEffect(() => {
     const fetchLeads = async () => {
@@ -453,22 +343,20 @@ export default function AllLeads() {
         }
       };
 
-      // Try cached data first - use it without making API call
+      // Try cached data first for instant display, but always fetch fresh data from API
       const cachedData = getCachedLeadData();
       if (cachedData?.leads) {
-        console.log("=== USING CACHED LEADS ===");
+        console.log("=== USING CACHED LEADS FOR INSTANT DISPLAY ===");
         console.log("Cached leads count:", cachedData.leads.length);
-        if (cachedData.leads.length > 0) {
-          console.log("Sample cached lead:", cachedData.leads[0]);
-          console.log(
-            "Sample lead assigned_to:",
-            cachedData.leads[0].assigned_to
-          );
-          console.log(
-            "Sample lead assignedTo:",
-            cachedData.leads[0].assignedTo
-          );
+        
+        // Also set statuses and employees from cache if available
+        if (cachedData.statuses) {
+          setStatuses(cachedData.statuses);
         }
+        if (cachedData.employees) {
+          setEmployees(cachedData.employees);
+        }
+        
         const filteredLeads = filterLeadsByUser(cachedData.leads);
         console.log(
           "Filtered leads count after filtering:",
@@ -477,29 +365,12 @@ export default function AllLeads() {
 
         setLeads(filteredLeads);
         setIsPageLoading(false);
-        // Don't make API call - just use cached data
-        return;
+        // Continue to fetch fresh data from API (don't return early)
       }
 
-      // No cache, wait a bit to see if prefetch completes (avoid race condition)
-      await new Promise((resolve) => setTimeout(resolve, 1000));
-
-      // Check cache again after short delay
-      const cachedDataAfterDelay = getCachedLeadData();
-      if (cachedDataAfterDelay?.leads) {
-        console.log("Cache available after delay, using it");
-        const leadsList = cachedDataAfterDelay.leads;
-        if (Array.isArray(leadsList)) {
-          const filteredLeads = filterLeadsByUser(leadsList);
-          setLeads(filteredLeads);
-        }
-        setIsPageLoading(false);
-        return;
-      }
-
-      // Still no cache, fetch fresh
+      // Always fetch fresh data from /api/leads API
       try {
-        console.log("Fetching leads from API...");
+        console.log("Fetching fresh leads from /api/leads/ API...");
         const data = await apiRequest("/api/leads/");
         console.log("=== API RESPONSE RAW ===", data);
         console.log("API response type:", typeof data);
@@ -532,6 +403,24 @@ export default function AllLeads() {
           );
         }
 
+        // Extract statuses and users (employees) from the API response
+        let statusesList = [];
+        let usersList = [];
+        
+        if (data?.statuses && Array.isArray(data.statuses)) {
+          statusesList = data.statuses;
+          console.log("Extracted statuses from API response:", statusesList.length);
+          setStatuses(statusesList);
+        }
+
+        if (data?.users && Array.isArray(data.users)) {
+          usersList = data.users;
+          console.log("Extracted users (employees) from API response:", usersList.length);
+          // Map users to employees format for consistency
+          // The users array contains employee profile data
+          setEmployees(usersList);
+        }
+
         console.log("=== PARSED LEADS LIST ===");
         console.log("Total leads count:", leadsList.length);
         if (leadsList.length > 0) {
@@ -550,18 +439,20 @@ export default function AllLeads() {
         setLeads(filteredLeads);
         setIsPageLoading(false);
 
-        // Update cache with fresh leads data (store all leads, filter on display)
+        // Update cache with fresh leads data, statuses, and employees (store all leads, filter on display)
         const currentCache = getCachedLeadData();
         if (currentCache) {
           currentCache.leads = leadsList;
+          currentCache.statuses = statusesList;
+          currentCache.employees = usersList;
           currentCache.timestamp = Date.now();
           localStorage.setItem("leadDataCache", JSON.stringify(currentCache));
         } else {
           // Create new cache entry if none exists
           const newCache = {
-            statuses: [],
-            sources: [],
-            employees: [],
+            statuses: statusesList,
+            sources: data?.sources || [],
+            employees: usersList,
             leads: leadsList,
             timestamp: Date.now(),
           };
