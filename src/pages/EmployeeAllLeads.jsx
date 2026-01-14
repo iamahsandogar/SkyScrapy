@@ -1,5 +1,6 @@
 import {
   Box,
+  Backdrop,
   Typography,
   Table,
   TableBody,
@@ -19,23 +20,35 @@ import {
   Checkbox,
   FormControlLabel,
   Menu,
+  Dialog,
+  DialogTitle,
+  DialogContent,
+  DialogActions,
 } from "@mui/material";
+
 import CloudDownloadIcon from "@mui/icons-material/CloudDownload";
 import AddIcon from "@mui/icons-material/Add";
 import DeleteIcon from "@mui/icons-material/Delete";
 import EditIcon from "@mui/icons-material/Edit";
 import AssignmentTurnedInIcon from "@mui/icons-material/AssignmentTurnedIn";
-import { useEffect, useState } from "react";
+import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { useNavigate, useLocation } from "react-router-dom";
 import Topbar from "../components/global/Topbar";
 import { colors } from "../design-system/tokens";
 import { FaLinkedin } from "react-icons/fa";
 import VisibilityIcon from "@mui/icons-material/Visibility";
 import LeadDetailsModal from "../components/Leads/LeadDetailsModal";
+import LeadNotesChat from "../components/Leads/LeadNotesChat";
 import MoreHorizIcon from "@mui/icons-material/MoreHoriz";
 import apiRequest from "../components/services/api";
-import { getCachedLeadData, addLeadToCache } from "../utils/prefetchData";
+import {
+  getCachedLeadData,
+  addLeadToCache,
+  prefetchLeadData,
+  removeLeadFromCache,
+} from "../utils/prefetchData";
 import MoreVertIcon from "@mui/icons-material/MoreVert";
+import DotLoader from "../components/global/DotLoader";
 
 const getChipStyles = (status) => {
   switch (status) {
@@ -98,6 +111,11 @@ const DEFAULT_COLUMNS = [
   "followupStatus",
 ];
 
+const resolveLeadId = (lead) => {
+  if (!lead) return null;
+  return lead.id ?? lead.pk ?? lead.uuid ?? lead.lead_id ?? lead.leadId ?? null;
+};
+
 const tableHeaderCellStyles = {
   whiteSpace: "nowrap",
   fontWeight: 700,
@@ -121,13 +139,51 @@ export default function EmployeeAllLeads() {
   });
   const [selectedLead, setSelectedLead] = useState(null);
   const [isModalOpen, setIsModalOpen] = useState(false);
+  const [notesDialogOpen, setNotesDialogOpen] = useState(false);
+  const [notesDialogLead, setNotesDialogLead] = useState(null);
   const [statuses, setStatuses] = useState([]);
+  const [leadsLoading, setLeadsLoading] = useState(true);
+  const [statusesLoading, setStatusesLoading] = useState(true);
   const [actionAnchorEl, setActionAnchorEl] = useState(null);
   const [menuLead, setMenuLead] = useState(null);
   const [mobileMenuAnchorEl, setMobileMenuAnchorEl] = useState(null);
   const [currentUserId, setCurrentUserId] = useState(null);
+  const [actionLoading, setActionLoading] = useState(false);
+  const [actionMessage, setActionMessage] = useState("");
 
   const actionOpen = Boolean(actionAnchorEl);
+  const rowRefs = useRef({});
+  const highlightTimer = useRef(null);
+  const [highlightedLeadId, setHighlightedLeadId] = useState(null);
+  const focusLeadId = useMemo(() => {
+    const stateLeadId = location.state?.focusLeadId;
+    if (stateLeadId) return String(stateLeadId);
+    const params = new URLSearchParams(location.search);
+    const searchId = params.get("focusLeadId");
+    return searchId ? String(searchId) : null;
+  }, [location.key, location.search]);
+  const isPageDataLoading = leadsLoading || statusesLoading;
+
+  useLayoutEffect(() => {
+    if (!focusLeadId) return;
+    const target = rowRefs.current[String(focusLeadId)];
+    if (!target) return;
+    target.scrollIntoView({ behavior: "smooth", block: "center" });
+    setHighlightedLeadId(String(focusLeadId));
+    if (highlightTimer.current) {
+      clearTimeout(highlightTimer.current);
+    }
+    highlightTimer.current = setTimeout(() => {
+      setHighlightedLeadId(null);
+      highlightTimer.current = null;
+    }, 4000);
+    return () => {
+      if (highlightTimer.current) {
+        clearTimeout(highlightTimer.current);
+        highlightTimer.current = null;
+      }
+    };
+  }, [focusLeadId, leads]);
 
   // Get current user info on mount
   useEffect(() => {
@@ -141,33 +197,6 @@ export default function EmployeeAllLeads() {
 
   // Fetch statuses - use cache first, similar to CreateLead.jsx pattern
   useEffect(() => {
-    const fetchStatuses = async () => {
-      // Try cached data first for instant loading
-      const cachedData = getCachedLeadData();
-      const CACHE_MAX_AGE = 5 * 60 * 1000; // 5 minutes
-
-      if (cachedData && cachedData.timestamp) {
-        const cacheAge = Date.now() - cachedData.timestamp;
-        const isCacheFresh = cacheAge < CACHE_MAX_AGE;
-
-        if (isCacheFresh && cachedData.statuses) {
-          console.log("Using cached statuses for instant loading");
-          setStatuses(cachedData.statuses);
-        }
-
-        // Only refresh in background if cache is older than 5 minutes
-        if (cacheAge > CACHE_MAX_AGE) {
-          console.log("Cache is stale, refreshing statuses in background...");
-          refreshStatusesInBackground();
-        } else {
-          console.log("Cache is fresh, skipping statuses API call");
-        }
-      } else {
-        console.log("No cache available, fetching fresh statuses...");
-        await refreshStatusesInBackground();
-      }
-    };
-
     const refreshStatusesInBackground = async () => {
       try {
         console.log("Fetching statuses from /ui/options/statuses/");
@@ -211,15 +240,51 @@ export default function EmployeeAllLeads() {
       }
     };
 
-    fetchStatuses();
+    const fetchStatuses = async () => {
+      setStatusesLoading(true);
+      try {
+        // Try cached data first for instant loading
+        const cachedData = getCachedLeadData();
+        const CACHE_MAX_AGE = 5 * 60 * 1000; // 5 minutes
+
+        if (cachedData && cachedData.timestamp) {
+          const cacheAge = Date.now() - cachedData.timestamp;
+          const isCacheFresh = cacheAge < CACHE_MAX_AGE;
+
+          if (isCacheFresh && cachedData.statuses) {
+            console.log("Using cached statuses for instant loading");
+            setStatuses(cachedData.statuses);
+          }
+
+          // Only refresh in background if cache is older than 5 minutes
+          if (cacheAge > CACHE_MAX_AGE) {
+            console.log("Cache is stale, refreshing statuses in background...");
+            refreshStatusesInBackground();
+          } else {
+            console.log("Cache is fresh, skipping statuses API call");
+          }
+        } else {
+          console.log("No cache available, fetching fresh statuses...");
+          await refreshStatusesInBackground();
+        }
+      } catch (error) {
+        console.error("Failed to fetch statuses:", error);
+      } finally {
+        setStatusesLoading(false);
+      }
+    };
+
+    void fetchStatuses();
   }, []);
 
   // Fetch leads - use cache first, then API
   useEffect(() => {
     const fetchLeads = async () => {
-      // Get current user to filter leads
-      const storedUser = localStorage.getItem("user");
-      let employeeId = null;
+      setLeadsLoading(true);
+      try {
+        // Get current user to filter leads
+        const storedUser = localStorage.getItem("user");
+        let employeeId = null;
 
       if (storedUser) {
         const userData = JSON.parse(storedUser);
@@ -366,8 +431,7 @@ export default function EmployeeAllLeads() {
       }
 
       // Still no cache, fetch fresh from API
-      try {
-        console.log("Fetching leads from API...");
+      console.log("Fetching leads from API...");
         const data = await apiRequest("/api/leads/");
         console.log("=== API RESPONSE RAW ===", data);
 
@@ -426,19 +490,23 @@ export default function EmployeeAllLeads() {
         console.error("Failed to fetch leads:", err);
         alert("Failed to load leads");
         setLeads([]);
+      } finally {
+        setLeadsLoading(false);
       }
     };
 
-    fetchLeads();
+    void fetchLeads();
   }, [location.pathname, currentUserId]);
 
   // Handler to update lead status
   const handleStatusChange = async (lead, newStatusId) => {
+    setActionLoading(true);
+    setActionMessage("Updating status...");
     try {
       const leadId = lead.id;
-      
+
       // Get the current lead data to preserve all fields
-      const currentLead = leads.find(l => l.id === leadId);
+      const currentLead = leads.find((l) => l.id === leadId);
       if (!currentLead) {
         console.error("Lead not found:", leadId);
         return;
@@ -460,16 +528,21 @@ export default function EmployeeAllLeads() {
         contact_linkedin_url: currentLead.contact_linkedin_url || "",
         // Only include follow_up_at and follow_up_status if they have valid values
         // Status is independent of follow_up_at and follow_up_status, so we only include them if they exist
-        ...((currentLead.follow_up_at || currentLead.followUpAt) && 
-            (currentLead.follow_up_at || currentLead.followUpAt) !== null && 
-            (currentLead.follow_up_at || currentLead.followUpAt) !== "" ? {
-          follow_up_at: currentLead.follow_up_at || currentLead.followUpAt
-        } : {}),
-        ...((currentLead.follow_up_status || currentLead.followupStatus) && 
-            (currentLead.follow_up_status || currentLead.followupStatus) !== null && 
-            (currentLead.follow_up_status || currentLead.followupStatus) !== "" ? {
-          follow_up_status: currentLead.follow_up_status || currentLead.followupStatus
-        } : {}),
+        ...((currentLead.follow_up_at || currentLead.followUpAt) &&
+        (currentLead.follow_up_at || currentLead.followUpAt) !== null &&
+        (currentLead.follow_up_at || currentLead.followUpAt) !== ""
+          ? {
+              follow_up_at: currentLead.follow_up_at || currentLead.followUpAt,
+            }
+          : {}),
+        ...((currentLead.follow_up_status || currentLead.followupStatus) &&
+        (currentLead.follow_up_status || currentLead.followupStatus) !== null &&
+        (currentLead.follow_up_status || currentLead.followupStatus) !== ""
+          ? {
+              follow_up_status:
+                currentLead.follow_up_status || currentLead.followupStatus,
+            }
+          : {}),
       };
 
       // Update via API
@@ -499,24 +572,32 @@ export default function EmployeeAllLeads() {
     } catch (error) {
       console.error("Failed to update lead status:", error);
       alert("Failed to update lead status");
+    } finally {
+      setActionLoading(false);
+      setActionMessage("");
     }
   };
 
   // Handler to update follow-up status
   const handleFollowUpStatusChange = async (lead, newFollowUpStatus) => {
+    setActionLoading(true);
+    setActionMessage("Updating follow-up status...");
     try {
       const leadId = lead.id;
 
       // Handle "None" - try null instead of empty string if API doesn't accept empty strings
-      const statusValue = newFollowUpStatus === "" || newFollowUpStatus === null || newFollowUpStatus === undefined 
-        ? null 
-        : newFollowUpStatus;
+      const statusValue =
+        newFollowUpStatus === "" ||
+        newFollowUpStatus === null ||
+        newFollowUpStatus === undefined
+          ? null
+          : newFollowUpStatus;
 
       // If setting to "None" (null), use PUT endpoint with full lead data
       // Otherwise use PATCH endpoint for follow-up-status
       if (statusValue === null) {
         // Get the current lead data to preserve all fields
-        const currentLead = leads.find(l => l.id === leadId);
+        const currentLead = leads.find((l) => l.id === leadId);
         if (!currentLead) {
           console.error("Lead not found:", leadId);
           return;
@@ -535,7 +616,8 @@ export default function EmployeeAllLeads() {
           contact_phone: currentLead.contact_phone || "",
           contact_position_title: currentLead.contact_position_title || "",
           contact_linkedin_url: currentLead.contact_linkedin_url || "",
-          follow_up_at: currentLead.follow_up_at || currentLead.followUpAt || null,
+          follow_up_at:
+            currentLead.follow_up_at || currentLead.followUpAt || null,
           follow_up_status: null, // Explicitly set to null for "None"
         };
 
@@ -581,7 +663,14 @@ export default function EmployeeAllLeads() {
         errorMessage: error?.message,
         errorResponse: error?.response,
       });
-      alert(`Failed to update follow-up status: ${error?.message || "Unknown error"}`);
+      alert(
+        `Failed to update follow-up status: ${
+          error?.message || "Unknown error"
+        }`
+      );
+    } finally {
+      setActionLoading(false);
+      setActionMessage("");
     }
   };
 
@@ -669,7 +758,37 @@ export default function EmployeeAllLeads() {
     setIsModalOpen(false);
   };
 
+  const closeNotesDialog = () => {
+    setNotesDialogOpen(false);
+    setNotesDialogLead(null);
+  };
+
+  const openNotesDialog = (lead) => {
+    setNotesDialogLead(lead);
+    setNotesDialogOpen(true);
+  };
+
+  const getLeadIdForNotes = (lead) => {
+    if (!lead) return null;
+    return lead.id ?? lead.pk ?? lead.uuid ?? lead.lead_id ?? null;
+  };
+
   const navigate = useNavigate();
+
+  const warmUpLeadForm = () => {
+    prefetchLeadData({ includeLeads: false });
+  };
+
+  const handleOpenCreateLead = () => {
+    warmUpLeadForm();
+    navigate("/create-lead");
+  };
+
+  const handleNavigateToEditLead = (leadId) => {
+    if (!leadId) return;
+    warmUpLeadForm();
+    navigate(`/edit-lead/${leadId}`);
+  };
 
   // Helper function to get lead field value handling both camelCase and snake_case
   const getLeadFieldValue = (lead, fieldKey) => {
@@ -757,6 +876,7 @@ export default function EmployeeAllLeads() {
     try {
       await apiRequest(`/api/leads/${id}`, { method: "DELETE" });
       setLeads(leads.filter((l) => String(l.id) !== String(id)));
+      removeLeadFromCache(id);
     } catch (err) {
       console.error("Failed to delete lead:", err);
       alert("Failed to delete lead. Please try again.");
@@ -842,6 +962,7 @@ export default function EmployeeAllLeads() {
       // Delete the lead after successful creation
       await apiRequest(`/api/leads/${lead.id}/`, { method: "DELETE" });
       setLeads(leads.filter((l) => l.id !== lead.id));
+      removeLeadFromCache(lead);
 
       alert(`Lead "${leadTitle}" converted to project successfully!`);
       navigate(`/management/projects`);
@@ -914,6 +1035,31 @@ export default function EmployeeAllLeads() {
 
   return (
     <Box>
+      <Backdrop
+        open={isPageDataLoading}
+        sx={{
+          zIndex: 1200,
+          color: "#fff",
+          flexDirection: "column",
+          gap: 1,
+        }}
+      >
+        <DotLoader size={40} color="#007bffff" />
+        <Typography variant="body2" sx={{ textAlign: "center" }}>
+          Loading leads data...
+        </Typography>
+      </Backdrop>
+      <Backdrop
+        open={actionLoading}
+        sx={{ zIndex: 1300, color: "#fff", flexDirection: "column", gap: 1 }}
+      >
+        <DotLoader size={40} color="#007bffff" />
+        {actionMessage && (
+          <Typography variant="body2" sx={{ textAlign: "center" }}>
+            {actionMessage}
+          </Typography>
+        )}
+      </Backdrop>
       <Topbar>
         <Typography variant="h5" fontWeight="bold">
           All Leads
@@ -930,7 +1076,7 @@ export default function EmployeeAllLeads() {
           <Button
             variant="contained"
             startIcon={<AddIcon />}
-            onClick={() => navigate("/create-lead")}
+            onClick={handleOpenCreateLead}
           >
             Add New Lead
           </Button>
@@ -971,7 +1117,7 @@ export default function EmployeeAllLeads() {
                 variant="contained"
                 startIcon={<AddIcon />}
                 onClick={() => {
-                  navigate("/create-lead");
+                  handleOpenCreateLead();
                   setMobileMenuAnchorEl(null);
                 }}
               >
@@ -1130,6 +1276,9 @@ export default function EmployeeAllLeads() {
               )}
 
               <TableCell sx={{ ...tableHeaderCellStyles, textAlign: "center" }}>
+                Notes
+              </TableCell>
+              <TableCell sx={{ ...tableHeaderCellStyles, textAlign: "center" }}>
                 Actions
               </TableCell>
             </TableRow>
@@ -1138,14 +1287,46 @@ export default function EmployeeAllLeads() {
           <TableBody>
             {filteredLeads.length === 0 ? (
               <TableRow>
-                <TableCell colSpan={visibleColumns.length + 1} align="center">
+                <TableCell colSpan={visibleColumns.length + 2} align="center">
                   No leads found.
                 </TableCell>
               </TableRow>
             ) : (
-              filteredLeads.map((lead) => {
+              filteredLeads.map((lead, leadIndex) => {
+                const currentLeadId = resolveLeadId(lead);
+                const normalizedLeadId = currentLeadId
+                  ? String(currentLeadId)
+                  : null;
+                const rowKey =
+                  currentLeadId ||
+                  lead.id ||
+                  lead.pk ||
+                  lead.uuid ||
+                  lead.lead_id ||
+                  `lead-${leadIndex}`;
+                const isHighlighted =
+                  Boolean(normalizedLeadId && highlightedLeadId) &&
+                  normalizedLeadId === highlightedLeadId;
+                const attachRowRef = normalizedLeadId
+                  ? (node) => {
+                      if (node) {
+                        rowRefs.current[normalizedLeadId] = node;
+                      } else {
+                        delete rowRefs.current[normalizedLeadId];
+                      }
+                    }
+                  : undefined;
                 return (
-                  <TableRow key={lead.id}>
+                  <TableRow
+                    key={rowKey}
+                    ref={attachRowRef}
+                    sx={{
+                      ...(isHighlighted && {
+                        backgroundColor: colors.bg[200],
+                        transition: "background-color 0.4s ease",
+                      }),
+                    }}
+                  >
                     {visibleColumns.includes("title") && (
                       <TableCell>
                         {getLeadFieldValue(lead, "title") || "-"}
@@ -1183,18 +1364,26 @@ export default function EmployeeAllLeads() {
                             // Get the status ID from the lead
                             // Status cannot be None, so if empty, use first available status
                             const statusId = lead.status;
-                            if (statusId === null || statusId === undefined || statusId === "") {
+                            if (
+                              statusId === null ||
+                              statusId === undefined ||
+                              statusId === ""
+                            ) {
                               // If no status, default to first available status
                               if (statuses.length > 0) {
                                 const firstStatus = statuses[0];
-                                return typeof firstStatus === "object" && firstStatus !== null 
-                                  ? (firstStatus.id || firstStatus.pk) 
+                                return typeof firstStatus === "object" &&
+                                  firstStatus !== null
+                                  ? firstStatus.id || firstStatus.pk
                                   : firstStatus;
                               }
                               return "";
                             }
                             // If status is an object, extract the ID
-                            if (typeof statusId === "object" && statusId !== null) {
+                            if (
+                              typeof statusId === "object" &&
+                              statusId !== null
+                            ) {
                               return statusId.id || statusId.pk || "";
                             }
                             return String(statusId);
@@ -1225,14 +1414,19 @@ export default function EmployeeAllLeads() {
                         >
                           {statuses.map((status, index) => {
                             // Handle different status structures - match CreateLead form logic
-                            const statusId = typeof status === "object" && status !== null 
-                              ? (status.id || status.pk) 
-                              : status;
-                            const statusName = typeof status === "string" 
-                              ? status 
-                              : (status.name || status.label || status.status_name || String(statusId));
+                            const statusId =
+                              typeof status === "object" && status !== null
+                                ? status.id || status.pk
+                                : status;
+                            const statusName =
+                              typeof status === "string"
+                                ? status
+                                : status.name ||
+                                  status.label ||
+                                  status.status_name ||
+                                  String(statusId);
                             const key = statusId || index;
-                            
+
                             return (
                               <MenuItem key={key} value={statusId}>
                                 {statusName}
@@ -1260,13 +1454,19 @@ export default function EmployeeAllLeads() {
                         <Select
                           value={(() => {
                             // Explicitly handle null/undefined/empty values for "None"
-                            const status = lead.follow_up_status || lead.followupStatus;
-                            return status === null || status === undefined || status === "" ? "" : status;
+                            const status =
+                              lead.follow_up_status || lead.followupStatus;
+                            return status === null ||
+                              status === undefined ||
+                              status === ""
+                              ? ""
+                              : status;
                           })()}
                           onChange={(e) => {
                             // Explicitly handle "None" selection (empty string)
                             // This ensures "None" is easily mutable
-                            const selectedValue = e.target.value === "" ? "" : e.target.value;
+                            const selectedValue =
+                              e.target.value === "" ? "" : e.target.value;
                             handleFollowUpStatusChange(lead, selectedValue);
                           }}
                           size="small"
@@ -1289,7 +1489,11 @@ export default function EmployeeAllLeads() {
                             displayEmpty: true,
                             renderValue: (val) => {
                               // Show "None" for empty/null/undefined values
-                              if (val === "" || val === null || val === undefined) {
+                              if (
+                                val === "" ||
+                                val === null ||
+                                val === undefined
+                              ) {
                                 return "None";
                               }
                               return val;
@@ -1358,6 +1562,21 @@ export default function EmployeeAllLeads() {
                       </TableCell>
                     )}
 
+                    <TableCell align="center">
+                      <Button
+                        variant="outlined"
+                        size="small"
+                        onClick={() => openNotesDialog(lead)}
+                        sx={{
+                          textTransform: "none",
+                          display: "block",
+                          whiteSpace: "nowrap",
+                        }}
+                      >
+                        Click Note
+                      </Button>
+                    </TableCell>
+
                     <TableCell>
                       <IconButton
                         size="small"
@@ -1392,7 +1611,7 @@ export default function EmployeeAllLeads() {
 
         <MenuItem
           onClick={() => {
-            navigate(`/edit-lead/${menuLead.id}`);
+            handleNavigateToEditLead(menuLead?.id);
             handleActionMenuClose();
           }}
         >
@@ -1400,7 +1619,7 @@ export default function EmployeeAllLeads() {
           Edit
         </MenuItem>
 
-        <MenuItem
+        {/* <MenuItem
           onClick={() => {
             handleConvertToProject(menuLead);
             handleActionMenuClose();
@@ -1408,7 +1627,7 @@ export default function EmployeeAllLeads() {
         >
           <AssignmentTurnedInIcon fontSize="small" sx={{ mr: 1 }} />
           Convert to Project
-        </MenuItem>
+        </MenuItem> */}
 
         <MenuItem
           onClick={() => {
@@ -1422,6 +1641,23 @@ export default function EmployeeAllLeads() {
         </MenuItem>
       </Menu>
 
+      <Dialog
+        open={notesDialogOpen}
+        onClose={closeNotesDialog}
+        fullWidth
+        maxWidth="sm"
+      >
+        <DialogTitle>{notesDialogLead?.title || "Lead Notes"}</DialogTitle>
+        <DialogContent dividers>
+          <LeadNotesChat
+            leadId={getLeadIdForNotes(notesDialogLead) || undefined}
+          />
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={closeNotesDialog}>Close</Button>
+        </DialogActions>
+      </Dialog>
+
       <LeadDetailsModal
         open={isModalOpen}
         onClose={handleCloseModal}
@@ -1432,4 +1668,3 @@ export default function EmployeeAllLeads() {
     </Box>
   );
 }
-

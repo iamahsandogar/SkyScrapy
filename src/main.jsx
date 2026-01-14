@@ -4,6 +4,7 @@ import App from "./App.jsx";
 import { BrowserRouter } from "react-router-dom";
 import { ThemeProvider as MUIThemeProvider, CssBaseline } from "@mui/material";
 import { ThemeProvider, useTheme } from "./contexts/ThemeContext.jsx";
+import { NotificationProvider } from "./contexts/NotificationContext.jsx";
 import { getTheme } from "./theme/theme.js";
 import "./index.css";
 
@@ -15,17 +16,19 @@ function AppWithTheme() {
   return (
     <MUIThemeProvider theme={theme}>
       <CssBaseline />
-      <App />
+      <NotificationProvider>
+        <App />
+      </NotificationProvider>
     </MUIThemeProvider>
   );
 }
 
 ReactDOM.createRoot(document.getElementById("root")).render(
-  <React.StrictMode>
-    <BrowserRouter>
-      <ThemeProvider>
-        <AppWithTheme />
-      </ThemeProvider>
-    </BrowserRouter>
-  </React.StrictMode>
+  // <React.StrictMode>
+  <BrowserRouter>
+    <ThemeProvider>
+      <AppWithTheme />
+    </ThemeProvider>
+  </BrowserRouter>
+  // </React.StrictMode>
 );

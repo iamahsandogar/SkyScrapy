@@ -14,7 +14,7 @@ export const tokens = (mode = "light") =>
         },
 
         primary: {
-          100: "#d0d1d5",
+          100: "#ffffffff",
           200: "#a1a4ab",
           300: "#727681",
           400: "#1f2a40",
@@ -22,7 +22,7 @@ export const tokens = (mode = "light") =>
           600: "#101624",
           700: "#0c101b",
           800: "#080b12",
-          900: "#040509",
+          900: "#000000ff",
         },
 
         greenAccent: {
@@ -54,27 +54,41 @@ export const tokens = (mode = "light") =>
           200: "#c3c6fd",
           300: "#a4a9fc",
           400: "#868dfb",
-          500: "#0b54db",
+          500: "#004ad3ff",
           600: "#535ac8",
           700: "#3e4396",
           800: "#2a2d64",
           900: "#151632",
         },
+
         yellowAccent: {
-          100: "#fff9e5", // lightest
+          100: "#fff9e5",
           200: "#fff3cc",
           300: "#ffe999",
           400: "#ffe066",
-          500: "#ffd633", // main accent
+          500: "#ffd633",
           600: "#e6bf00",
           700: "#cca300",
           800: "#b38a00",
-          900: "#997000", // darkest
+          900: "#997000",
         },
+
+        purpleAccent: {
+          100: "#f2e8ff",
+          200: "#e0cfff",
+          300: "#c7a6ff",
+          400: "#ae7dff",
+          500: "#9554ff",
+          600: "#7743cc",
+          700: "#593299",
+          800: "#3c2266",
+          900: "#1e1133",
+        },
+
         bg: {
-          500: "#141b2d", // dark background
-          100: "#101624", // dark paper
-          900: "#0c101b", // dark surface
+          500: "#141b2d",
+          100: "#101624",
+          900: "#0c101b",
         },
       }
     : {
@@ -91,8 +105,8 @@ export const tokens = (mode = "light") =>
         },
 
         primary: {
-          100: "#eaeaea",
-          200: "#080b12",
+          100: "#ffffffff",
+          200: "#000000ff",
           300: "#d0d0d0",
           400: "#f1f0f0",
           500: "#141b2d",
@@ -127,7 +141,7 @@ export const tokens = (mode = "light") =>
         },
 
         blueAccent: {
-          100: "#151632",
+          100: "#141b2d",
           200: "#2a2d64",
           300: "#3e4396",
           400: "#535ac8",
@@ -139,15 +153,27 @@ export const tokens = (mode = "light") =>
         },
 
         yellowAccent: {
-          100: "#997000", // darkest
+          100: "#997000",
           200: "#b38a00",
           300: "#cca300",
           400: "#e6bf00",
-          500: "#ffd633", // main accent
+          500: "#ffd633",
           600: "#ffe066",
           700: "#ffe999",
           800: "#fff3cc",
-          900: "#fff9e5", // lightest
+          900: "#fff9e5",
+        },
+
+        purpleAccent: {
+          100: "#1e1133",
+          200: "#3c2266",
+          300: "#593299",
+          400: "#7743cc",
+          500: "#9554ff",
+          600: "#ae7dff",
+          700: "#c7a6ff",
+          800: "#e0cfff",
+          900: "#f2e8ff",
         },
 
         bg: {

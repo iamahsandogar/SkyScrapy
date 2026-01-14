@@ -4,11 +4,25 @@ import { CSS } from "@dnd-kit/utilities";
 import CheckCircleIcon from "@mui/icons-material/CheckCircle";
 import dayjs from "dayjs";
 
-export default function KanbanCard({ lead, column, onMarkAsDone, setColumns, getStatusName, isDragging = false }) {
+export default function KanbanCard({
+  lead,
+  column,
+  onMarkAsDone,
+  setColumns,
+  getStatusName,
+  isDragging = false,
+}) {
   // Disable dragging if the card is in the Done column
   const isDisabled = column === "Done";
-  
-  const { setNodeRef, attributes, listeners, transform, transition, isDragging: isSortableDragging } = useSortable({
+
+  const {
+    setNodeRef,
+    attributes,
+    listeners,
+    transform,
+    transition,
+    isDragging: isSortableDragging,
+  } = useSortable({
     id: lead.id,
     data: { column },
     disabled: isDisabled,
@@ -57,20 +71,23 @@ export default function KanbanCard({ lead, column, onMarkAsDone, setColumns, get
         "&:active": {
           cursor: isDisabled ? "default" : "grabbing",
         },
-        opacity: isDisabled ? 0.8 : (isDragging ? 1 : style.opacity),
+        opacity: isDisabled ? 0.8 : isDragging ? 1 : style.opacity,
         transform: isDragging ? "rotate(3deg) scale(1.05)" : style.transform,
         transition: isDragging ? "none" : style.transition,
         boxShadow: isSortableDragging || isDragging ? 8 : 2,
         "&:hover": {
           boxShadow: isDisabled ? 2 : 4,
-          transform: isDisabled || isSortableDragging || isDragging ? "none" : "translateY(-2px)",
+          transform:
+            isDisabled || isSortableDragging || isDragging
+              ? "none"
+              : "translateY(-2px)",
           transition: "all 0.2s ease-in-out",
         },
         userSelect: "none",
         WebkitUserSelect: "none",
         touchAction: "none",
         position: "relative",
-        zIndex: isSortableDragging ? 1000 : (isDragging ? 2000 : 1),
+        zIndex: isSortableDragging ? 1000 : isDragging ? 2000 : 1,
         pointerEvents: isDragging ? "none" : "auto",
       }}
     >
@@ -79,7 +96,12 @@ export default function KanbanCard({ lead, column, onMarkAsDone, setColumns, get
       </Typography>
 
       {lead.follow_up_at && (
-        <Typography variant="caption" color="text.secondary" display="block" sx={{ mb: 0.5 }}>
+        <Typography
+          variant="caption"
+          color="text.secondary"
+          display="block"
+          sx={{ mb: 0.5 }}
+        >
           📅 {formatFollowUpDate(lead.follow_up_at)}
         </Typography>
       )}

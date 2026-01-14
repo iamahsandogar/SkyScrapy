@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import React, { useState, useRef, useEffect } from "react";
 import {
   Box,
   Typography,
@@ -7,7 +7,7 @@ import {
   Button,
   IconButton,
   InputAdornment,
-  useTheme as useMUITheme
+  useTheme as useMUITheme,
 } from "@mui/material";
 import { Link, useNavigate } from "react-router-dom";
 import Visibility from "@mui/icons-material/Visibility";
@@ -18,6 +18,7 @@ import { authAPI } from "../services/api";
 import { prefetchLeadData } from "../../utils/prefetchData";
 import LightModeIcon from "@mui/icons-material/LightMode";
 import DarkModeIcon from "@mui/icons-material/DarkMode";
+import { useNotification } from "../../contexts/NotificationContext";
 
 export default function Login() {
 
@@ -33,6 +34,16 @@ export default function Login() {
     email: "",
     password: "",
   });
+  const navigateTimer = useRef(null);
+  const { notifySuccess, notifyError } = useNotification();
+
+  useEffect(() => {
+    return () => {
+      if (navigateTimer.current) {
+        clearTimeout(navigateTimer.current);
+      }
+    };
+  }, []);
 
   const handleChange = (e) => {
     setCredentials({ ...credentials, [e.target.name]: e.target.value });
@@ -57,7 +68,7 @@ export default function Login() {
       if (response?.user) {
         localStorage.setItem("user", JSON.stringify(response.user));
         localStorage.setItem("isAuth", "true");
-        
+        notifySuccess("Login Successful");
         // Pre-fetch statuses, sources, employees, and leads in the background
         // This ensures instant loading when user navigates to All Leads or Create Lead pages
         // Don't wait for it - let user navigate immediately
@@ -66,10 +77,14 @@ export default function Login() {
           // Don't block login if prefetch fails
         });
         
-        navigate("/dashboard", { replace: true });
+        navigateTimer.current = setTimeout(() => {
+          navigate("/dashboard", { replace: true });
+        }, 900);
       }
     } catch (err) {
-      setError(err.message || "Invalid email or password");
+      const message = err.message || "Invalid email or password";
+      setError(message);
+      notifyError(message);
     } finally {
       setLoading(false);
     }

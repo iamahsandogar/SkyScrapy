@@ -1,4 +1,5 @@
 import {
+  Backdrop,
   Box,
   Typography,
   Table,
@@ -19,23 +20,35 @@ import {
   Checkbox,
   FormControlLabel,
   Menu,
+  Dialog,
+  DialogTitle,
+  DialogContent,
+  DialogActions,
 } from "@mui/material";
 import CloudDownloadIcon from "@mui/icons-material/CloudDownload";
 import AddIcon from "@mui/icons-material/Add";
 import DeleteIcon from "@mui/icons-material/Delete";
 import EditIcon from "@mui/icons-material/Edit";
 import AssignmentTurnedInIcon from "@mui/icons-material/AssignmentTurnedIn";
-import { useEffect, useState } from "react";
+import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { useNavigate, useLocation } from "react-router-dom";
 import Topbar from "../components/global/Topbar";
 import { colors } from "../design-system/tokens";
 import { FaLinkedin } from "react-icons/fa";
 import VisibilityIcon from "@mui/icons-material/Visibility";
 import LeadDetailsModal from "../components/Leads/LeadDetailsModal";
+import LeadNotesChat from "../components/Leads/LeadNotesChat";
 import MoreHorizIcon from "@mui/icons-material/MoreHoriz";
 import apiRequest from "../components/services/api";
-import { getCachedLeadData, addLeadToCache } from "../utils/prefetchData";
+import {
+  getCachedLeadData,
+  addLeadToCache,
+  prefetchLeadData,
+  removeLeadFromCache,
+} from "../utils/prefetchData";
+import { useNotification } from "../contexts/NotificationContext.jsx";
 import MoreVertIcon from "@mui/icons-material/MoreVert";
+import DotLoader from "../components/global/DotLoader";
 const getChipStyles = (status) => {
   switch (status) {
     case "Completed":
@@ -108,6 +121,19 @@ const tableBodyCellStyles = {
   whiteSpace: "nowrap",
 };
 
+const parseEmployeesPayload = (payload) => {
+  if (!payload) return [];
+  if (Array.isArray(payload)) return payload;
+  if (Array.isArray(payload.employees)) return payload.employees;
+  if (Array.isArray(payload.data)) return payload.data;
+  return [];
+};
+
+const resolveLeadId = (lead) => {
+  if (!lead) return null;
+  return lead.id ?? lead.pk ?? lead.uuid ?? lead.lead_id ?? lead.leadId ?? null;
+};
+
 export default function AllLeads() {
   const location = useLocation();
   const [leads, setLeads] = useState([]);
@@ -119,16 +145,51 @@ export default function AllLeads() {
   });
   const [selectedLead, setSelectedLead] = useState(null);
   const [isModalOpen, setIsModalOpen] = useState(false);
+  const [notesDialogOpen, setNotesDialogOpen] = useState(false);
+  const [notesDialogLead, setNotesDialogLead] = useState(null);
   const [statuses, setStatuses] = useState([]); // Store statuses for mapping
   const [employees, setEmployees] = useState([]); // Store employees for mapping
+  const [actionLoading, setActionLoading] = useState(false);
+  const [actionMessage, setActionMessage] = useState("");
+  const [isPageLoading, setIsPageLoading] = useState(true);
   // Lead actions menu
   const [actionAnchorEl, setActionAnchorEl] = useState(null);
   const [menuLead, setMenuLead] = useState(null);
   const [mobileMenuAnchorEl, setMobileMenuAnchorEl] = useState(null);
 
   const actionOpen = Boolean(actionAnchorEl);
-// src/pages/AllLeads.jsx
+  const rowRefs = useRef({});
+  const highlightTimer = useRef(null);
+  const [highlightedLeadId, setHighlightedLeadId] = useState(null);
+  const focusLeadId = useMemo(() => {
+    const stateLeadId = location.state?.focusLeadId;
+    if (stateLeadId) return String(stateLeadId);
+    const params = new URLSearchParams(location.search);
+    const searchId = params.get("focusLeadId");
+    return searchId ? String(searchId) : null;
+  }, [location.key, location.search]);
+  // src/pages/AllLeads.jsx
 
+  useLayoutEffect(() => {
+    if (!focusLeadId) return;
+    const target = rowRefs.current[String(focusLeadId)];
+    if (!target) return;
+    target.scrollIntoView({ behavior: "smooth", block: "center" });
+    setHighlightedLeadId(String(focusLeadId));
+    if (highlightTimer.current) {
+      clearTimeout(highlightTimer.current);
+    }
+    highlightTimer.current = setTimeout(() => {
+      setHighlightedLeadId(null);
+      highlightTimer.current = null;
+    }, 4000);
+    return () => {
+      if (highlightTimer.current) {
+        clearTimeout(highlightTimer.current);
+        highlightTimer.current = null;
+      }
+    };
+  }, [focusLeadId, leads]);
 
   // Fetch statuses and employees to map IDs to names - use cache first for instant loading
   useEffect(() => {
@@ -150,6 +211,7 @@ export default function AllLeads() {
       try {
         const [statusesData, employeesData] = await Promise.all([
           apiRequest("/ui/options/statuses/").catch(() => null),
+          apiRequest("/ui/employees/").catch(() => null),
         ]);
 
         if (statusesData) {
@@ -230,7 +292,39 @@ export default function AllLeads() {
   }, []);
 
   useEffect(() => {
+    let cancelled = false;
+
+    const refreshEmployeesOnRevisit = async () => {
+      try {
+        const response = await apiRequest("/ui/employees/");
+        if (cancelled) return;
+        const employeesList = parseEmployeesPayload(response);
+        setEmployees(employeesList);
+
+        const cached = getCachedLeadData();
+        if (cached) {
+          const updatedCache = {
+            ...cached,
+            employees: employeesList,
+            timestamp: Date.now(),
+          };
+          localStorage.setItem("leadDataCache", JSON.stringify(updatedCache));
+        }
+      } catch (err) {
+        console.error("Failed to refresh employees on revisit:", err);
+      }
+    };
+
+    refreshEmployeesOnRevisit();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [location.key]);
+
+  useEffect(() => {
     const fetchLeads = async () => {
+      setIsPageLoading(true);
       // Get current user to filter leads
       let currentUserId = null;
       let isCurrentUserAdmin = false;
@@ -382,6 +476,7 @@ export default function AllLeads() {
         );
 
         setLeads(filteredLeads);
+        setIsPageLoading(false);
         // Don't make API call - just use cached data
         return;
       }
@@ -398,6 +493,7 @@ export default function AllLeads() {
           const filteredLeads = filterLeadsByUser(leadsList);
           setLeads(filteredLeads);
         }
+        setIsPageLoading(false);
         return;
       }
 
@@ -426,7 +522,7 @@ export default function AllLeads() {
           } else if (data.data?.leads && Array.isArray(data.data.leads)) {
             leadsList = data.data.leads;
             console.log("Using data.data.leads array");
-        } else {
+          } else {
             console.log("data.data is not an array:", data.data);
           }
         } else {
@@ -452,6 +548,7 @@ export default function AllLeads() {
         console.log("Original leads count:", leadsList.length);
 
         setLeads(filteredLeads);
+        setIsPageLoading(false);
 
         // Update cache with fresh leads data (store all leads, filter on display)
         const currentCache = getCachedLeadData();
@@ -472,8 +569,9 @@ export default function AllLeads() {
         }
       } catch (err) {
         console.error("Failed to fetch leads:", err);
-        alert("Failed to load leads");
+        notifyError("Failed to load leads");
         setLeads([]);
+        setIsPageLoading(false);
       }
     };
 
@@ -482,11 +580,13 @@ export default function AllLeads() {
 
   // Handler to update lead status
   const handleStatusChange = async (lead, newStatusId) => {
+    setActionLoading(true);
+    setActionMessage("Updating status...");
     try {
       const leadId = lead.id;
-      
+
       // Get the current lead data to preserve all fields
-      const currentLead = leads.find(l => l.id === leadId);
+      const currentLead = leads.find((l) => l.id === leadId);
       if (!currentLead) {
         console.error("Lead not found:", leadId);
         return;
@@ -508,16 +608,21 @@ export default function AllLeads() {
         contact_linkedin_url: currentLead.contact_linkedin_url || "",
         // Only include follow_up_at and follow_up_status if they have valid values
         // Status is independent of follow_up_at and follow_up_status, so we only include them if they exist
-        ...((currentLead.follow_up_at || currentLead.followUpAt) && 
-            (currentLead.follow_up_at || currentLead.followUpAt) !== null && 
-            (currentLead.follow_up_at || currentLead.followUpAt) !== "" ? {
-          follow_up_at: currentLead.follow_up_at || currentLead.followUpAt
-        } : {}),
-        ...((currentLead.follow_up_status || currentLead.followupStatus) && 
-            (currentLead.follow_up_status || currentLead.followupStatus) !== null && 
-            (currentLead.follow_up_status || currentLead.followupStatus) !== "" ? {
-          follow_up_status: currentLead.follow_up_status || currentLead.followupStatus
-        } : {}),
+        ...((currentLead.follow_up_at || currentLead.followUpAt) &&
+        (currentLead.follow_up_at || currentLead.followUpAt) !== null &&
+        (currentLead.follow_up_at || currentLead.followUpAt) !== ""
+          ? {
+              follow_up_at: currentLead.follow_up_at || currentLead.followUpAt,
+            }
+          : {}),
+        ...((currentLead.follow_up_status || currentLead.followupStatus) &&
+        (currentLead.follow_up_status || currentLead.followupStatus) !== null &&
+        (currentLead.follow_up_status || currentLead.followupStatus) !== ""
+          ? {
+              follow_up_status:
+                currentLead.follow_up_status || currentLead.followupStatus,
+            }
+          : {}),
       };
 
       // Update via API
@@ -544,27 +649,36 @@ export default function AllLeads() {
 
       // Update cache so Kanban board reflects changes
       addLeadToCache(updatedLead);
+      notifySuccess("Lead status updated successfully");
     } catch (error) {
       console.error("Failed to update lead status:", error);
-      alert("Failed to update lead status");
+      notifyError("Failed to update lead status");
+    } finally {
+      setActionLoading(false);
+      setActionMessage("");
     }
   };
 
   // Handler to update follow-up status
   const handleFollowUpStatusChange = async (lead, newFollowUpStatus) => {
+    setActionLoading(true);
+    setActionMessage("Updating follow-up status...");
     try {
       const leadId = lead.id;
 
       // Handle "None" - try null instead of empty string if API doesn't accept empty strings
-      const statusValue = newFollowUpStatus === "" || newFollowUpStatus === null || newFollowUpStatus === undefined 
-        ? null 
-        : newFollowUpStatus;
+      const statusValue =
+        newFollowUpStatus === "" ||
+        newFollowUpStatus === null ||
+        newFollowUpStatus === undefined
+          ? null
+          : newFollowUpStatus;
 
       // If setting to "None" (null), use PUT endpoint with full lead data
       // Otherwise use PATCH endpoint for follow-up-status
       if (statusValue === null) {
         // Get the current lead data to preserve all fields
-        const currentLead = leads.find(l => l.id === leadId);
+        const currentLead = leads.find((l) => l.id === leadId);
         if (!currentLead) {
           console.error("Lead not found:", leadId);
           return;
@@ -583,7 +697,8 @@ export default function AllLeads() {
           contact_phone: currentLead.contact_phone || "",
           contact_position_title: currentLead.contact_position_title || "",
           contact_linkedin_url: currentLead.contact_linkedin_url || "",
-          follow_up_at: currentLead.follow_up_at || currentLead.followUpAt || null,
+          follow_up_at:
+            currentLead.follow_up_at || currentLead.followUpAt || null,
           follow_up_status: null, // Explicitly set to null for "None"
         };
 
@@ -621,6 +736,7 @@ export default function AllLeads() {
 
       // Update cache so Kanban board reflects changes
       addLeadToCache(updatedLead);
+      notifySuccess("Follow-up status updated successfully");
     } catch (error) {
       console.error("Failed to update follow-up status:", error);
       console.error("Error details:", {
@@ -630,7 +746,14 @@ export default function AllLeads() {
         errorMessage: error?.message,
         errorResponse: error?.response,
       });
-      alert(`Failed to update follow-up status: ${error?.message || "Unknown error"}`);
+      notifyError(
+        `Failed to update follow-up status: ${
+          error?.message || "Unknown error"
+        }`
+      );
+    } finally {
+      setActionLoading(false);
+      setActionMessage("");
     }
   };
 
@@ -725,7 +848,28 @@ export default function AllLeads() {
     setIsModalOpen(false);
   };
 
+  const closeNotesDialog = () => {
+    setNotesDialogOpen(false);
+    setNotesDialogLead(null);
+  };
+
   const navigate = useNavigate();
+  const { notifyError, notifySuccess } = useNotification();
+
+  const warmUpLeadForm = () => {
+    prefetchLeadData({ includeLeads: false });
+  };
+
+  const handleOpenCreateLead = () => {
+    warmUpLeadForm();
+    navigate("/create-lead");
+  };
+
+  const handleNavigateToEditLead = (leadId) => {
+    if (!leadId) return;
+    warmUpLeadForm();
+    navigate(`/edit-lead/${leadId}`);
+  };
 
   // Helper function to get lead field value handling both camelCase and snake_case
   const getLeadFieldValue = (lead, fieldKey) => {
@@ -792,6 +936,11 @@ export default function AllLeads() {
     }
   };
 
+  const getLeadIdForNotes = (lead) => {
+    if (!lead) return null;
+    return lead.id ?? lead.pk ?? lead.uuid ?? lead.lead_id ?? null;
+  };
+
   const getEmployeeName = (assignedTo) => {
     // Handle null, undefined, empty string, or "None"
     if (!assignedTo && assignedTo !== 0) {
@@ -839,15 +988,16 @@ export default function AllLeads() {
     try {
       await apiRequest(`/api/leads/${id}`, { method: "DELETE" });
       setLeads(leads.filter((l) => String(l.id) !== String(id)));
+      removeLeadFromCache(id);
     } catch (err) {
       console.error("Failed to delete lead:", err);
-      alert("Failed to delete lead. Please try again.");
+      notifyError("Failed to delete lead. Please try again.");
     }
   };
 
   const handleExportLeadsCSV = () => {
     if (!leads.length) {
-      alert("No leads to export");
+      notifyError("No leads to export");
       return;
     }
 
@@ -926,8 +1076,9 @@ export default function AllLeads() {
       // Delete the lead after successful creation
       await apiRequest(`/api/leads/${lead.id}/`, { method: "DELETE" });
       setLeads(leads.filter((l) => l.id !== lead.id));
+      removeLeadFromCache(lead);
 
-      alert(`Lead "${leadTitle}" converted to project successfully!`);
+      notifySuccess(`Lead "${leadTitle}" converted to project successfully!`);
       navigate(`/management/projects`);
     } catch (err) {
       console.error("Failed to convert lead:", err);
@@ -935,7 +1086,9 @@ export default function AllLeads() {
         message: err.message,
         lead: lead,
       });
-      alert("Failed to convert lead: " + (err.message || "Unknown error"));
+      notifyError(
+        "Failed to convert lead: " + (err.message || "Unknown error")
+      );
     }
   };
 
@@ -991,7 +1144,9 @@ export default function AllLeads() {
       l.positionTitle || l.contact_position_title || "",
       l.source || "",
       l.description || "",
-      l.followUpAt || l.follow_up_at ? new Date(l.followUpAt || l.follow_up_at).toLocaleDateString() : "",
+      l.followUpAt || l.follow_up_at
+        ? new Date(l.followUpAt || l.follow_up_at).toLocaleDateString()
+        : "",
       l.followupStatus || l.follow_up_status || "",
       assignedEmployeeName, // Include employee name in search
       l.linkedIn || l.contact_linkedin_url || "",
@@ -1004,6 +1159,35 @@ export default function AllLeads() {
 
   return (
     <Box>
+      <Backdrop
+        open={isPageLoading}
+        sx={{
+          color: "#fff",
+          zIndex: (theme) => theme.zIndex.drawer,
+          flexDirection: "column",
+        }}
+      >
+        <DotLoader size={48} color="#0A66C2" />
+        <Typography mt={1} variant="body2">
+          Loading leads...
+        </Typography>
+      </Backdrop>
+      <Backdrop
+        open={actionLoading}
+        sx={{
+          zIndex: (theme) => theme.zIndex.drawer + 1,
+          color: "#fff",
+          flexDirection: "column",
+          gap: 1,
+        }}
+      >
+        <DotLoader size={48} color="#0A66C2" />
+        {actionMessage && (
+          <Typography variant="body2" sx={{ textAlign: "center" }}>
+            {actionMessage}
+          </Typography>
+        )}
+      </Backdrop>
       <Topbar>
         <Typography variant="h5" fontWeight="bold">
           All Leads
@@ -1020,7 +1204,7 @@ export default function AllLeads() {
           <Button
             variant="contained"
             startIcon={<AddIcon />}
-            onClick={() => navigate("/create-lead")}
+            onClick={handleOpenCreateLead}
           >
             Add New Lead
           </Button>
@@ -1063,7 +1247,7 @@ export default function AllLeads() {
                 variant="contained"
                 startIcon={<AddIcon />}
                 onClick={() => {
-                  navigate("/create-lead");
+                  handleOpenCreateLead();
                   setMobileMenuAnchorEl(null);
                 }}
               >
@@ -1154,12 +1338,19 @@ export default function AllLeads() {
             <MenuItem value="None">None</MenuItem>
             {statuses.map((status, index) => {
               // Handle different status structures
-              const statusName = typeof status === "string" 
-                ? status 
-                : (status.name || status.label || status.status_name || String(status.id || status.pk || index));
-              
+              const statusName =
+                typeof status === "string"
+                  ? status
+                  : status.name ||
+                    status.label ||
+                    status.status_name ||
+                    String(status.id || status.pk || index);
+
               return (
-                <MenuItem key={status.id || status.pk || statusName || index} value={statusName}>
+                <MenuItem
+                  key={status.id || status.pk || statusName || index}
+                  value={statusName}
+                >
                   {statusName}
                 </MenuItem>
               );
@@ -1231,7 +1422,9 @@ export default function AllLeads() {
               {visibleColumns.includes("positionTitle") && (
                 <TableCell sx={tableHeaderCellStyles}>Position Title</TableCell>
               )}
-
+              <TableCell sx={{ ...tableHeaderCellStyles, textAlign: "center" }}>
+                Notes
+              </TableCell>
               <TableCell sx={{ ...tableHeaderCellStyles, textAlign: "center" }}>
                 Actions
               </TableCell>
@@ -1241,12 +1434,35 @@ export default function AllLeads() {
           <TableBody>
             {filteredLeads.length === 0 ? (
               <TableRow>
-                <TableCell colSpan={visibleColumns.length + 1} align="center">
+                <TableCell colSpan={visibleColumns.length + 2} align="center">
                   No leads found.
                 </TableCell>
               </TableRow>
             ) : (
-              filteredLeads.map((lead) => {
+              filteredLeads.map((lead, leadIndex) => {
+                const currentLeadId = resolveLeadId(lead);
+                const normalizedLeadId = currentLeadId
+                  ? String(currentLeadId)
+                  : null;
+                const rowKey =
+                  currentLeadId ||
+                  lead.id ||
+                  lead.pk ||
+                  lead.uuid ||
+                  lead.lead_id ||
+                  `lead-${leadIndex}`;
+                const isHighlighted =
+                  Boolean(normalizedLeadId && highlightedLeadId) &&
+                  normalizedLeadId === highlightedLeadId;
+                const attachRowRef = normalizedLeadId
+                  ? (node) => {
+                      if (node) {
+                        rowRefs.current[normalizedLeadId] = node;
+                      } else {
+                        delete rowRefs.current[normalizedLeadId];
+                      }
+                    }
+                  : undefined;
                 // Debug: Log lead data to understand structure
                 if (lead.assigned_to || lead.assignedTo) {
                   console.log("Lead assigned_to data:", {
@@ -1263,7 +1479,16 @@ export default function AllLeads() {
                   });
                 }
                 return (
-                  <TableRow key={lead.id}>
+                  <TableRow
+                    key={rowKey}
+                    ref={attachRowRef}
+                    sx={{
+                      ...(isHighlighted && {
+                        backgroundColor: colors.bg[200],
+                        transition: "background-color 0.4s ease",
+                      }),
+                    }}
+                  >
                     {visibleColumns.includes("title") && (
                       <TableCell>
                         {getLeadFieldValue(lead, "title") || "-"}
@@ -1276,19 +1501,19 @@ export default function AllLeads() {
                           const linkedInUrl =
                             lead.contact_linkedin_url || lead.linkedIn;
                           return linkedInUrl ? (
-                          <a
+                            <a
                               href={linkedInUrl}
-                            target="_blank"
-                            rel="noopener noreferrer"
+                              target="_blank"
+                              rel="noopener noreferrer"
                               style={{
                                 textDecoration: "none",
                                 color: "#0A66C2",
                               }}
-                          >
-                            <FaLinkedin size={24} />
-                          </a>
-                        ) : (
-                          "-"
+                            >
+                              <FaLinkedin size={24} />
+                            </a>
+                          ) : (
+                            "-"
                           );
                         })()}
                       </TableCell>
@@ -1301,18 +1526,26 @@ export default function AllLeads() {
                             // Get the status ID from the lead
                             // Status cannot be None, so if empty, use first available status
                             const statusId = lead.status;
-                            if (statusId === null || statusId === undefined || statusId === "") {
+                            if (
+                              statusId === null ||
+                              statusId === undefined ||
+                              statusId === ""
+                            ) {
                               // If no status, default to first available status
                               if (statuses.length > 0) {
                                 const firstStatus = statuses[0];
-                                return typeof firstStatus === "object" && firstStatus !== null 
-                                  ? (firstStatus.id || firstStatus.pk) 
+                                return typeof firstStatus === "object" &&
+                                  firstStatus !== null
+                                  ? firstStatus.id || firstStatus.pk
                                   : firstStatus;
                               }
                               return "";
                             }
                             // If status is an object, extract the ID
-                            if (typeof statusId === "object" && statusId !== null) {
+                            if (
+                              typeof statusId === "object" &&
+                              statusId !== null
+                            ) {
                               return statusId.id || statusId.pk || "";
                             }
                             return String(statusId);
@@ -1343,14 +1576,19 @@ export default function AllLeads() {
                         >
                           {statuses.map((status, index) => {
                             // Handle different status structures - match CreateLead form logic
-                            const statusId = typeof status === "object" && status !== null 
-                              ? (status.id || status.pk) 
-                              : status;
-                            const statusName = typeof status === "string" 
-                              ? status 
-                              : (status.name || status.label || status.status_name || String(statusId));
+                            const statusId =
+                              typeof status === "object" && status !== null
+                                ? status.id || status.pk
+                                : status;
+                            const statusName =
+                              typeof status === "string"
+                                ? status
+                                : status.name ||
+                                  status.label ||
+                                  status.status_name ||
+                                  String(statusId);
                             const key = statusId || index;
-                            
+
                             return (
                               <MenuItem key={key} value={statusId}>
                                 {statusName}
@@ -1378,13 +1616,19 @@ export default function AllLeads() {
                         <Select
                           value={(() => {
                             // Explicitly handle null/undefined/empty values for "None"
-                            const status = lead.follow_up_status || lead.followupStatus;
-                            return status === null || status === undefined || status === "" ? "" : status;
+                            const status =
+                              lead.follow_up_status || lead.followupStatus;
+                            return status === null ||
+                              status === undefined ||
+                              status === ""
+                              ? ""
+                              : status;
                           })()}
                           onChange={(e) => {
                             // Explicitly handle "None" selection (empty string)
                             // This ensures "None" is easily mutable
-                            const selectedValue = e.target.value === "" ? "" : e.target.value;
+                            const selectedValue =
+                              e.target.value === "" ? "" : e.target.value;
                             handleFollowUpStatusChange(lead, selectedValue);
                           }}
                           size="small"
@@ -1407,7 +1651,11 @@ export default function AllLeads() {
                             displayEmpty: true,
                             renderValue: (val) => {
                               // Show "None" for empty/null/undefined values
-                              if (val === "" || val === null || val === undefined) {
+                              if (
+                                val === "" ||
+                                val === null ||
+                                val === undefined
+                              ) {
                                 return "None";
                               }
                               return val;
@@ -1475,6 +1723,23 @@ export default function AllLeads() {
                         {getLeadFieldValue(lead, "positionTitle") || "-"}
                       </TableCell>
                     )}
+                    <TableCell align="center">
+                      <Button
+                        variant="outlined"
+                        size="small"
+                        onClick={() => {
+                          setNotesDialogLead(lead);
+                          setNotesDialogOpen(true);
+                        }}
+                        sx={{
+                          textTransform: "none",
+                          display: "flex",
+                          whiteSpace: "nowrap",
+                        }}
+                      >
+                        Click Note
+                      </Button>
+                    </TableCell>
 
                     <TableCell>
                       <IconButton
@@ -1510,7 +1775,7 @@ export default function AllLeads() {
 
         <MenuItem
           onClick={() => {
-            navigate(`/edit-lead/${menuLead.id}`);
+            handleNavigateToEditLead(menuLead?.id);
             handleActionMenuClose();
           }}
         >
@@ -1518,7 +1783,7 @@ export default function AllLeads() {
           Edit
         </MenuItem>
 
-        <MenuItem
+        {/* <MenuItem
           onClick={() => {
             handleConvertToProject(menuLead);
             handleActionMenuClose();
@@ -1526,7 +1791,7 @@ export default function AllLeads() {
         >
           <AssignmentTurnedInIcon fontSize="small" sx={{ mr: 1 }} />
           Convert to Project
-        </MenuItem>
+        </MenuItem> */}
 
         <MenuItem
           onClick={() => {
@@ -1540,6 +1805,22 @@ export default function AllLeads() {
         </MenuItem>
       </Menu>
 
+      <Dialog
+        open={notesDialogOpen}
+        onClose={closeNotesDialog}
+        fullWidth
+        maxWidth="sm"
+      >
+        <DialogTitle>{notesDialogLead?.title || "Lead Notes"}</DialogTitle>
+        <DialogContent dividers>
+          <LeadNotesChat
+            leadId={getLeadIdForNotes(notesDialogLead) || undefined}
+          />
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={closeNotesDialog}>Close</Button>
+        </DialogActions>
+      </Dialog>
       <LeadDetailsModal
         open={isModalOpen}
         onClose={handleCloseModal}

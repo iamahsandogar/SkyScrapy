@@ -30,6 +30,14 @@ export default function SidebarMenu({ user, onItemClick, onClose, isMobile }) {
   const toggle = (index) =>
     setOpen((prev) => ({ ...prev, [index]: !prev[index] }));
 
+  const isAdminUser = Boolean(
+    user?.is_staff ||
+      user?.is_admin ||
+      user?.is_superuser ||
+      user?.role === 0 ||
+      user?.role === "0"
+  );
+
   const handleLogout = async () => {
     try {
       const response = await authAPI.logout();
@@ -113,100 +121,104 @@ export default function SidebarMenu({ user, onItemClick, onClose, isMobile }) {
             gap: 0.5,
           }}
         >
-          {sidebarMenu.map((item, index) => {
-            if (item.type === "divider")
-              return <Divider key={index} sx={{ my: 0.5 }} />;
+          {sidebarMenu
+            .filter((item) => item.label !== "Management" || isAdminUser)
+            .map((item, index) => {
+              if (item.type === "divider")
+                return <Divider key={index} sx={{ my: 0.5 }} />;
 
-            const Icon = item.icon ? Icons[item.icon] : null;
-            const hasChildren = Boolean(item.children);
+              const Icon = item.icon ? Icons[item.icon] : null;
+              const hasChildren = Boolean(item.children);
 
-            return (
-              <Box
-                key={item.label}
-                sx={{ display: "flex", flexDirection: "column" }}
-              >
-                {/* PARENT ITEM */}
-                <ListItemButton
-                  onClick={() => {
-                    if (hasChildren) {
-                      toggle(index);
-                      return;
-                    }
-                    navigate(item.path);
-                    onItemClick?.(); // closes drawer on mobile
-                  }}
+              return (
+                <Box
+                  key={item.label}
+                  sx={{ display: "flex", flexDirection: "column" }}
                 >
-                  {Icon && (
-                    <ListItemIcon sx={{ minWidth: 36 }}>
-                      <Icon
-                        fontSize="small"
-                        color={item.danger ? "error" : "inherit"}
-                      />
-                    </ListItemIcon>
-                  )}
-
-                  <ListItemText
-                    primary={item.label}
-                    sx={{
-                      "& .MuiListItemText-primary": {
-                        fontSize: 16,
-                      },
+                  {/* PARENT ITEM */}
+                  <ListItemButton
+                    onClick={() => {
+                      if (hasChildren) {
+                        toggle(index);
+                        return;
+                      }
+                      navigate(item.path);
+                      onItemClick?.(); // closes drawer on mobile
                     }}
-                  />
+                  >
+                    {Icon && (
+                      <ListItemIcon sx={{ minWidth: 36 }}>
+                        <Icon
+                          fontSize="small"
+                          color={item.danger ? "error" : "inherit"}
+                        />
+                      </ListItemIcon>
+                    )}
 
-                  {hasChildren &&
-                    (open[index] ? (
-                      <Icons.ExpandLess fontSize="small" />
-                    ) : (
-                      <Icons.ExpandMore fontSize="small" />
-                    ))}
-                </ListItemButton>
+                    <ListItemText
+                      primary={item.label}
+                      sx={{
+                        "& .MuiListItemText-primary": {
+                          fontSize: 16,
+                        },
+                      }}
+                    />
 
-                {/* CHILDREN ITEMS */}
-                {hasChildren && (
-                  <Collapse in={open[index]} timeout="auto" unmountOnExit>
-                    <List component="div" disablePadding sx={{ py: 0.5 }}>
-                      {item.children.map((child) => {
-                        const ChildIcon = child.icon ? Icons[child.icon] : null;
+                    {hasChildren &&
+                      (open[index] ? (
+                        <Icons.ExpandLess fontSize="small" />
+                      ) : (
+                        <Icons.ExpandMore fontSize="small" />
+                      ))}
+                  </ListItemButton>
 
-                        return (
-                          <ListItemButton
-                            key={child.label}
-                            onClick={() => {
-                              navigate(child.path);
-                              onItemClick?.();
-                            }}
-                            sx={{
-                              pl: 3,
-                              py: 0.5,
-                              borderRadius: 1,
-                              "&:hover": { bgcolor: "action.hover" },
-                              minHeight: 36,
-                            }}
-                          >
-                            {ChildIcon && (
-                              <ListItemIcon sx={{ minWidth: 36 }}>
-                                <ChildIcon fontSize="small" />
-                              </ListItemIcon>
-                            )}
+                  {/* CHILDREN ITEMS */}
+                  {hasChildren && (
+                    <Collapse in={open[index]} timeout="auto" unmountOnExit>
+                      <List component="div" disablePadding sx={{ py: 0.5 }}>
+                        {item.children.map((child) => {
+                          const ChildIcon = child.icon
+                            ? Icons[child.icon]
+                            : null;
 
-                            <ListItemText
-                              primary={child.label}
-                              sx={{
-                                "& .MuiListItemText-primary": {
-                                  fontSize: 15,
-                                },
+                          return (
+                            <ListItemButton
+                              key={child.label}
+                              onClick={() => {
+                                navigate(child.path);
+                                onItemClick?.();
                               }}
-                            />
-                          </ListItemButton>
-                        );
-                      })}
-                    </List>
-                  </Collapse>
-                )}
-              </Box>
-            );
-          })}
+                              sx={{
+                                pl: 3,
+                                py: 0.5,
+                                borderRadius: 1,
+                                "&:hover": { bgcolor: "action.hover" },
+                                minHeight: 36,
+                              }}
+                            >
+                              {ChildIcon && (
+                                <ListItemIcon sx={{ minWidth: 36 }}>
+                                  <ChildIcon fontSize="small" />
+                                </ListItemIcon>
+                              )}
+
+                              <ListItemText
+                                primary={child.label}
+                                sx={{
+                                  "& .MuiListItemText-primary": {
+                                    fontSize: 15,
+                                  },
+                                }}
+                              />
+                            </ListItemButton>
+                          );
+                        })}
+                      </List>
+                    </Collapse>
+                  )}
+                </Box>
+              );
+            })}
         </Box>
 
         {/* USER PROFILE & LOGOUT */}
@@ -249,9 +261,10 @@ export default function SidebarMenu({ user, onItemClick, onClose, isMobile }) {
                     color:
                       mode === "dark" ? colors.grey[100] : colors.grey[100],
                     fontSize: "14px",
-                    overflow: "hidden",
-                    textOverflow: "ellipsis",
-                    whiteSpace: "nowrap",
+                    lineHeight: 1.2,
+                    whiteSpace: "normal",
+                    overflowWrap: "break-word",
+                    textOverflow: "unset",
                   }}
                 >
                   {user.name ||

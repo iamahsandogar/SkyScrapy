@@ -6,32 +6,35 @@ let lastPrefetchTime = 0;
 const PREFETCH_COOLDOWN = 15000; // 15 seconds - prevent duplicate calls within this window
 
 /**
- * Pre-fetch statuses, sources, employees, and leads data and store in localStorage
- * This is called after login to make data instantly available
+ * Pre-fetch statuses, sources, employees, and optionally leads data and store in localStorage.
+ * Pass `{ includeLeads: false }` if you only need metadata (used by lead form navigation).
+ * This is called after login to make data instantly available.
  */
-export const prefetchLeadData = async () => {
+export const prefetchLeadData = async ({ includeLeads = true } = {}) => {
   const now = Date.now();
-  
+
   // Prevent duplicate calls - check both flag and time window
   if (isPrefetching) {
     console.log("Prefetch already in progress, skipping duplicate call");
     return getCachedLeadData(); // Return existing cache if available
   }
-  
+
   // Prevent calls within cooldown period (React StrictMode protection)
   if (now - lastPrefetchTime < PREFETCH_COOLDOWN) {
-    console.log("Prefetch called too soon after last call, skipping to prevent duplicates");
+    console.log(
+      "Prefetch called too soon after last call, skipping to prevent duplicates"
+    );
     return getCachedLeadData(); // Return existing cache if available
   }
-  
+
   // Check if user is employee (not admin) - employees can't access employees API
   const storedUser = localStorage.getItem("user");
   let isCurrentUserAdmin = false;
-  
+
   if (storedUser) {
     try {
       const userData = JSON.parse(storedUser);
-      isCurrentUserAdmin = 
+      isCurrentUserAdmin =
         userData.is_staff ||
         userData.is_admin ||
         userData.is_superuser ||
@@ -41,37 +44,50 @@ export const prefetchLeadData = async () => {
       console.warn("Error parsing user data:", e);
     }
   }
-  
+
   try {
     isPrefetching = true;
     lastPrefetchTime = now;
-    console.log("Pre-fetching lead data (statuses, sources, employees, leads)...");
+    console.log(
+      `Pre-fetching lead data${includeLeads ? "" : " (metadata only)"}...`
+    );
 
     // Fetch APIs in parallel, but skip employees API for employees (they get 403)
-    const apiPromises = [
-      apiRequest("/ui/options/statuses/").catch((err) => {
-        console.error("Failed to prefetch statuses:", err);
-        return null;
-      }),
-      apiRequest("/ui/options/sources/").catch((err) => {
-        console.error("Failed to prefetch sources:", err);
-        return null;
-      }),
-      // Only fetch employees API if user is admin
-      isCurrentUserAdmin 
-        ? apiRequest("/ui/employees/").catch((err) => {
-            console.error("Failed to prefetch employees:", err);
-            return null;
-          })
-        : Promise.resolve(null), // Skip for employees
-      apiRequest("/api/leads/").catch((err) => {
-        console.error("Failed to prefetch leads:", err);
-        return null;
-      }),
-    ];
-    
-    const [statusesResponse, sourcesResponse, employeesResponse, leadsResponse] =
-      await Promise.all(apiPromises);
+    const statusesPromise = apiRequest("/ui/options/statuses/").catch((err) => {
+      console.error("Failed to prefetch statuses:", err);
+      return null;
+    });
+
+    const sourcesPromise = apiRequest("/ui/options/sources/").catch((err) => {
+      console.error("Failed to prefetch sources:", err);
+      return null;
+    });
+
+    const employeesPromise = isCurrentUserAdmin
+      ? apiRequest("/ui/employees/").catch((err) => {
+          console.error("Failed to prefetch employees:", err);
+          return null;
+        })
+      : Promise.resolve(null);
+
+    const leadsPromise = includeLeads
+      ? apiRequest("/api/leads/").catch((err) => {
+          console.error("Failed to prefetch leads:", err);
+          return null;
+        })
+      : Promise.resolve(null);
+
+    const [
+      statusesResponse,
+      sourcesResponse,
+      employeesResponse,
+      leadsResponse,
+    ] = await Promise.all([
+      statusesPromise,
+      sourcesPromise,
+      employeesPromise,
+      leadsPromise,
+    ]);
 
     // Parse statuses
     let statusesList = [];
@@ -119,9 +135,11 @@ export const prefetchLeadData = async () => {
     // (leads might be assigned to inactive employees, so we need all for display)
     const allEmployees = employeesList;
 
-    // Parse leads
+    // Parse leads (only if requested)
     let leadsList = [];
-    if (leadsResponse) {
+    let hasNewLeads = false;
+    if (includeLeads && leadsResponse) {
+      hasNewLeads = true;
       if (Array.isArray(leadsResponse)) {
         leadsList = leadsResponse;
       } else if (leadsResponse?.leads) {
@@ -133,12 +151,21 @@ export const prefetchLeadData = async () => {
       }
     }
 
-    // Store in localStorage with timestamp
+    const existingCache = getCachedLeadData() || {
+      statuses: [],
+      sources: [],
+      employees: [],
+      leads: [],
+    };
+
+    // Store in localStorage with timestamp (merge metadata to preserve cached leads when not fetched)
     const cacheData = {
-      statuses: statusesList,
-      sources: sourcesList,
-      employees: allEmployees,
-      leads: leadsList,
+      ...existingCache,
+      statuses: statusesList.length > 0 ? statusesList : existingCache.statuses,
+      sources: sourcesList.length > 0 ? sourcesList : existingCache.sources,
+      employees:
+        employeesList.length > 0 ? employeesList : existingCache.employees,
+      leads: hasNewLeads ? leadsList : existingCache.leads,
       timestamp: Date.now(),
     };
 
@@ -147,7 +174,8 @@ export const prefetchLeadData = async () => {
       statusesCount: statusesList.length,
       sourcesCount: sourcesList.length,
       employeesCount: allEmployees.length,
-      leadsCount: leadsList.length,
+      leadsCount: hasNewLeads ? leadsList.length : cacheData.leads.length,
+      includeLeads,
     });
 
     isPrefetching = false;
@@ -206,12 +234,14 @@ export const addLeadToCache = (newLead) => {
       if (cacheData.leads && Array.isArray(cacheData.leads)) {
         // Check if lead already exists (by ID) to avoid duplicates
         const existingIndex = cacheData.leads.findIndex(
-          (lead) => 
+          (lead) =>
             (lead.id && newLead.id && String(lead.id) === String(newLead.id)) ||
             (lead.pk && newLead.pk && String(lead.pk) === String(newLead.pk)) ||
-            (lead.uuid && newLead.uuid && String(lead.uuid) === String(newLead.uuid))
+            (lead.uuid &&
+              newLead.uuid &&
+              String(lead.uuid) === String(newLead.uuid))
         );
-        
+
         if (existingIndex >= 0) {
           // Update existing lead
           cacheData.leads[existingIndex] = newLead;
@@ -219,7 +249,7 @@ export const addLeadToCache = (newLead) => {
           // Add new lead to the beginning of the array
           cacheData.leads.unshift(newLead);
         }
-        
+
         // Update timestamp
         cacheData.timestamp = Date.now();
         localStorage.setItem("leadDataCache", JSON.stringify(cacheData));
@@ -245,3 +275,65 @@ export const addLeadToCache = (newLead) => {
   }
 };
 
+const getLeadIdentifierStrings = (lead) => {
+  if (!lead || typeof lead !== "object") return [];
+  const ids = [lead.id, lead.pk, lead.uuid, lead.lead_id, lead.leadId];
+  return ids
+    .filter((value) => value !== null && value !== undefined)
+    .map((value) => String(value).trim())
+    .filter(Boolean);
+};
+
+const resolveLeadIdentifierValue = (value) => {
+  if (value == null) return null;
+  if (typeof value === "object") {
+    return (
+      value.id ?? value.pk ?? value.uuid ?? value.lead_id ?? value.leadId ?? null
+    );
+  }
+  return value;
+};
+
+const doesLeadMatchId = (lead, targetId) => {
+  if (!targetId) return false;
+  const normalizedTarget = String(targetId).trim();
+  if (!normalizedTarget) return false;
+  const leadIds = getLeadIdentifierStrings(lead);
+  return leadIds.some((candidate) => candidate === normalizedTarget);
+};
+
+export const removeLeadFromCache = (leadLike) => {
+  const resolvedId = resolveLeadIdentifierValue(leadLike);
+  if (!resolvedId) return null;
+  const normalized = String(resolvedId).trim();
+  if (!normalized) return null;
+
+  try {
+    const cached = localStorage.getItem("leadDataCache");
+    if (!cached) return null;
+    const cacheData = JSON.parse(cached);
+    if (!cacheData.leads || !Array.isArray(cacheData.leads)) {
+      return cacheData;
+    }
+
+    const filteredLeads = cacheData.leads.filter(
+      (lead) => !doesLeadMatchId(lead, normalized)
+    );
+
+    if (filteredLeads.length === cacheData.leads.length) {
+      return cacheData;
+    }
+
+    const updatedCache = {
+      ...cacheData,
+      leads: filteredLeads,
+      timestamp: Date.now(),
+    };
+    localStorage.setItem("leadDataCache", JSON.stringify(updatedCache));
+    console.log("Removed lead from cache:", normalized);
+    return updatedCache;
+  } catch (error) {
+    console.error("Error removing lead from cache:", error);
+    return null;
+  }
+};

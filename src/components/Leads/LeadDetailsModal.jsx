@@ -9,11 +9,17 @@ import {
   Box,
 } from "@mui/material";
 import LeadNotesChat from "./LeadNotesChat";
-function LeadDetailsModal({ open, onClose, lead, getEmployeeName, getStatusName }) {
+function LeadDetailsModal({
+  open,
+  onClose,
+  lead,
+  getEmployeeName,
+  getStatusName,
+}) {
   if (!lead) return null;
 
   const leadIdentifier = lead.id || lead.pk || lead.uuid;
-  
+
   const formatDate = (date) => {
     if (!date) return "-";
     return new Date(date).toLocaleDateString();
@@ -33,10 +39,12 @@ function LeadDetailsModal({ open, onClose, lead, getEmployeeName, getStatusName 
             <strong>Lead Title:</strong> {getField("title", "title")}
           </Typography>
           <Typography>
-            <strong>First Name:</strong> {getField("firstName", "contact_first_name")}
+            <strong>First Name:</strong>{" "}
+            {getField("firstName", "contact_first_name")}
           </Typography>
           <Typography>
-            <strong>Last Name:</strong> {getField("lastName", "contact_last_name")}
+            <strong>Last Name:</strong>{" "}
+            {getField("lastName", "contact_last_name")}
           </Typography>
           <Typography>
             <strong>Email:</strong> {getField("email", "contact_email")}
@@ -45,27 +53,38 @@ function LeadDetailsModal({ open, onClose, lead, getEmployeeName, getStatusName 
             <strong>Phone:</strong> {getField("phone", "contact_phone")}
           </Typography>
           <Typography>
-            <strong>LinkedIn:</strong> {getField("linkedIn", "contact_linkedin_url")}
+            <strong>LinkedIn:</strong>{" "}
+            {getField("linkedIn", "contact_linkedin_url")}
           </Typography>
           <Typography>
-            <strong>Status:</strong> {getStatusName ? getStatusName(lead.status) : (lead.status || "-")}
+            <strong>Status:</strong>{" "}
+            {getStatusName ? getStatusName(lead.status) : lead.status || "-"}
           </Typography>
           <Typography>
-            <strong>Assigned To:</strong> {getEmployeeName ? getEmployeeName(lead.assigned_to || lead.assignedTo) : "-"}
+            <strong>Assigned To:</strong>{" "}
+            {getEmployeeName
+              ? getEmployeeName(lead.assigned_to || lead.assignedTo)
+              : "-"}
           </Typography>
           <Typography>
-            <strong>Follow-up Date:</strong> {formatDate(lead.follow_up_at || lead.followUpAt)}
+            <strong>Follow-up Date:</strong>{" "}
+            {formatDate(lead.follow_up_at || lead.followUpAt)}
           </Typography>
           <Typography>
-            <strong>Follow-up Time:</strong> {(() => {
+            <strong>Follow-up Time:</strong>{" "}
+            {(() => {
               const time = lead.follow_up_time || lead.followUpTime;
               if (!time) return "-";
-              if (typeof time === 'string') return time;
-              return new Date(time).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+              if (typeof time === "string") return time;
+              return new Date(time).toLocaleTimeString([], {
+                hour: "2-digit",
+                minute: "2-digit",
+              });
             })()}
           </Typography>
           <Typography>
-            <strong>Follow-up Status:</strong> {getField("followupStatus", "follow_up_status")}
+            <strong>Follow-up Status:</strong>{" "}
+            {getField("followupStatus", "follow_up_status")}
           </Typography>
           <Typography>
             <strong>Source:</strong> {getField("source", "source")}
@@ -74,15 +93,17 @@ function LeadDetailsModal({ open, onClose, lead, getEmployeeName, getStatusName 
             <strong>Company:</strong> {getField("company", "company_name")}
           </Typography>
           <Typography>
-            <strong>Position Title:</strong> {getField("positionTitle", "contact_position_title")}
+            <strong>Position Title:</strong>{" "}
+            {getField("positionTitle", "contact_position_title")}
           </Typography>
           <Typography>
-            <strong>Description:</strong> {getField("description", "description")}
+            <strong>Description:</strong>{" "}
+            {getField("description", "description")}
           </Typography>
         </Box>
-        <Box mt={4}>
+        {/* <Box mt={4}>
           <LeadNotesChat leadId={leadIdentifier} />
-        </Box>
+        </Box> */}
       </DialogContent>
       <DialogActions>
         <Button onClick={onClose} variant="contained">

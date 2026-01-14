@@ -1,4 +1,5 @@
 import {
+  Backdrop,
   Box,
   Typography,
   TextField,
@@ -13,6 +14,8 @@ import CloseIcon from "@mui/icons-material/Close";
 import { useEffect, useState } from "react";
 import apiRequest from "../services/api";
 import { getCachedLeadData } from "../../utils/prefetchData";
+import DotLoader from "../global/DotLoader";
+import { useNotification } from "../../contexts/NotificationContext.jsx";
 
 // Module-level flag to prevent duplicate API calls in React StrictMode
 let isFetching = false;
@@ -28,56 +31,63 @@ export default function ManageLeadOptions() {
   const [editIndex, setEditIndex] = useState(null);
   const [editValue, setEditValue] = useState("");
   const [loading, setLoading] = useState(false);
+  const [optionsLoaderOpen, setOptionsLoaderOpen] = useState(true);
+
+  const { notifyError } = useNotification();
+
+  const getOptionFieldName = (optionType) =>
+    optionType === "status" ? "statuses" : "sources";
 
   /* ------------------------------------
      FETCH STATUS & SOURCE FROM BACKEND
      Uses cached data first for instant loading, then refreshes
   -------------------------------------*/
   useEffect(() => {
-    // Prevent duplicate API calls in React StrictMode (development)
-    if (isFetching) {
-      console.log("Skipping duplicate fetch - already in progress");
-      return;
-    }
-    
-    fetchOptions();
+    fetchOptions(true);
   }, []);
 
-  const fetchOptions = async () => {
-    // Prevent duplicate calls
-    if (isFetching) {
-      return;
+  const fetchOptions = async (showGlobalLoader = false) => {
+    if (showGlobalLoader) {
+      setOptionsLoaderOpen(true);
     }
-    
-    // Try cached data first for instant loading
+
     const cachedData = getCachedLeadData();
     if (cachedData && (cachedData.statuses || cachedData.sources)) {
       console.log("Using cached statuses and sources for instant loading");
-      // Set data immediately without showing loading state
       setData({
         status: cachedData.statuses || [],
         source: cachedData.sources || [],
       });
-      // Don't set loading to true - data is already available
-      
-      // Refresh in background to ensure data is up-to-date
-      // Don't wait for it - user can see cached data immediately
-      // Pass false to prevent showing loading state since we already have data
-      refreshDataInBackground(false);
+      const fetched = await refreshDataInBackground(false, () => {
+        if (showGlobalLoader) {
+          setOptionsLoaderOpen(false);
+        }
+      });
+      if (!fetched && showGlobalLoader) {
+        setOptionsLoaderOpen(false);
+      }
       return;
     }
-    
-    // No cache available, fetch fresh data
-    // Pass true to show loading state since we don't have cached data
-    await refreshDataInBackground(true);
+
+    const fetched = await refreshDataInBackground(true, () => {
+      if (showGlobalLoader) {
+        setOptionsLoaderOpen(false);
+      }
+    });
+    if (!fetched && showGlobalLoader) {
+      setOptionsLoaderOpen(false);
+    }
   };
 
-  const refreshDataInBackground = async (showLoading = true) => {
+  const refreshDataInBackground = async (
+    showLoading = true,
+    onFetchComplete
+  ) => {
     // Prevent duplicate calls
     if (isFetching) {
-      return;
+      return false;
     }
-    
+
     try {
       isFetching = true;
       // Only show loading if explicitly requested (i.e., no cached data available)
@@ -139,21 +149,34 @@ export default function ManageLeadOptions() {
       }
     } catch (error) {
       console.error("Failed to load options", error);
-      alert("Failed to load lead options");
+      notifyError("Failed to load lead options");
     } finally {
       setLoading(false);
+      if (typeof onFetchComplete === "function") {
+        onFetchComplete();
+      }
       // Reset flag after a short delay to allow React StrictMode remount
       setTimeout(() => {
         isFetching = false;
       }, 100);
     }
+
+    return true;
+  };
+
+  const reloadOptionsWithOverlay = async () => {
+    setOptionsLoaderOpen(true);
+    const fetched = await refreshDataInBackground(true);
+    setOptionsLoaderOpen(false);
+    return fetched;
   };
 
   /* ------------------------------------
      ADD STATUS / SOURCE
   -------------------------------------*/
   const addItem = async () => {
-    if (!newValue.trim()) return;
+    const trimmedValue = newValue.trim();
+    if (!trimmedValue) return;
 
     try {
       const endpoint =
@@ -161,18 +184,18 @@ export default function ManageLeadOptions() {
           ? "/ui/options/statuses/create/"
           : "/ui/options/sources/create/";
 
-      await apiRequest(endpoint, {
+      const response = await apiRequest(endpoint, {
         method: "POST",
         body: JSON.stringify({
-          name: newValue.trim(),
+          name: trimmedValue,
         }),
       });
 
       setNewValue("");
-      fetchOptions(); // refresh list
+      await reloadOptionsWithOverlay();
     } catch (error) {
       console.error("Add failed", error);
-      alert(error.message || "Failed to add");
+      notifyError(error.message || "Failed to add");
     }
   };
 
@@ -184,7 +207,7 @@ export default function ManageLeadOptions() {
     const pk = typeof item === "object" ? item.id || item.pk : null;
 
     if (!pk) {
-      alert("Cannot delete: Item missing ID");
+      notifyError("Cannot delete: Item missing ID");
       return;
     }
 
@@ -206,13 +229,13 @@ export default function ManageLeadOptions() {
           : `/ui/options/sources/${pk}/delete/`;
 
       await apiRequest(endpoint, {
-        method: "POST",
+        method: "DELETE",
       });
 
-      fetchOptions(); // refresh list
+      await reloadOptionsWithOverlay();
     } catch (error) {
       console.error("Delete failed", error);
-      alert(error.message || "Failed to delete");
+      notifyError(error.message || "Failed to delete");
     }
   };
 
@@ -233,65 +256,79 @@ export default function ManageLeadOptions() {
      UI
   -------------------------------------*/
   return (
-    <Paper sx={{ p: 3, borderRadius: 3, boxShadow: "none" }}>
-      <Typography variant="h6" fontWeight="bold" mb={2}>
-        Lead Status & Source Settings
-      </Typography>
+    <>
+      <Backdrop
+        open={optionsLoaderOpen}
+        sx={{
+          color: "#fff",
+          zIndex: (theme) => theme.zIndex.drawer,
+          flexDirection: "column",
+          gap: 1,
+        }}
+      >
+        <DotLoader size={48} color="#0A66C2" />
+        <Typography variant="body2">Loading statuses & sources...</Typography>
+      </Backdrop>
+      <Paper sx={{ p: 3, borderRadius: 3, boxShadow: "none" }}>
+        <Typography variant="h6" fontWeight="bold" mb={2}>
+          Lead Status & Source Settings
+        </Typography>
 
-      {/* SWITCH */}
-      <Box display="flex" gap={2} mb={2}>
-        <Button
-          variant={type === "status" ? "contained" : "outlined"}
-          onClick={() => {
-            setType("status");
-            cancelEdit();
-          }}
-        >
-          Status
-        </Button>
-        <Button
-          variant={type === "source" ? "contained" : "outlined"}
-          onClick={() => {
-            setType("source");
-            cancelEdit();
-          }}
-        >
-          Source
-        </Button>
-      </Box>
-
-      {/* ADD */}
-      <Box display="flex" gap={2} mb={3}>
-        <TextField
-          fullWidth
-          label={`Add ${type}`}
-          value={newValue}
-          onChange={(e) => setNewValue(e.target.value)}
-        />
-        <Button variant="contained" onClick={addItem}>
-          Add
-        </Button>
-      </Box>
-
-      {/* LOADING */}
-      {loading && <Typography color="text.secondary">Loading...</Typography>}
-
-      {/* LIST */}
-      {data[type].map((item, index) => (
-        <Box key={index} display="flex" alignItems="center" gap={2} mb={1}>
-          <Typography flex={1}>
-            {typeof item === "string" ? item : item.name}
-          </Typography>
-
-          <IconButton
-            onClick={() => deleteItem(item)}
-            color="error"
-            disabled={loading}
+        {/* SWITCH */}
+        <Box display="flex" gap={2} mb={2}>
+          <Button
+            variant={type === "status" ? "contained" : "outlined"}
+            onClick={() => {
+              setType("status");
+              cancelEdit();
+            }}
           >
-            <DeleteIcon />
-          </IconButton>
+            Status
+          </Button>
+          <Button
+            variant={type === "source" ? "contained" : "outlined"}
+            onClick={() => {
+              setType("source");
+              cancelEdit();
+            }}
+          >
+            Source
+          </Button>
         </Box>
-      ))}
-    </Paper>
+
+        {/* ADD */}
+        <Box display="flex" gap={2} mb={3}>
+          <TextField
+            fullWidth
+            label={`Add ${type}`}
+            value={newValue}
+            onChange={(e) => setNewValue(e.target.value)}
+          />
+          <Button variant="contained" onClick={addItem}>
+            Add
+          </Button>
+        </Box>
+
+        {/* LOADING */}
+        {loading && <Typography color="text.secondary">Loading...</Typography>}
+
+        {/* LIST */}
+        {data[type].map((item, index) => (
+          <Box key={index} display="flex" alignItems="center" gap={2} mb={1}>
+            <Typography flex={1}>
+              {typeof item === "string" ? item : item.name}
+            </Typography>
+
+            <IconButton
+              onClick={() => deleteItem(item)}
+              color="error"
+              disabled={loading}
+            >
+              <DeleteIcon />
+            </IconButton>
+          </Box>
+        ))}
+      </Paper>
+    </>
   );
 }

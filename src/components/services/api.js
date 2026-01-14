@@ -1,5 +1,13 @@
 const API_BASE_URL = import.meta.env.VITE_API_BASE_URL;
 
+const createApiError = (message, status) => {
+  const error = new Error(message);
+  if (typeof status === "number") {
+    error.status = status;
+  }
+  return error;
+};
+
 /**
  * Internal function to refresh token (doesn't use apiRequest to avoid circular dependency)
  */
@@ -59,7 +67,7 @@ async function apiRequest(endpoint, options = {}) {
       try {
         const refreshSuccess = await refreshTokenInternal();
         if (!refreshSuccess) {
-          throw new Error("Token refresh failed");
+          throw createApiError("Token refresh failed", response.status);
         }
 
         // Retry the original request after refresh
@@ -87,15 +95,19 @@ async function apiRequest(endpoint, options = {}) {
           !retryContentType.includes("application/json")
         ) {
           if (!retryResponse.ok) {
-            throw new Error(`HTTP error! status: ${retryResponse.status}`);
+            throw createApiError(
+              `HTTP error! status: ${retryResponse.status}`,
+              retryResponse.status
+            );
           }
           return null;
         }
 
         const retryData = await retryResponse.json();
         if (!retryResponse.ok) {
-          throw new Error(
-            retryData.error || `HTTP error! status: ${retryResponse.status}`
+          throw createApiError(
+            retryData.error || `HTTP error! status: ${retryResponse.status}`,
+            retryResponse.status
           );
         }
 
@@ -114,7 +126,10 @@ async function apiRequest(endpoint, options = {}) {
   const contentType = response.headers.get("content-type");
   if (!contentType || !contentType.includes("application/json")) {
     if (!response.ok) {
-      throw new Error(`HTTP error! status: ${response.status}`);
+      throw createApiError(
+        `HTTP error! status: ${response.status}`,
+        response.status
+      );
     }
     return null;
   }
@@ -122,7 +137,10 @@ async function apiRequest(endpoint, options = {}) {
   const data = await response.json();
 
   if (!response.ok) {
-    throw new Error(data.error || `HTTP error! status: ${response.status}`);
+    throw createApiError(
+      data.error || `HTTP error! status: ${response.status}`,
+      response.status
+    );
   }
 
   return data;
@@ -159,23 +177,9 @@ export const authAPI = {
   },
 
   passwordResetConfirm: async (data) => {
-    return apiRequest(`${AUTH_BASE}/password-reset-request/`, {
+    return apiRequest(`${AUTH_BASE}/password-reset-confirm/`, {
       method: "POST",
       body: JSON.stringify(data),
-    });
-  },
-
-  passwordResetRequest: async (email) => {
-    return apiRequest("/api/common/auth/password-reset-request/", {
-      method: "POST",
-      body: JSON.stringify({ email }),
-    });
-  },
-
-  passwordResetConfirm: async (uid, token, password) => {
-    return apiRequest("/api/common/auth/password-reset-confirm/", {
-      method: "POST",
-      body: JSON.stringify({ uid, token, password }),
     });
   },
 };

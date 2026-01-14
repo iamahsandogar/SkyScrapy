@@ -1,4 +1,4 @@
-import { useMemo } from "react";
+import { useEffect, useState } from "react";
 import { Routes, Route, Navigate } from "react-router-dom";
 import Layout from "./components/Layout.jsx";
 
@@ -19,25 +19,28 @@ import ManageLeadOptions from "./components/Leads/ManageLeadOptions.jsx";
 
 // Component to conditionally render AllLeads based on user role
 function RoleBasedAllLeads({ adminComponent, employeeComponent }) {
-  const isEmployee = useMemo(() => {
-    const storedUser = localStorage.getItem("user");
-    if (!storedUser) return false;
+  const [isEmployee, setIsEmployee] = useState(false);
 
+  useEffect(() => {
     try {
+      const storedUser = localStorage.getItem("user");
+      if (!storedUser) {
+        setIsEmployee(false);
+        return;
+      }
       const userData = JSON.parse(storedUser);
-      // Employee role is role: 1
-      return (
+      setIsEmployee(
         userData.role === 1 ||
-        userData.role === "1" ||
-        (!userData.is_staff &&
-          !userData.is_admin &&
-          !userData.is_superuser &&
-          userData.role !== 0 &&
-          userData.role !== "0")
+          userData.role === "1" ||
+          (!userData.is_staff &&
+            !userData.is_admin &&
+            !userData.is_superuser &&
+            userData.role !== 0 &&
+            userData.role !== "0")
       );
     } catch (e) {
       console.error("Error parsing user data:", e);
-      return false;
+      setIsEmployee(false);
     }
   }, []);
 

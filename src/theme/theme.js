@@ -133,4 +133,3 @@ export const getTheme = (mode) => {
     },
   });
 };
-

@@ -6,9 +6,10 @@ import {
   InputLabel,
   Select,
   MenuItem,
-  Button,
+  IconButton,
   CircularProgress,
 } from "@mui/material";
+import RefreshIcon from "@mui/icons-material/Refresh";
 import LeadNotesChat from "../Leads/LeadNotesChat";
 import apiRequest from "../services/api";
 import { colors } from "../../design-system/tokens";
@@ -29,7 +30,8 @@ const normalizeLeadId = (lead) => {
 };
 
 const getAssignedName = (lead) => {
-  const assignee = lead?.assigned_to || lead?.assignedTo || lead?.owner || lead?.employee;
+  const assignee =
+    lead?.assigned_to || lead?.assignedTo || lead?.owner || lead?.employee;
   if (!assignee) return "";
   if (typeof assignee === "string") return assignee;
   const nameParts = [
@@ -84,7 +86,11 @@ const formatLeadMeta = (lead) => {
 
 const sortLeadsByDate = (lead) => {
   const value =
-    lead.follow_up_at || lead.followup_at || lead.followUpAt || lead.created_at || lead.createdAt;
+    lead.follow_up_at ||
+    lead.followup_at ||
+    lead.followUpAt ||
+    lead.created_at ||
+    lead.createdAt;
   const parsed = new Date(value);
   if (Number.isNaN(parsed.getTime())) return 0;
   return parsed.getTime();
@@ -165,26 +171,31 @@ export default function LeadNotesPanel() {
         border: `1px solid ${colors.grey[900]}`,
       }}
     >
-      <Box display="flex" alignItems="center" justifyContent="space-between" gap={1}>
+      <Box
+        display="flex"
+        alignItems="center"
+        justifyContent="space-between"
+        gap={1}
+      >
         <Typography variant="h6" fontWeight={700}>
           Lead Notes
         </Typography>
         <Box display="flex" alignItems="center" gap={1}>
-          <Button
+          <IconButton
             size="small"
-            variant="text"
             onClick={fetchLeadsFromApi}
             disabled={loadingLeads}
-            sx={{ textTransform: "none" }}
+            aria-label="Refresh leads"
           >
-            {loadingLeads ? "Refreshing leads" : "Reload leads"}
-          </Button>
+            <RefreshIcon fontSize="small" />
+          </IconButton>
           {loadingLeads && <CircularProgress size={18} />}
         </Box>
       </Box>
 
       <Typography variant="caption" color="text.secondary" mt={0.5}>
-        Conversation style updates between manager and employee for a selected lead.
+        Conversation style updates between manager and employee for a selected
+        lead.
       </Typography>
 
       <Box mt={2}>

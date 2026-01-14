@@ -10,12 +10,47 @@ import {
   Avatar,
   Button,
   Chip,
+  TableContainer,
 } from "@mui/material";
 import { useEffect, useState } from "react";
 import Topbar from "../global/Topbar";
 import { colors } from "../../design-system/tokens";
 import apiRequest from "../services/api";
 import { getCachedLeadData } from "../../utils/prefetchData";
+import DotLoader from "../global/DotLoader";
+
+const parseLeadPayload = (payload) => {
+  if (!payload) return [];
+  if (Array.isArray(payload)) return payload;
+  if (Array.isArray(payload.leads)) return payload.leads;
+  if (Array.isArray(payload.data)) return payload.data;
+  if (Array.isArray(payload.data?.leads)) return payload.data.leads;
+  return [];
+};
+
+const extractLeadAssignedId = (value) => {
+  if (value === null || value === undefined) return null;
+  if (typeof value === "string" || typeof value === "number") return value;
+  if (typeof value === "object") {
+    const idKeys = ["id", "pk", "uuid", "user_id", "assigned_to", "owner_id"];
+    for (const key of idKeys) {
+      if (value[key] !== undefined && value[key] !== null) {
+        return value[key];
+      }
+    }
+
+    const nestedKeys = ["user", "owner", "employee", "profile"];
+    for (const key of nestedKeys) {
+      if (value[key]) {
+        const nested = extractLeadAssignedId(value[key]);
+        if (nested !== null) {
+          return nested;
+        }
+      }
+    }
+  }
+  return null;
+};
 const getActionButtonStyles = (action) => {
   switch (action) {
     case "activate":
@@ -60,6 +95,7 @@ const getActionButtonStyles = (action) => {
 export default function ManageEmployees() {
   const [employees, setEmployees] = useState([]);
   const [loading, setLoading] = useState(false);
+  const tableCellStyle = { whiteSpace: "nowrap" };
 
   /* ------------------------------------
      FETCH EMPLOYEES FROM BACKEND
@@ -104,13 +140,81 @@ export default function ManageEmployees() {
     }
   };
 
+  const getEmployeesForLookup = () => {
+    if (employees.length) return employees;
+    const cached = getCachedLeadData();
+    return cached?.employees ?? [];
+  };
+
+  const loadLeadsForLogging = async () => {
+    const cached = getCachedLeadData();
+    if (cached?.leads?.length) {
+      return cached.leads;
+    }
+
+    try {
+      const response = await apiRequest("/api/leads/?page_size=200");
+      return parseLeadPayload(response);
+    } catch (error) {
+      console.error("Failed to load leads for logging", error);
+      return [];
+    }
+  };
+
+  const logLeadsForEmail = async (email) => {
+    if (!email) return;
+    const employeesList = getEmployeesForLookup();
+    const employee = employeesList.find(
+      (emp) => emp.email && emp.email.toLowerCase() === email.toLowerCase()
+    );
+
+    if (!employee) {
+      console.warn(`No employee found with email ${email}`);
+      return;
+    }
+
+    const employeeId = employee.id || employee.pk || employee.uuid;
+    if (!employeeId) {
+      console.warn("Employee has no identifier to match leads");
+      return;
+    }
+
+    const leadsList = await loadLeadsForLogging();
+    const assignedLeads = leadsList.filter((lead) => {
+      const assignedTo =
+        lead.assigned_to ??
+        lead.assignedTo ??
+        lead.assigned_to_id ??
+        lead.assignedToId ??
+        lead.owner ??
+        lead.employee ??
+        lead.assigned_user ??
+        lead.assignedUser;
+      const assignedId = extractLeadAssignedId(assignedTo);
+      if (assignedId === null || assignedId === undefined) return false;
+      return String(assignedId) === String(employeeId);
+    });
+
+    console.group(`Leads assigned to ${email}`);
+    console.log(`Employee ID: ${employeeId}`);
+    console.log(`Found ${assignedLeads.length} lead(s)`);
+    console.table(
+      assignedLeads.map((lead) => ({
+        id: lead.id ?? lead.pk ?? lead.uuid,
+        title: lead.title,
+        company: lead.company_name || lead.company,
+        follow_up_at: lead.follow_up_at || lead.followUpAt,
+      })),
+      ["id", "title", "company", "follow_up_at"]
+    );
+    console.groupEnd();
+  };
+
   const getAvatarStyles = (emp) => {
     const isActive = emp.status === "Active" || emp.is_active;
 
     return {
-      bgcolor: isActive
-        ? colors.blueAccent[700]
-        : colors.grey[700],
+      bgcolor: isActive ? colors.blueAccent[700] : colors.grey[700],
       color: colors.bg[100],
       fontWeight: "bold",
     };
@@ -162,6 +266,9 @@ export default function ManageEmployees() {
     try {
       await apiRequest(`/ui/employees/${pk}/delete/`, {
         method: "POST",
+        body: JSON.stringify({
+          email: employee.email,
+        }),
       });
 
       // Refresh the list after successful deletion
@@ -175,127 +282,142 @@ export default function ManageEmployees() {
   return (
     <>
       <Topbar>
-        <Typography variant="h5" fontWeight="bold">
-          Employee Management
-        </Typography>
+        <Box
+          display="flex"
+          justifyContent="space-between"
+          alignItems="center"
+          width="100%"
+        >
+          <Typography variant="h5" fontWeight="bold">
+            Employee Management
+          </Typography>
+        </Box>
       </Topbar>
 
       <Paper sx={{ p: 2, borderRadius: 3, mt: 2, boxShadow: "none" }}>
-        {loading && (
-          <Typography color="text.secondary" sx={{ p: 2 }}>
-            Loading employees...
-          </Typography>
-        )}
-
-        {!loading && employees.length === 0 && (
+        {loading ? (
+          <Box
+            display="flex"
+            flexDirection="column"
+            alignItems="center"
+            justifyContent="center"
+            gap={1}
+            py={4}
+          >
+            <DotLoader size={48} color={colors.blueAccent[500]} />
+            <Typography color="text.secondary">Loading employees...</Typography>
+          </Box>
+        ) : employees.length === 0 ? (
           <Typography color="text.secondary" sx={{ p: 2 }}>
             No employees found.
           </Typography>
-        )}
+        ) : (
+          <Box sx={{ width: "100%", overflowX: "auto" }}>
+            <TableContainer sx={{ minWidth: 800 }}>
+              <Table>
+                <TableHead>
+                  <TableRow>
+                    <TableCell sx={tableCellStyle}>
+                      <b>Employee Details</b>
+                    </TableCell>
+                    <TableCell sx={tableCellStyle}>
+                      <b>Email Address</b>
+                    </TableCell>
+                    <TableCell sx={tableCellStyle}>
+                      <b>Status</b>
+                    </TableCell>
+                    <TableCell sx={tableCellStyle}>
+                      <b>Actions</b>
+                    </TableCell>
+                  </TableRow>
+                </TableHead>
+                <TableBody>
+                  {employees.map((emp) => (
+                    <TableRow key={emp.id || emp.pk || emp.uuid}>
+                      <TableCell sx={tableCellStyle}>
+                        <Box display="flex" alignItems="center" gap={1}>
+                          <Avatar sx={getAvatarStyles(emp)}>
+                            {emp.firstName?.[0] || emp.first_name?.[0] || "?"}
+                          </Avatar>
+                          {emp.firstName || emp.first_name}{" "}
+                          {emp.lastName || emp.last_name}
+                        </Box>
+                      </TableCell>
 
-        {!loading && employees.length > 0 && (
-          <Table>
-            <TableHead>
-              <TableRow sx={{}}>
-                <TableCell>
-                  <b>Employee Details</b>
-                </TableCell>
-                <TableCell>
-                  <b>Email Address</b>
-                </TableCell>
-                <TableCell>
-                  <b>Status</b>
-                </TableCell>
-                <TableCell>
-                  <b>Actions</b>
-                </TableCell>
-              </TableRow>
-            </TableHead>
+                      <TableCell sx={tableCellStyle}>{emp.email}</TableCell>
 
-            <TableBody>
-              {employees.map((emp) => (
-                <TableRow key={emp.id || emp.pk || emp.uuid}>
-                  <TableCell>
-                    <Box display="flex" alignItems="center" gap={1}>
-                      <Avatar sx={getAvatarStyles(emp)}>
-                        {emp.firstName?.[0] || emp.first_name?.[0] || "?"}
-                      </Avatar>
+                      <TableCell sx={tableCellStyle}>
+                        <Chip
+                          label={
+                            emp.status ||
+                            (emp.is_active ? "Active" : "Deactivated")
+                          }
+                          sx={{
+                            backgroundColor:
+                              emp.status === "Active" || emp.is_active
+                                ? colors.greenAccent[900]
+                                : colors.grey[900],
+                            color:
+                              emp.status === "Active" || emp.is_active
+                                ? colors.greenAccent[400]
+                                : colors.grey[500],
+                            border: `1px solid ${
+                              emp.status === "Active" || emp.is_active
+                                ? colors.greenAccent[400]
+                                : colors.grey[500]
+                            }`,
+                            fontWeight: "bold",
+                          }}
+                        />
+                      </TableCell>
 
-                      {emp.firstName || emp.first_name}{" "}
-                      {emp.lastName || emp.last_name}
-                    </Box>
-                  </TableCell>
+                      <TableCell sx={tableCellStyle}>
+                        <Box display="flex" gap={1}>
+                          <Button
+                            size="small"
+                            variant="contained"
+                            onClick={() => toggleStatus(emp)}
+                            disabled={loading}
+                            sx={{
+                              ...getActionButtonStyles(
+                                emp.status === "Active" || emp.is_active
+                                  ? "deactivate"
+                                  : "activate"
+                              ),
+                              textTransform: "none",
+                              fontWeight: "bold",
+                              borderRadius: 1,
+                              boxShadow: "none",
+                            }}
+                          >
+                            {emp.status === "Active" || emp.is_active
+                              ? "Deactivate"
+                              : "Activate"}
+                          </Button>
 
-                  <TableCell>{emp.email}</TableCell>
-
-                  <TableCell>
-                    <Chip
-                      label={
-                        emp.status || (emp.is_active ? "Active" : "Deactivated")
-                      }
-                      sx={{
-                        backgroundColor:
-                          emp.status === "Active" || emp.is_active
-                            ? colors.greenAccent[900]
-                            : colors.grey[900],
-                        color:
-                          emp.status === "Active" || emp.is_active
-                            ? colors.greenAccent[400]
-                            : colors.grey[500],
-                        border: `1px solid ${emp.status === "Active" || emp.is_active
-                            ? colors.greenAccent[400]
-                            : colors.grey[500]
-                          }`,
-                        fontWeight: "bold",
-                      }}
-                    />
-                  </TableCell>
-
-                  <TableCell>
-                    <Box display="flex" gap={1}>
-                      <Button
-                        size="small"
-                        variant="contained"
-                        onClick={() => toggleStatus(emp)}
-                        disabled={loading}
-                        sx={{
-                          ...getActionButtonStyles(
-                            emp.status === "Active" || emp.is_active
-                              ? "deactivate"
-                              : "activate"
-                          ),
-                          textTransform: "none",
-                          fontWeight: "bold",
-                          borderRadius: 1,
-                          boxShadow: "none",
-                        }}
-                      >
-                        {emp.status === "Active" || emp.is_active
-                          ? "Deactivate"
-                          : "Activate"}
-                      </Button>
-
-                      <Button
-                        size="small"
-                        variant="contained"
-                        onClick={() => handleDelete(emp)}
-                        disabled={loading}
-                        sx={{
-                          ...getActionButtonStyles("delete"),
-                          textTransform: "none",
-                          fontWeight: "bold",
-                          borderRadius: 1,
-                          boxShadow: "none",
-                        }}
-                      >
-                        Delete
-                      </Button>
-                    </Box>
-                  </TableCell>
-                </TableRow>
-              ))}
-            </TableBody>
-          </Table>
+                          <Button
+                            size="small"
+                            variant="contained"
+                            onClick={() => handleDelete(emp)}
+                            disabled={loading}
+                            sx={{
+                              ...getActionButtonStyles("delete"),
+                              textTransform: "none",
+                              fontWeight: "bold",
+                              borderRadius: 1,
+                              boxShadow: "none",
+                            }}
+                          >
+                            Delete
+                          </Button>
+                        </Box>
+                      </TableCell>
+                    </TableRow>
+                  ))}
+                </TableBody>
+              </Table>
+            </TableContainer>
+          </Box>
         )}
       </Paper>
     </>
