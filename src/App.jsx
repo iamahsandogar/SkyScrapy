@@ -56,7 +56,7 @@ export default function App() {
       {/* Public routes */}
       <Route path="/login" element={<Login />} />
       <Route path="/forgot-password" element={<ForgotPassword />} />
-      <Route path="/reset-password" element={<ResetPassword />} />
+      <Route path="/reset-password/:uid/:token" element={<ResetPassword />} />
 
       {/* Protected routes */}
       <Route element={<AuthGuard />}>

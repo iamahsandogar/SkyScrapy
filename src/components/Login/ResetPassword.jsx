@@ -9,15 +9,14 @@ import {
   InputAdornment,
   Alert,
 } from "@mui/material";
-import { useSearchParams } from "react-router-dom";
+import { useParams, useNavigate } from "react-router-dom";
 import Visibility from "@mui/icons-material/Visibility";
 import VisibilityOff from "@mui/icons-material/VisibilityOff";
 import { authAPI } from "../services/api";
 
 export default function ResetPassword() {
-  const [search] = useSearchParams();
-  const uid = search.get("uid") || undefined;
-  const token = search.get("token") || undefined;
+  const { uid, token } = useParams();
+  const navigate = useNavigate();
 
   const [passwords, setPasswords] = useState({
     password: "",
@@ -38,12 +37,24 @@ export default function ResetPassword() {
   const handleUpdate = async () => {
     const { password, confirmPassword } = passwords;
 
+    // Validation
     if (!password || !confirmPassword) {
       setError("Please fill both password fields");
       return;
     }
+
+    if (password.length < 8) {
+      setError("Password must be at least 8 characters long");
+      return;
+    }
+
     if (password !== confirmPassword) {
       setError("Passwords do not match");
+      return;
+    }
+
+    if (!uid || !token) {
+      setError("Invalid reset link. Please check your email for the correct link.");
       return;
     }
 
@@ -52,17 +63,24 @@ export default function ResetPassword() {
     setMessage("");
 
     try {
-      // Send what your backend expects; uid/token are optional if your link encodes them
+      // POST to /api/common/auth/password-reset-confirm/ with { uid, token, password }
       const payload = {
+        uid,
+        token,
         password,
-        confirm_password: confirmPassword,
-        ...(uid ? { uid } : {}),
-        ...(token ? { token } : {}),
       };
+      
       const res = await authAPI.passwordResetConfirm(payload);
+      
+      // On success, redirect to login page
       setMessage(
-        res?.message || "Your password has been updated successfully."
+        res?.message || "Your password has been updated successfully. Redirecting to login..."
       );
+      
+      // Redirect to login after 2 seconds
+      setTimeout(() => {
+        navigate("/login");
+      }, 2000);
     } catch (err) {
       setError(err?.message || "Failed to reset password. Please try again.");
     } finally {
