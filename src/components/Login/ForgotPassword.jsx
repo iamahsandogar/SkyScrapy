@@ -6,11 +6,18 @@ import {
   TextField,
   Button,
   Alert,
+  IconButton,
 } from "@mui/material";
 import { useLocation } from "react-router-dom";
 import { authAPI } from "../services/api";
+import { useTheme } from "../../contexts/ThemeContext";
+import { getColors } from "../../design-system/tokens";
+import LightModeIcon from "@mui/icons-material/LightMode";
+import DarkModeIcon from "@mui/icons-material/DarkMode";
 
 export default function ForgotPassword() {
+  const { mode, toggleTheme } = useTheme();
+  const colors = getColors(mode);
   const [email, setEmail] = useState("");
   const [loading, setLoading] = useState(false);
   const [message, setMessage] = useState("");
@@ -53,10 +60,39 @@ export default function ForgotPassword() {
         display: "flex",
         justifyContent: "center",
         alignItems: "center",
-        backgroundColor: "#f5f5f5",
+        backgroundColor:
+          mode === "dark" ? colors.primary[500] : colors.bg[500],
+        position: "relative",
       }}
     >
-      <Paper elevation={3} sx={{ width: 380, padding: 4, borderRadius: 4 }}>
+      <IconButton
+        onClick={toggleTheme}
+        sx={{
+          position: "absolute",
+          top: 20,
+          right: 20,
+          color: mode === "dark" ? colors.grey[100] : colors.grey[100],
+          backgroundColor:
+            mode === "dark" ? colors.primary[600] : colors.bg[100],
+          "&:hover": {
+            backgroundColor:
+              mode === "dark" ? colors.primary[700] : colors.grey[200],
+          },
+        }}
+      >
+        {mode === "dark" ? <LightModeIcon /> : <DarkModeIcon />}
+      </IconButton>
+      <Paper
+        elevation={3}
+        sx={{
+          width: 380,
+          padding: 4,
+          borderRadius: 4,
+          backgroundColor:
+            mode === "dark" ? colors.primary[600] : colors.bg[100],
+          color: mode === "dark" ? colors.grey[100] : colors.grey[100],
+        }}
+      >
         <Box
           sx={{
             display: "flex",
@@ -70,7 +106,14 @@ export default function ForgotPassword() {
             alt="SLCW Icon"
             style={{ width: "180px", height: "55px", objectFit: "contain" }}
           />
-          <Typography variant="h5" fontWeight="bold" mt={1}>
+          <Typography
+            variant="h5"
+            fontWeight="bold"
+            mt={1}
+            sx={{
+              color: mode === "dark" ? colors.grey[100] : colors.grey[100],
+            }}
+          >
             Forgot Password
           </Typography>
         </Box>

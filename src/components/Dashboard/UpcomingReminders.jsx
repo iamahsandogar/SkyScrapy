@@ -21,16 +21,6 @@ import {
   resolveTextValue,
 } from "./leadUtils";
 
-const normalizeReminders = (payload) => {
-  if (!payload) return [];
-  if (Array.isArray(payload)) return payload;
-  if (Array.isArray(payload.reminders)) return payload.reminders;
-  if (Array.isArray(payload.data)) return payload.data;
-  if (Array.isArray(payload.data?.reminders)) return payload.data.reminders;
-  if (Array.isArray(payload.results)) return payload.results;
-  return [];
-};
-
 const parseDueDate = (reminder) => {
   if (!reminder) return null;
   const possible =
@@ -164,24 +154,35 @@ function UpcomingReminders({ data }) {
   const [dialogOpen, setDialogOpen] = useState(false);
 
   // Extract data from props (from /api/common/dashboard/)
-  const leads = useMemo(() => data?.leads || [], [data?.leads]);
   const statuses = useMemo(() => data?.statuses || [], [data?.statuses]);
-  const remindersData = useMemo(() => data?.reminders || [], [data?.reminders]);
+  const remindersData = useMemo(() => data?.reminders || {}, [data?.reminders]);
 
-  // Process reminders and follow-ups from the data
-  const reminders = useMemo(() => normalizeReminders(remindersData), [remindersData]);
-  
+  // Process reminders from the new API structure
   const futureFollowUps = useMemo(() => {
-    const normalizedLeads = leads;
-    const now = new Date().getTime();
-    return normalizedLeads
+    // Combine overdue, due_today, and upcoming leads
+    const overdueLeads = remindersData.overdue?.leads || [];
+    const dueTodayLeads = remindersData.due_today?.leads || [];
+    const upcomingLeads = remindersData.upcoming?.leads || [];
+    
+    const allLeads = [...overdueLeads, ...dueTodayLeads, ...upcomingLeads];
+    
+    return allLeads
       .map((lead) => ({
         lead,
         followUp: normalizeDateValue(getFollowUpTimestamp(lead)),
       }))
-      .filter(({ followUp }) => followUp && followUp.getTime() > now)
-      .sort((a, b) => a.followUp.getTime() - b.followUp.getTime());
-  }, [leads]);
+      .filter(({ followUp }) => followUp)
+      .sort((a, b) => (a.followUp?.getTime() || 0) - (b.followUp?.getTime() || 0));
+  }, [remindersData]);
+
+  // Create reminders array from leads with follow-ups
+  const reminders = useMemo(() => {
+    return futureFollowUps.map(({ lead, followUp }) => ({
+      ...lead,
+      title: lead.title || getLeadTitle(lead),
+      dueDate: followUp,
+    }));
+  }, [futureFollowUps]);
 
   const cardStyles = {
     flex: 1,

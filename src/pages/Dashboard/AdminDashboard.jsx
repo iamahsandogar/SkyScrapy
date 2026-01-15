@@ -29,10 +29,63 @@ export default function AdminDashboard() {
     const fetchDashboardData = async () => {
       try {
         setLoading(true);
-        const response = await apiRequest("/api/common/dashboard/");
-        setDashboardData(response);
+        
+        // Fetch dashboard data and employees in parallel
+        const [dashboardResponse, employeesResponse] = await Promise.all([
+          apiRequest("/api/common/dashboard/"),
+          // apiRequest("/ui/employees/").catch(err => {
+          //   console.warn("Failed to fetch employees:", err);
+          //   return [];
+          // })
+        ]);
+        
+        console.log("Dashboard API Response:", dashboardResponse);
+        console.log("Employees API Response:", employeesResponse);
+        
+        if (dashboardResponse) {
+          // Transform API response to expected format
+          const reminders = dashboardResponse.reminders || {};
+          
+          // Collect all leads from reminders sections
+          const allLeads = [
+            ...(reminders.overdue?.leads || []),
+            ...(reminders.due_today?.leads || []),
+            ...(reminders.upcoming?.leads || []),
+            ...(reminders.done?.leads || []),
+          ];
+          
+          // Transform lead_statuses to statuses format
+          const statuses = (dashboardResponse.lead_statuses || []).map(s => ({
+            id: s.status_id,
+            name: s.status_name,
+            count: s.count,
+          }));
+          
+          // Calculate total leads from status counts
+          const totalLeadsCount = (dashboardResponse.lead_statuses || []).reduce((sum, s) => sum + s.count, 0);
+          
+          // Parse employees response
+          const employeesList = employeesResponse?.employees || employeesResponse || [];
+          
+          const dashboardPayload = {
+            leads: allLeads,
+            statuses: statuses,
+            lead_statuses: dashboardResponse.lead_statuses || [],
+            employees: Array.isArray(employeesList) ? employeesList : [],
+            unread_notes: dashboardResponse.unread_notes || { notes: [], unread_count: 0 },
+            reminders: reminders,
+            always_active: dashboardResponse.always_active || { count: 0 },
+            total_leads_count: totalLeadsCount,
+          };
+          
+          setDashboardData(dashboardPayload);
+        } else {
+          console.warn("Dashboard API returned empty response");
+          setDashboardData({ leads: [], employees: [], statuses: [], lead_statuses: [], unread_notes: { notes: [], unread_count: 0 }, reminders: {}, always_active: { count: 0 }, total_leads_count: 0 });
+        }
       } catch (err) {
         console.error("Failed to fetch dashboard data:", err);
+        setDashboardData({ leads: [], employees: [], statuses: [], lead_statuses: [], unread_notes: { notes: [], unread_count: 0 }, reminders: {}, always_active: { count: 0 }, total_leads_count: 0 });
       } finally {
         setLoading(false);
       }

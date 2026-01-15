@@ -262,8 +262,18 @@ export default function MonthlyRemindersCalendar({ data }) {
   const [selectedDate, setSelectedDate] = useState(() => new Date());
 
   // Extract data from props (from /api/common/dashboard/)
-  const leads = data?.leads || [];
+  const remindersData = data?.reminders || {};
   const statuses = data?.statuses || [];
+  
+  // Combine all leads from reminders sections
+  const leads = useMemo(() => {
+    const overdueLeads = remindersData.overdue?.leads || [];
+    const dueTodayLeads = remindersData.due_today?.leads || [];
+    const upcomingLeads = remindersData.upcoming?.leads || [];
+    const doneLeads = remindersData.done?.leads || [];
+    return [...overdueLeads, ...dueTodayLeads, ...upcomingLeads, ...doneLeads];
+  }, [remindersData]);
+  
   const reminders = useMemo(() => normalizeLeads(leads), [leads]);
 
   const remindersByDate = useMemo(() => {

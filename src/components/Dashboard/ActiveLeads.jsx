@@ -126,8 +126,16 @@ function ActiveLeads({ data }) {
   const [dialogOpen, setDialogOpen] = useState(false);
 
   // Extract data from props (from /api/common/dashboard/)
-  const leads = data?.leads || [];
+  const remindersData = data?.reminders || {};
   const statuses = data?.statuses || [];
+  
+  // Get leads from reminders (upcoming, due_today, overdue)
+  const leads = useMemo(() => {
+    const overdueLeads = remindersData.overdue?.leads || [];
+    const dueTodayLeads = remindersData.due_today?.leads || [];
+    const upcomingLeads = remindersData.upcoming?.leads || [];
+    return [...overdueLeads, ...dueTodayLeads, ...upcomingLeads];
+  }, [remindersData]);
 
   const cardStyles = {
     flex: 1,

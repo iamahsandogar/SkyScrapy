@@ -165,61 +165,36 @@ export default function ChartBox({ data }) {
   ];
 
   // Extract data from props (from /api/common/dashboard/)
-  const leads = data?.leads || [];
-  const statuses = data?.statuses || [];
+  const leadStatuses = data?.lead_statuses || [];
+  const totalLeadsCount = data?.total_leads_count || 0;
 
-  const matchStatusValue = (lead, targetPhrase) => {
-    const statusLabel = resolveLeadStatusLabel(lead, statuses);
-    const normalized = normalizeStatusKey(statusLabel);
-    if (!normalized) return false;
-    return normalized.includes(targetPhrase);
+  // Helper to get count from lead_statuses by status name
+  const getStatusCount = (statusName) => {
+    const normalizedTarget = normalizeStatusKey(statusName);
+    const found = leadStatuses.find(s => 
+      normalizeStatusKey(s.status_name).includes(normalizedTarget)
+    );
+    return found?.count || 0;
   };
 
-  const activeFollowUpStatuses = ["pending", "done", "none"];
-  const doneOrNoneStatuses = ["done", "none"];
-
   const cardStats = useMemo(() => {
-    const safeTotal = leads.length > 0 ? leads.length : 1;
-    const matchers = {
-      completed: (lead) => {
-        const followUp = getFollowUpStatusLabel(lead);
-        return (
-          matchStatusValue(lead, "completed") &&
-          doneOrNoneStatuses.includes(followUp)
-        );
-      },
-      in_progress: (lead) => {
-        const followUp = getFollowUpStatusLabel(lead);
-        return (
-          matchStatusValue(lead, "in progress") &&
-          activeFollowUpStatuses.includes(followUp)
-        );
-      },
-      pending: (lead) => {
-        const followUp = getFollowUpStatusLabel(lead);
-        return (
-          matchStatusValue(lead, "pending") &&
-          activeFollowUpStatuses.includes(followUp)
-        );
-      },
-      rejected: (lead) => {
-        const followUp = getFollowUpStatusLabel(lead);
-        return (
-          matchStatusValue(lead, "rejected") &&
-          doneOrNoneStatuses.includes(followUp)
-        );
-      },
-    };
-
+    const safeTotal = totalLeadsCount > 0 ? totalLeadsCount : 1;
+    
     return CARD_CONFIG.map((card) => {
-      const filterFn = matchers[card.key] ?? (() => false);
-      const count = leads.filter(filterFn).length;
+      // Map card key to status name for lookup
+      const statusNameMap = {
+        completed: "completed",
+        in_progress: "in progress",
+        pending: "pending",
+        rejected: "rejected",
+      };
+      const count = getStatusCount(statusNameMap[card.key] || card.key);
       const percent = Math.round((count / safeTotal) * 100);
       return { ...card, count, percent };
     });
-  }, [leads, statuses]);
+  }, [leadStatuses, totalLeadsCount]);
 
-  const totalLeads = leads.length;
+  const totalLeads = totalLeadsCount;
   const chartData = cardStats.map(({ key, label, color, count, percent }) => ({
     key,
     label,

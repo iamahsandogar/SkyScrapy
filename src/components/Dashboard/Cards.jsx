@@ -7,92 +7,8 @@ const normalizeText = (value) => {
   return value.toString().replace(/\s+/g, " ").trim().toLowerCase();
 };
 
-const extractStatusName = (statusObj) => {
-  if (!statusObj) return "";
-  if (typeof statusObj === "string") return statusObj;
-  if (typeof statusObj === "object" && statusObj !== null) {
-    return (
-      statusObj.name ||
-      statusObj.status ||
-      statusObj.status_name ||
-      statusObj.label ||
-      statusObj.title ||
-      statusObj.value ||
-      statusObj.key ||
-      ""
-    );
-  }
-  return "";
-};
-
-const resolveLeadStatusLabel = (lead, statuses) => {
-  if (!lead) return "";
-  const candidateStatus =
-    lead.status ??
-    lead.status_id ??
-    lead.statusId ??
-    lead.lead_status ??
-    lead.status_obj ??
-    lead.statusData ??
-    null;
-
-  if (typeof candidateStatus === "object" && candidateStatus !== null) {
-    const resolved = extractStatusName(candidateStatus);
-    if (resolved) return resolved;
-  }
-
-  if (candidateStatus === null || candidateStatus === undefined) return "";
-
-  if (typeof candidateStatus === "string" && isNaN(candidateStatus)) {
-    return candidateStatus;
-  }
-
-  const normalizedId =
-    typeof candidateStatus === "string"
-      ? parseInt(candidateStatus, 10)
-      : candidateStatus;
-
-  if (normalizedId === null || normalizedId === undefined) return "";
-
-  const match = (statuses || []).find((statusObj) => {
-    if (!statusObj || typeof statusObj !== "object") return false;
-    const possibleIds = [
-      statusObj.id,
-      statusObj.pk,
-      statusObj.uuid,
-      statusObj.status_id,
-      statusObj.value,
-      statusObj.key,
-    ];
-    return possibleIds.some(
-      (idCandidate) =>
-        idCandidate !== undefined &&
-        idCandidate !== null &&
-        String(idCandidate) === String(normalizedId)
-    );
-  });
-
-  if (match) {
-    const resolved = extractStatusName(match);
-    if (resolved) return resolved;
-  }
-
-  return String(normalizedId);
-};
-
 const normalizeStatusKey = (value) =>
   normalizeText(value).replace(/[-_]+/g, " ");
-
-const getFollowUpStatusLabel = (lead) => {
-  const followUpValue =
-    lead.follow_up_status ??
-    lead.followupStatus ??
-    lead.followUpStatus ??
-    lead.followup_status ??
-    null;
-  const normalized = normalizeText(followUpValue);
-  return normalized === "" ? "none" : normalized;
-};
 
 export default function Cards({ data, mode = "admin" }) {
   const dashboardMode = mode;
@@ -113,65 +29,30 @@ export default function Cards({ data, mode = "admin" }) {
     : themeColors.bg[100];
 
   // Extract data from props (from /api/common/dashboard/)
-  const leads = data?.leads || [];
   const employees = data?.employees || [];
-  const statuses = data?.statuses || [];
+  const leadStatuses = data?.lead_statuses || [];
+  const totalLeadsCount = data?.total_leads_count || 0;
   const loading = !data;
 
-  const total = leads.length || 1; // avoid divide-by-zero
-
-  const activeFollowUpStatuses = ["pending", "done", "none"];
-  const doneOrNoneStatuses = ["done", "none"];
-
-  const matchStatusValue = (lead, targetPhrase) => {
-    const statusLabel = resolveLeadStatusLabel(lead, statuses);
-    const normalized = normalizeStatusKey(statusLabel);
-    if (!normalized) return false;
-    return normalized.includes(targetPhrase);
+  // Helper to get count from lead_statuses by status name
+  const getStatusCount = (statusName) => {
+    const normalizedTarget = normalizeStatusKey(statusName);
+    const found = leadStatuses.find(s => 
+      normalizeStatusKey(s.status_name).includes(normalizedTarget)
+    );
+    return found?.count || 0;
   };
 
-  const matchers = {
-    completed: (lead) => {
-      const followUp = getFollowUpStatusLabel(lead);
-      return (
-        matchStatusValue(lead, "completed") &&
-        doneOrNoneStatuses.includes(followUp)
-      );
-    },
-    in_progress: (lead) => {
-      const followUp = getFollowUpStatusLabel(lead);
-      return (
-        matchStatusValue(lead, "in progress") &&
-        activeFollowUpStatuses.includes(followUp)
-      );
-    },
-    pending: (lead) => {
-      const followUp = getFollowUpStatusLabel(lead);
-      return (
-        matchStatusValue(lead, "pending") &&
-        activeFollowUpStatuses.includes(followUp)
-      );
-    },
-    rejected: (lead) => {
-      const followUp = getFollowUpStatusLabel(lead);
-      return (
-        matchStatusValue(lead, "rejected") &&
-        doneOrNoneStatuses.includes(followUp)
-      );
-    },
-  };
+  const total = totalLeadsCount || 1; // avoid divide-by-zero
 
-  const countByCard = (key) =>
-    leads.filter(matchers[key] ?? (() => false)).length;
-  const getPercent = (key) => Math.round((countByCard(key) / total) * 100);
+  // Get counts directly from lead_statuses API response
+  const completedCount = getStatusCount("completed");
+  const pendingCount = getStatusCount("pending");
+  const rejectedCount = getStatusCount("rejected");
 
-  const completedCount = countByCard("completed");
-  const pendingCount = countByCard("pending");
-  const completedPercent = getPercent("completed");
-  const pendingPercent = getPercent("pending");
-
-  const rejectedCount = countByCard("rejected");
-  const rejectedPercent = getPercent("rejected");
+  const completedPercent = Math.round((completedCount / total) * 100);
+  const pendingPercent = Math.round((pendingCount / total) * 100);
+  const rejectedPercent = Math.round((rejectedCount / total) * 100);
 
   const metricCardsBase = [
     {
@@ -185,7 +66,7 @@ export default function Cards({ data, mode = "admin" }) {
     {
       key: "leads",
       label: "Total Leads",
-      value: leads.length,
+      value: totalLeadsCount,
       loading: loading,
       accentGroup: "purpleAccent",
       caption: "Leads in the pipeline",
@@ -219,7 +100,7 @@ export default function Cards({ data, mode = "admin" }) {
 
   const metricCards =
     dashboardMode === "employee"
-      ? [rejectedCard, ...metricCardsBase.slice(1)]
+      ? [...metricCardsBase.slice(1), rejectedCard]  // Total Leads first, Rejected last (skip employees card)
       : metricCardsBase;
 
   return (

@@ -227,8 +227,66 @@ export default function UnreadNotesSummary({ data }) {
   const [dialogLoading, setDialogLoading] = useState(false);
   const [dialogError, setDialogError] = useState("");
 
-  // Extract unread notes summaries from props (from /api/common/dashboard/)
-  const summaries = data?.unread_notes_summary || [];
+  // Extract unread notes from props (from /api/common/dashboard/)
+  const unreadNotesData = data?.unread_notes || { notes: [], unread_count: 0 };
+  const rawNotes = unreadNotesData.notes || [];
+  const remindersData = data?.reminders || {};
+  
+  // Build a map of lead IDs to lead titles from reminders data
+  const leadTitleMap = useMemo(() => {
+    const map = new Map();
+    const allLeads = [
+      ...(remindersData.overdue?.leads || []),
+      ...(remindersData.due_today?.leads || []),
+      ...(remindersData.upcoming?.leads || []),
+      ...(remindersData.done?.leads || []),
+    ];
+    allLeads.forEach(lead => {
+      if (lead.id) {
+        map.set(String(lead.id), lead.title || lead.name || lead.company_name || "Untitled lead");
+      }
+    });
+    return map;
+  }, [remindersData]);
+  
+  // Transform notes to the expected summary format
+  const summaries = useMemo(() => {
+    // Group notes by lead
+    const leadNotesMap = new Map();
+    
+    rawNotes.forEach(note => {
+      const leadId = note.lead || resolveNoteLeadId(note);
+      if (!leadId) return;
+      
+      const leadKey = String(leadId);
+      if (!leadNotesMap.has(leadKey)) {
+        // Try to get title from leadTitleMap, then from note, then fallback
+        const leadTitle = leadTitleMap.get(leadKey) || 
+                         note.lead_title || 
+                         note.lead?.title || 
+                         "Untitled lead";
+        leadNotesMap.set(leadKey, {
+          id: leadKey,
+          title: leadTitle,
+          unreadCount: 0,
+          lastNote: null,
+          notes: [],
+        });
+      }
+      
+      const summary = leadNotesMap.get(leadKey);
+      summary.notes.push(note);
+      if (!note.is_read) {
+        summary.unreadCount += 1;
+      }
+      // Keep track of the latest note
+      if (!summary.lastNote || new Date(note.created_at) > new Date(summary.lastNote.created_at)) {
+        summary.lastNote = note;
+      }
+    });
+    
+    return Array.from(leadNotesMap.values()).filter(s => s.unreadCount > 0);
+  }, [rawNotes, leadTitleMap]);
 
   const totalUnread = useMemo(() => {
     return summaries.reduce(

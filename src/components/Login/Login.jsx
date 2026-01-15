@@ -15,7 +15,6 @@ import VisibilityOff from "@mui/icons-material/VisibilityOff";
 import { useTheme } from "../../contexts/ThemeContext";
 import { getColors } from "../../design-system/tokens";
 import { authAPI } from "../services/api";
-import { prefetchLeadData } from "../../utils/prefetchData";
 import LightModeIcon from "@mui/icons-material/LightMode";
 import DarkModeIcon from "@mui/icons-material/DarkMode";
 import { useNotification } from "../../contexts/NotificationContext";
@@ -69,13 +68,6 @@ export default function Login() {
         localStorage.setItem("user", JSON.stringify(response.user));
         localStorage.setItem("isAuth", "true");
         notifySuccess("Login Successful");
-        // Pre-fetch statuses, sources, employees, and leads in the background
-        // This ensures instant loading when user navigates to All Leads or Create Lead pages
-        // Don't wait for it - let user navigate immediately
-        prefetchLeadData().catch((err) => {
-          console.error("Background prefetch failed:", err);
-          // Don't block login if prefetch fails
-        });
         
         navigateTimer.current = setTimeout(() => {
           navigate("/dashboard", { replace: true });
