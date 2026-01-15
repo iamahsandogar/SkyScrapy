@@ -143,6 +143,14 @@ const searchForAnyName = (source, visited = new Set()) => {
 
 const getNoteAuthorId = (note) => {
   if (!note) return null;
+  // Check author.user_details.id first (as per API response structure)
+  if (note?.author?.user_details?.id) {
+    return note.author.user_details.id;
+  }
+  if (note?.author?.user_details?.user_id) {
+    return note.author.user_details.user_id;
+  }
+  // Fallback to other fields
   return (
     extractEntityId(note?.created_by) ||
     extractEntityId(note?.author) ||
@@ -427,8 +435,10 @@ export default function LeadNotesChat({ leadId }) {
       const stored = localStorage.getItem("user");
       if (!stored) return null;
       const parsed = JSON.parse(stored);
+      // Get user ID directly from parsed.id (localStorage user object structure)
+      const userId = parsed?.id || extractEntityId(parsed);
       return {
-        id: extractEntityId(parsed),
+        id: userId,
         name: buildEntityDisplayName(parsed),
       };
     } catch {
@@ -444,17 +454,23 @@ export default function LeadNotesChat({ leadId }) {
   const chatBackground = isDark
     ? themeColors.primary[600]
     : themeColors.bg[100];
-  const chatSenderBubble = themeColors.blueAccent[500];
+  // My messages (right side) - using green accent color
+  const chatSenderBubble = isDark
+    ? "#226ffe" // themeColors.greenAccent[600]
+    : "#226ffe"; //themeColors.greenAccent[500];
+  // Other messages (left side) - grey color
   const chatReceiverBubble = isDark
-    ? themeColors.blueAccent[700]
-    : themeColors.blueAccent[500];
+    ? "#aaa" //themeColors.grey[700]
+    : "#eee"; //themeColors.grey[300];
   const chatBorderColor = isDark
     ? themeColors.grey[700]
     : themeColors.grey[300];
-  const senderTextColor = themeColors.bg[100];
+  const senderTextColor = isDark
+    ? "#eee" //themeColors.grey[100]
+    : themeColors.bg[100];
   const receiverTextColor = isDark
-    ? themeColors.grey[100]
-    : themeColors.grey[900];
+    ? "#222" //themeColors.grey[100]
+    : "#333"; //themeColors.grey[900];
   const inputBackground = isDark
     ? themeColors.grey[900]
     : themeColors.grey[100];
@@ -826,23 +842,25 @@ export default function LeadNotesChat({ leadId }) {
                           <CheckCircleOutlineIcon fontSize="small" />
                         </IconButton>
                       )}
-                      {isCurrentUser && (
-                        <IconButton
-                          size="small"
-                          onClick={() => handleDeleteNote(note)}
-                          disabled={isDeletingThisNote}
-                          sx={{
-                            color: bubbleTextColor,
-                          }}
-                          aria-label="Delete note"
-                        >
-                          {isDeletingThisNote ? (
-                            <CircularProgress size={16} color="inherit" />
-                          ) : (
-                            <DeleteOutlineIcon fontSize="small" />
-                          )}
-                        </IconButton>
-                      )}
+                      {
+                        // isCurrentUser && (
+                        // <IconButton
+                        //   size="small"
+                        //   onClick={() => handleDeleteNote(note)}
+                        //   disabled={isDeletingThisNote}
+                        //   sx={{
+                        //     color: bubbleTextColor,
+                        //   }}
+                        //   aria-label="Delete note"
+                        // >
+                        //   {isDeletingThisNote ? (
+                        //     <CircularProgress size={16} color="inherit" />
+                        //   ) : (
+                        //     <DeleteOutlineIcon fontSize="small" />
+                        //   )}
+                        // </IconButton>
+                        // )
+                      }
                     </Box>
                   </Box>
                 </Box>
