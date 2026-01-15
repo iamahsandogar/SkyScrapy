@@ -1,12 +1,10 @@
-import { useCallback, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { Box, Typography, Button } from "@mui/material";
 import AddIcon from "@mui/icons-material/Add";
 import { useNavigate } from "react-router-dom";
 import Topbar from "../../components/global/Topbar";
-import QuickActions from "../../components/Dashboard/QuickActions";
 import ActiveLeads from "../../components/Dashboard/ActiveLeads";
 import UnreadNotesSummary from "../../components/Dashboard/UnreadNotesSummary";
-import LeadNotesPanel from "../../components/Dashboard/LeadNotesPanel";
 import MonthlyRemindersCalendar from "../../components/Dashboard/MonthlyRemindersCalendar";
 import ChartBox from "../../components/Dashboard/ChartBox";
 import Cards from "../../components/Dashboard/Cards";
@@ -15,6 +13,7 @@ import DotLoader from "../../components/global/DotLoader";
 import { getColors } from "../../design-system/tokens";
 import { useTheme } from "../../contexts/ThemeContext";
 import { prefetchLeadData } from "../../utils/prefetchData";
+import apiRequest from "../../components/services/api";
 
 export default function EmployeeDashboard() {
   const navigate = useNavigate();
@@ -22,51 +21,26 @@ export default function EmployeeDashboard() {
   const mode = theme?.mode ?? theme?.palette?.mode ?? "light";
   const colors = getColors(mode);
 
-  const [loadingStates, setLoadingStates] = useState({
-    cards: true,
-    chart: true,
-    calendar: true,
-    activeLeads: true,
-    upcomingReminders: true,
-    unreadNotesSummary: true,
-  });
+  const [loading, setLoading] = useState(true);
+  const [dashboardData, setDashboardData] = useState(null);
 
-  const updateLoadingState = useCallback((section, value) => {
-    setLoadingStates((prev) => {
-      if (prev[section] === value) return prev;
-      return { ...prev, [section]: value };
-    });
+  // Fetch all dashboard data from single API endpoint
+  useEffect(() => {
+    const fetchDashboardData = async () => {
+      try {
+        setLoading(true);
+        const response = await apiRequest("/api/common/dashboard/");
+        setDashboardData(response);
+      } catch (err) {
+        console.error("Failed to fetch dashboard data:", err);
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    fetchDashboardData();
   }, []);
 
-  const handleCardsLoadingChange = useCallback(
-    (value) => updateLoadingState("cards", value),
-    [updateLoadingState]
-  );
-  const handleChartLoadingChange = useCallback(
-    (value) => updateLoadingState("chart", value),
-    [updateLoadingState]
-  );
-  const handleCalendarLoadingChange = useCallback(
-    (value) => updateLoadingState("calendar", value),
-    [updateLoadingState]
-  );
-
-  const handleActiveLeadsLoadingChange = useCallback(
-    (value) => updateLoadingState("activeLeads", value),
-    [updateLoadingState]
-  );
-
-  const handleUpcomingRemindersLoadingChange = useCallback(
-    (value) => updateLoadingState("upcomingReminders", value),
-    [updateLoadingState]
-  );
-
-  const handleUnreadNotesSummaryLoadingChange = useCallback(
-    (value) => updateLoadingState("unreadNotesSummary", value),
-    [updateLoadingState]
-  );
-
-  const isDashboardLoading = Object.values(loadingStates).some(Boolean);
   const overlayBg =
     mode === "dark" ? "rgba(5, 9, 20, 0.85)" : "rgba(255, 255, 255, 0.85)";
   const overlayTextColor =
@@ -83,7 +57,7 @@ export default function EmployeeDashboard() {
 
   return (
     <Box>
-      {isDashboardLoading && (
+      {loading && (
         <Box
           sx={{
             position: "fixed",
@@ -124,7 +98,7 @@ export default function EmployeeDashboard() {
         </Box>
       </Topbar>
 
-      <Cards mode="employee" onLoadingChange={handleCardsLoadingChange} />
+      <Cards mode="employee" data={dashboardData} />
 
       <Box
         display="grid"
@@ -138,10 +112,8 @@ export default function EmployeeDashboard() {
           },
         }}
       >
-        <ChartBox onLoadingChange={handleChartLoadingChange} />
-        <MonthlyRemindersCalendar
-          onLoadingChange={handleCalendarLoadingChange}
-        />
+        <ChartBox data={dashboardData} />
+        <MonthlyRemindersCalendar data={dashboardData} />
       </Box>
 
       <Box
@@ -152,10 +124,9 @@ export default function EmployeeDashboard() {
           marginTop: 2,
         }}
       >
-        <QuickActions />
-        <UpcomingReminders onLoadingChange={handleUpcomingRemindersLoadingChange} />
-        <ActiveLeads onLoadingChange={handleActiveLeadsLoadingChange} />
-        <UnreadNotesSummary onLoadingChange={handleUnreadNotesSummaryLoadingChange} />
+        <UpcomingReminders data={dashboardData} />
+        <ActiveLeads data={dashboardData} />
+        <UnreadNotesSummary data={dashboardData} />
       </Box>
     </Box>
   );

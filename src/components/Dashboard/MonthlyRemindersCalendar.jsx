@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useMemo, useState } from "react";
 import {
   Box,
   Divider,
@@ -12,8 +12,6 @@ import ArrowBackIosNewIcon from "@mui/icons-material/ArrowBackIosNew";
 import ArrowForwardIosIcon from "@mui/icons-material/ArrowForwardIos";
 import { useTheme } from "../../contexts/ThemeContext";
 import { getColors } from "../../design-system/tokens";
-import apiRequest from "../services/api";
-import { getCachedLeadData } from "../../utils/prefetchData";
 
 const WEEK_DAYS = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
 
@@ -248,7 +246,7 @@ const getReminderTitle = (reminder) => {
   return "Untitled Reminder";
 };
 
-export default function MonthlyRemindersCalendar({ onLoadingChange }) {
+export default function MonthlyRemindersCalendar({ data }) {
   const { mode } = useTheme();
   const colors = getColors(mode);
   const isDark = mode === "dark";
@@ -261,87 +259,12 @@ export default function MonthlyRemindersCalendar({ onLoadingChange }) {
   const [currentMonth, setCurrentMonth] = useState(() => {
     return new Date(today.getFullYear(), today.getMonth(), 1);
   });
-  const [reminders, setReminders] = useState([]);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState("");
   const [selectedDate, setSelectedDate] = useState(() => new Date());
-  const [statuses, setStatuses] = useState([]);
 
-  useEffect(() => {
-    let isMounted = true;
-    const load = async () => {
-      setLoading(true);
-      try {
-        const cached = getCachedLeadData();
-        if (cached?.leads?.length) {
-          const normalized = normalizeLeads(cached.leads);
-          if (isMounted) {
-            setReminders(normalized);
-            setError("");
-          }
-        }
-
-        const response = await apiRequest("/api/leads/?page_size=200");
-        if (!isMounted) return;
-        const leadsPayload = parseLeadsPayload(response);
-        const normalized = normalizeLeads(leadsPayload);
-        setReminders(normalized);
-        setError("");
-      } catch (err) {
-        if (!isMounted) return;
-        console.error("Failed to load reminders calendar", err);
-        setError(err.message || "Unable to load reminders");
-      } finally {
-        if (isMounted) {
-          setLoading(false);
-        }
-      }
-    };
-
-    load();
-    return () => {
-      isMounted = false;
-    };
-  }, []);
-
-  useEffect(() => {
-    let isMounted = true;
-    const loadStatuses = async () => {
-      const cached = getCachedLeadData();
-      if (isMounted && cached?.statuses?.length) {
-        setStatuses(cached.statuses);
-      }
-      try {
-        // Single API call to get both statuses and sources
-        const response = await apiRequest("/ui/options/");
-        if (!isMounted) return;
-        
-        let statusesList = [];
-        if (response?.statuses && Array.isArray(response.statuses)) {
-          statusesList = response.statuses;
-        } else if (response?.data?.statuses && Array.isArray(response.data.statuses)) {
-          statusesList = response.data.statuses;
-        }
-        
-        if (statusesList.length > 0) {
-          setStatuses(statusesList);
-        }
-      } catch (err) {
-        console.error("Failed to load statuses for calendar", err);
-      }
-    };
-
-    loadStatuses();
-    return () => {
-      isMounted = false;
-    };
-  }, []);
-
-  useEffect(() => {
-    if (typeof onLoadingChange === "function") {
-      onLoadingChange(loading);
-    }
-  }, [loading, onLoadingChange]);
+  // Extract data from props (from /api/common/dashboard/)
+  const leads = data?.leads || [];
+  const statuses = data?.statuses || [];
+  const reminders = useMemo(() => normalizeLeads(leads), [leads]);
 
   const remindersByDate = useMemo(() => {
     return reminders.reduce((acc, reminder) => {
@@ -510,13 +433,7 @@ export default function MonthlyRemindersCalendar({ onLoadingChange }) {
         </Box>
       </Box>
 
-      {error ? (
-        <Box mt={4}>
-          <Typography color="error">{error}</Typography>
-        </Box>
-      ) : (
-        <>
-          <Box
+      <Box
             mt={3}
             display="flex"
             justifyContent="space-between"
@@ -730,8 +647,6 @@ export default function MonthlyRemindersCalendar({ onLoadingChange }) {
               ))
             )}
           </Stack>
-        </>
-      )}
     </Paper>
   );
 }

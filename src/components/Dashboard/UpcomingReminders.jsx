@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useMemo, useState } from "react";
+import React, { useMemo, useState } from "react";
 import {
   Box,
   Typography,
@@ -10,15 +10,11 @@ import {
   List,
   ListItem,
   ListItemText,
-  CircularProgress,
 } from "@mui/material";
 import ShoppingBagRoundedIcon from "@mui/icons-material/ShoppingBagRounded";
 import { useTheme } from "../../contexts/ThemeContext";
 import { tokens } from "../../design-system/tokens/colors.js";
-import apiRequest from "../services/api";
-import { getCachedLeadData } from "../../utils/prefetchData";
 import {
-  normalizeLeadsPayload,
   getLeadTitle,
   getFollowUpTimestamp,
   normalizeDateValue,
@@ -72,15 +68,6 @@ const formatTimeLabel = (value) => {
     minute: "2-digit",
     hour12: true,
   });
-};
-
-const parseStatusesPayload = (payload) => {
-  if (!payload) return [];
-  if (Array.isArray(payload)) return payload;
-  if (Array.isArray(payload.statuses)) return payload.statuses;
-  if (Array.isArray(payload.data)) return payload.data;
-  if (Array.isArray(payload.data?.statuses)) return payload.data.statuses;
-  return [];
 };
 
 const extractStatusName = (statusObj) => {
@@ -171,47 +158,30 @@ const resolveReminderTitle = (reminder) => {
   );
 };
 
-function UpcomingReminders({ onLoadingChange }) {
+function UpcomingReminders({ data }) {
   const { mode } = useTheme();
   const themeColors = tokens(mode);
   const [dialogOpen, setDialogOpen] = useState(false);
-  const [reminders, setReminders] = useState([]);
-  const [loadingReminders, setLoadingReminders] = useState(true);
-  const [fetchError, setFetchError] = useState("");
-  const [fetchedOnce, setFetchedOnce] = useState(false);
-  const [futureFollowUps, setFutureFollowUps] = useState([]);
-  const [futureFollowUpsLoading, setFutureFollowUpsLoading] = useState(false);
-  const [futureFollowUpsError, setFutureFollowUpsError] = useState("");
-  const [futureFollowUpsFetched, setFutureFollowUpsFetched] = useState(false);
-  const [statuses, setStatuses] = useState([]);
 
-  const fetchFutureFollowUps = useCallback(async () => {
-    if (futureFollowUpsFetched) return;
-    setFutureFollowUpsLoading(true);
-    setFutureFollowUpsError("");
-    try {
-      const response = await apiRequest("/api/leads/?page_size=200");
-      const normalizedLeads = normalizeLeadsPayload(response);
-      const now = Date.now();
-      const upcoming = normalizedLeads
-        .map((lead) => ({
-          lead,
-          followUp: normalizeDateValue(getFollowUpTimestamp(lead)),
-        }))
-        .filter(({ followUp }) => followUp && followUp.getTime() > now)
-        .sort((a, b) => a.followUp.getTime() - b.followUp.getTime());
+  // Extract data from props (from /api/common/dashboard/)
+  const leads = useMemo(() => data?.leads || [], [data?.leads]);
+  const statuses = useMemo(() => data?.statuses || [], [data?.statuses]);
+  const remindersData = useMemo(() => data?.reminders || [], [data?.reminders]);
 
-      setFutureFollowUps(upcoming);
-      setFutureFollowUpsFetched(true);
-    } catch (error) {
-      console.error("Failed to load future follow-up leads", error);
-      setFutureFollowUpsError(
-        error?.message || "Unable to load future follow-ups right now."
-      );
-    } finally {
-      setFutureFollowUpsLoading(false);
-    }
-  }, [futureFollowUpsFetched]);
+  // Process reminders and follow-ups from the data
+  const reminders = useMemo(() => normalizeReminders(remindersData), [remindersData]);
+  
+  const futureFollowUps = useMemo(() => {
+    const normalizedLeads = leads;
+    const now = new Date().getTime();
+    return normalizedLeads
+      .map((lead) => ({
+        lead,
+        followUp: normalizeDateValue(getFollowUpTimestamp(lead)),
+      }))
+      .filter(({ followUp }) => followUp && followUp.getTime() > now)
+      .sort((a, b) => a.followUp.getTime() - b.followUp.getTime());
+  }, [leads]);
 
   const cardStyles = {
     flex: 1,
@@ -230,7 +200,7 @@ function UpcomingReminders({ onLoadingChange }) {
     mode === "dark" ? themeColors.grey[200] : themeColors.grey[600];
 
   const upcomingReminders = useMemo(() => {
-    const now = Date.now();
+    const now = new Date().getTime();
     return reminders
       .map((item) => ({
         ...item,
@@ -239,71 +209,6 @@ function UpcomingReminders({ onLoadingChange }) {
       .filter((item) => item.dueDate && item.dueDate.getTime() > now)
       .sort((a, b) => a.dueDate - b.dueDate);
   }, [reminders]);
-
-  const fetchReminders = useCallback(async () => {
-    setLoadingReminders(true);
-    setFetchError("");
-    try {
-      const response = await apiRequest("/api/leads/reminders/?page_size=200");
-      const normalized = normalizeReminders(response);
-      setReminders(normalized);
-      if (!normalized.length) {
-        void fetchFutureFollowUps();
-      }
-      setFetchedOnce(true);
-    } catch (error) {
-      console.error("Failed to load reminders", error);
-      setFetchError(error?.message || "Unable to load reminders right now.");
-      if (!futureFollowUpsFetched) {
-        void fetchFutureFollowUps();
-      }
-    } finally {
-      setLoadingReminders(false);
-    }
-  }, [fetchFutureFollowUps]);
-
-  useEffect(() => {
-    void fetchReminders();
-  }, [fetchReminders]);
-
-  useEffect(() => {
-    let isMounted = true;
-    const loadStatuses = async () => {
-      const cached = getCachedLeadData();
-      if (isMounted && cached?.statuses?.length) {
-        setStatuses(cached.statuses);
-      }
-      try {
-        // Single API call to get both statuses and sources
-        const response = await apiRequest("/ui/options/");
-        if (!isMounted) return;
-        
-        let statusesList = [];
-        if (response?.statuses && Array.isArray(response.statuses)) {
-          statusesList = response.statuses;
-        } else if (response?.data?.statuses && Array.isArray(response.data.statuses)) {
-          statusesList = response.data.statuses;
-        }
-        
-        if (statusesList.length) {
-          setStatuses(statusesList);
-        }
-      } catch (err) {
-        console.error("Failed to load statuses for reminders", err);
-      }
-    };
-
-    loadStatuses();
-    return () => {
-      isMounted = false;
-    };
-  }, []);
-
-  useEffect(() => {
-    if (typeof onLoadingChange === "function") {
-      onLoadingChange(loadingReminders || futureFollowUpsLoading);
-    }
-  }, [loadingReminders, futureFollowUpsLoading, onLoadingChange]);
 
   const handleOpenDialog = () => {
     setDialogOpen(true);
@@ -319,8 +224,6 @@ function UpcomingReminders({ onLoadingChange }) {
     ? `${futureFollowUps.length} upcoming follow-up lead${
         futureFollowUps.length > 1 ? "s" : ""
       }`
-    : futureFollowUpsLoading
-    ? "Loading upcoming follow-ups"
     : "No upcoming reminders";
 
   const previewLabel = upcomingReminders[0]
@@ -365,17 +268,8 @@ function UpcomingReminders({ onLoadingChange }) {
   const hasReminderItems = upcomingReminders.length > 0;
   const shouldUseFallback = !hasReminderItems;
   const fallbackHasItems = futureFollowUps.length > 0;
-  const showSpinner =
-    loadingReminders || (shouldUseFallback && futureFollowUpsLoading);
-  const showFallbackList =
-    shouldUseFallback && !futureFollowUpsLoading && fallbackHasItems;
-  const showFallbackError =
-    shouldUseFallback && futureFollowUpsError && !futureFollowUpsLoading;
-  const showFetchError =
-    Boolean(fetchError) &&
-    !showFallbackList &&
-    !showFallbackError &&
-    !showSpinner;
+  const showSpinner = false;
+  const showFallbackList = shouldUseFallback && fallbackHasItems;
 
   return (
     <>
@@ -465,8 +359,6 @@ function UpcomingReminders({ onLoadingChange }) {
             <Box display="flex" justifyContent="center" py={4}>
               <CircularProgress size={24} />
             </Box>
-          ) : showFetchError ? (
-            <Typography color="error">{fetchError}</Typography>
           ) : hasReminderItems ? (
             <List disablePadding>
               {upcomingReminders.map((reminder) => (
@@ -535,12 +427,9 @@ function UpcomingReminders({ onLoadingChange }) {
                 </ListItem>
               ))}
             </List>
-          ) : showFallbackError ? (
-            <Typography color="error">{futureFollowUpsError}</Typography>
           ) : (
             <Typography>
-              {futureFollowUpsError ||
-                "No upcoming follow-ups are scheduled for the future."}
+              No upcoming follow-ups are scheduled for the future.
             </Typography>
           )}
         </DialogContent>

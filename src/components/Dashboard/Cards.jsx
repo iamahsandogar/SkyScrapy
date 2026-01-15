@@ -1,22 +1,10 @@
-import { useEffect, useState } from "react";
 import { Box, Paper, Typography } from "@mui/material";
-import apiRequest from "../services/api";
-import { getCachedLeadData } from "../../utils/prefetchData";
 import { getColors } from "../../design-system/tokens";
 import { useTheme } from "../../contexts/ThemeContext";
 
 const normalizeText = (value) => {
   if (value === null || value === undefined) return "";
   return value.toString().replace(/\s+/g, " ").trim().toLowerCase();
-};
-
-const parseStatusesPayload = (payload) => {
-  if (!payload) return [];
-  if (Array.isArray(payload)) return payload;
-  if (Array.isArray(payload.statuses)) return payload.statuses;
-  if (Array.isArray(payload.data)) return payload.data;
-  if (Array.isArray(payload.data?.statuses)) return payload.data.statuses;
-  return [];
 };
 
 const extractStatusName = (statusObj) => {
@@ -106,7 +94,7 @@ const getFollowUpStatusLabel = (lead) => {
   return normalized === "" ? "none" : normalized;
 };
 
-export default function Cards({ onLoadingChange, mode = "admin" }) {
+export default function Cards({ data, mode = "admin" }) {
   const dashboardMode = mode;
   const themeContext = useTheme();
   const colorMode =
@@ -121,132 +109,14 @@ export default function Cards({ onLoadingChange, mode = "admin" }) {
     ? themeColors.primary[100]
     : themeColors.primary[200];
   const cardBackgroundColor = isDarkTheme
-    ? themeColors.primary[600] ?? themeColors.primary[500]
-    : themeColors.bg[100] ?? themeColors.grey[100] ?? "#ffffff";
-  const [leads, setLeads] = useState([]);
-  const [loading, setLoading] = useState(true);
-  const [employees, setEmployees] = useState([]);
-  const [loadingEmployees, setLoadingEmployees] = useState(true);
-  const [statuses, setStatuses] = useState([]);
+    ? themeColors.primary[500]
+    : themeColors.bg[100];
 
-  useEffect(() => {
-    const fetchLeads = async () => {
-      // Try cached data first
-      const cachedData = getCachedLeadData();
-      if (cachedData?.leads) {
-        console.log("Using cached leads for dashboard cards");
-        const leadsList = cachedData.leads;
-        if (Array.isArray(leadsList)) {
-          setLeads(leadsList);
-        }
-        setLoading(false);
-
-        // Only refresh if cache is older than 30 seconds (to avoid duplicate calls right after login)
-        const cacheAge = Date.now() - cachedData.timestamp;
-        if (cacheAge > 30000) {
-          // Refresh in background
-          try {
-            const data = await apiRequest("/api/leads/");
-            let leadsList = [];
-            if (data && Array.isArray(data.leads)) {
-              leadsList = data.leads;
-            } else if (Array.isArray(data)) {
-              leadsList = data;
-            }
-            if (leadsList.length > 0) {
-              setLeads(leadsList);
-            }
-          } catch (err) {
-            console.error("Failed to refresh leads:", err);
-          }
-        }
-        return;
-      }
-
-      // No cache, fetch fresh
-      try {
-        setLoading(true);
-        const data = await apiRequest("/api/leads/");
-        if (data && Array.isArray(data.leads)) {
-          setLeads(data.leads);
-        } else if (Array.isArray(data)) {
-          setLeads(data);
-        } else {
-          setLeads([]);
-        }
-      } catch (err) {
-        console.error("Failed to fetch leads:", err);
-        setLeads([]);
-      } finally {
-        setLoading(false);
-      }
-    };
-    fetchLeads();
-  }, []);
-
-  useEffect(() => {
-    if (dashboardMode === "employee") {
-      setLoadingEmployees(false);
-      return;
-    }
-
-    const fetchEmployees = async () => {
-      const cachedData = getCachedLeadData();
-      if (cachedData?.employees) {
-        const cachedEmployees = Array.isArray(cachedData.employees)
-          ? cachedData.employees
-          : [];
-        if (cachedEmployees.length > 0) {
-          setEmployees(cachedEmployees);
-        }
-      }
-
-      try {
-        setLoadingEmployees(true);
-        const response = await apiRequest("/ui/employees/");
-        let employeesList = [];
-        if (response && Array.isArray(response.employees)) {
-          employeesList = response.employees;
-        } else if (Array.isArray(response)) {
-          employeesList = response;
-        }
-        setEmployees(employeesList);
-      } catch (error) {
-        console.error("Failed to fetch employees for dashboard cards:", error);
-      } finally {
-        setLoadingEmployees(false);
-      }
-    };
-
-    fetchEmployees();
-  }, [dashboardMode]);
-
-  useEffect(() => {
-    const fetchStatuses = async () => {
-      const cachedData = getCachedLeadData();
-      if (cachedData?.statuses) {
-        setStatuses(cachedData.statuses);
-      }
-      try {
-        // Single API call to get both statuses and sources
-        const response = await apiRequest("/ui/options/");
-        let statusesList = [];
-        
-        if (response?.statuses && Array.isArray(response.statuses)) {
-          statusesList = response.statuses;
-        } else if (response?.data?.statuses && Array.isArray(response.data.statuses)) {
-          statusesList = response.data.statuses;
-        }
-        
-        if (statusesList.length > 0) {
-          setStatuses(statusesList);
-        }
-      } catch (error) {
-        console.error("Failed to fetch statuses for cards:", error);
-      }
-    };
-    fetchStatuses();
-  }, []);
+  // Extract data from props (from /api/common/dashboard/)
+  const leads = data?.leads || [];
+  const employees = data?.employees || [];
+  const statuses = data?.statuses || [];
+  const loading = !data;
 
   const total = leads.length || 1; // avoid divide-by-zero
 
@@ -308,7 +178,7 @@ export default function Cards({ onLoadingChange, mode = "admin" }) {
       key: "employees",
       label: "Total Employees",
       value: employees.length,
-      loading: loadingEmployees,
+      loading: loading,
       accentGroup: "blueAccent",
       caption: "Active team members",
     },
@@ -351,14 +221,6 @@ export default function Cards({ onLoadingChange, mode = "admin" }) {
     dashboardMode === "employee"
       ? [rejectedCard, ...metricCardsBase.slice(1)]
       : metricCardsBase;
-
-  const isComponentLoading = loading || loadingEmployees;
-
-  useEffect(() => {
-    if (typeof onLoadingChange === "function") {
-      onLoadingChange(isComponentLoading);
-    }
-  }, [isComponentLoading, onLoadingChange]);
 
   return (
     <Box>

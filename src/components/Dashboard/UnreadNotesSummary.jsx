@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useMemo, useState } from "react";
 import {
   Box,
   Typography,
@@ -11,7 +11,8 @@ import {
 } from "@mui/material";
 import { useNavigate } from "react-router-dom";
 import apiRequest from "../services/api";
-import { colors } from "../../design-system/tokens";
+import { tokens } from "../../design-system/tokens/colors.js";
+import { useTheme } from "../../contexts/ThemeContext";
 
 const normalizeLeadId = (lead) => {
   if (!lead) return null;
@@ -208,154 +209,33 @@ const buildSummariesFromAggregatedData = (items, leadMap) => {
     .filter(Boolean);
 };
 
-export default function UnreadNotesSummary({ onLoadingChange }) {
+export default function UnreadNotesSummary({ data }) {
   const navigate = useNavigate();
-  const [summaries, setSummaries] = useState([]);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState("");
+  const { mode } = useTheme();
+  const colors = tokens(mode);
+
+  // Theme-aware colors
+  const backgroundColor = mode === "dark" ? colors.primary[600] : colors.bg[100];
+  const cardBackground = mode === "dark" ? colors.primary[500] : colors.bg[200];
+  const borderColor = mode === "dark" ? colors.grey[600] : colors.grey[800];
+  const headingColor = colors.grey[100];
+  const textColor = mode === "dark" ? colors.grey[100] : colors.grey[200];
+  const secondaryTextColor = mode === "dark" ? colors.grey[200] : colors.grey[600];
+  
   const [dialogOpen, setDialogOpen] = useState(false);
   const [selectedSummary, setSelectedSummary] = useState(null);
   const [dialogLoading, setDialogLoading] = useState(false);
   const [dialogError, setDialogError] = useState("");
 
+  // Extract unread notes summaries from props (from /api/common/dashboard/)
+  const summaries = data?.unread_notes_summary || [];
+
   const totalUnread = useMemo(() => {
     return summaries.reduce(
-      (total, item) => total + (item.unreadCount || 0),
+      (total, item) => total + (item.unreadCount || item.unread_count || 0),
       0
     );
   }, [summaries]);
-
-  const fetchLeadPool = useCallback(async () => {
-    const leads = [];
-    let nextUrl = "/api/leads/?page_size=30";
-    const MAX_LEADS = 60;
-
-    while (nextUrl && leads.length < MAX_LEADS) {
-      try {
-        const page = await apiRequest(nextUrl);
-        const pageLeads = toArray(page);
-        leads.push(...pageLeads);
-        nextUrl = page?.next || null;
-      } catch (err) {
-        console.error("Failed to fetch leads for unread summary", err);
-        nextUrl = null;
-      }
-    }
-
-    return leads.slice(0, MAX_LEADS);
-  }, []);
-
-  const collectNoteSummaries = (notes, leadMap) => {
-    const aggregated = new Map();
-    const pickTimestamp = (note) => {
-      const value =
-        note.created_at || note.createdAt || note.sent_at || note.timestamp;
-      return value ? new Date(value).getTime() : 0;
-    };
-
-    for (const note of notes) {
-      const leadId = resolveNoteLeadId(note);
-      if (!leadId) continue;
-      const idKey = String(leadId);
-      const existing = aggregated.get(idKey) || {
-        id: idKey,
-        title: "",
-        unreadCount: 0,
-        lastNote: null,
-      };
-
-      existing.unreadCount += 1;
-
-      if (!existing.lastNote) {
-        existing.lastNote = note;
-      } else {
-        const currentTs = pickTimestamp(existing.lastNote);
-        const candidateTs = pickTimestamp(note);
-        if (candidateTs > currentTs) {
-          existing.lastNote = note;
-        }
-      }
-
-      if (!existing.title) {
-        const mappedLead = leadMap.get(idKey);
-        if (mappedLead) {
-          existing.title = buildLeadLabel(mappedLead);
-        } else if (note.lead) {
-          existing.title = buildLeadLabel(note.lead);
-        }
-      }
-
-      aggregated.set(idKey, existing);
-    }
-
-    const results = [];
-    aggregated.forEach((value) => {
-      if (!value.title) {
-        value.title = "Untitled lead";
-      }
-      results.push(value);
-    });
-    return results;
-  };
-
-  const loadSummaries = useCallback(async () => {
-    setLoading(true);
-    setError("");
-    try {
-      const leadList = await fetchLeadPool();
-      const leadMap = new Map();
-      leadList.forEach((lead) => {
-        const leadId = normalizeLeadId(lead);
-        if (leadId) {
-          leadMap.set(String(leadId), lead);
-        }
-      });
-      // Fetch unread notes for each lead (API only supports per-lead endpoint)
-      const results = await Promise.all(
-        leadList.map(async (lead) => {
-          const leadId = normalizeLeadId(lead);
-          if (!leadId) return null;
-          
-          try {
-            const unreadResponse = await apiRequest(
-              `/api/leads/${leadId}/notes/unread/`
-            );
-            const unreadList = toArray(unreadResponse);
-            if (!unreadList.length) return null;
-            
-            const lastUnread = unreadList[unreadList.length - 1];
-            return {
-              id: leadId,
-              title: buildLeadLabel(lead),
-              unreadCount: unreadList.length,
-              lastNote: lastUnread,
-            };
-          } catch (err) {
-            // Silently skip leads with no unread notes or API errors
-            return null;
-          }
-        })
-      );
-      
-      const noteSummaries = results.filter(Boolean);
-      setSummaries(noteSummaries);
-    } catch (err) {
-      console.error("Failed to load unread notes summary", err);
-      setError("Unable to load unread notes right now.");
-    } finally {
-      setLoading(false);
-    }
-  }, [fetchLeadPool]);
-
-  useEffect(() => {
-    loadSummaries();
-  }, [loadSummaries]);
-
-  useEffect(() => {
-    if (typeof onLoadingChange === "function") {
-      onLoadingChange(loading);
-    }
-  }, [loading, onLoadingChange]);
 
   const closeDialog = useCallback(() => {
     setDialogOpen(false);
@@ -386,7 +266,6 @@ export default function UnreadNotesSummary({ onLoadingChange }) {
     setDialogError("");
     try {
       await markNoteAsRead(selectedSummary);
-      await loadSummaries();
       closeDialog();
     } catch (err) {
       console.error("Failed to mark note as read", err);
@@ -394,7 +273,7 @@ export default function UnreadNotesSummary({ onLoadingChange }) {
     } finally {
       setDialogLoading(false);
     }
-  }, [closeDialog, loadSummaries, markNoteAsRead, selectedSummary]);
+  }, [closeDialog, markNoteAsRead, selectedSummary]);
 
   const handleGoToLead = useCallback(async () => {
     if (!selectedSummary) return;
@@ -402,7 +281,6 @@ export default function UnreadNotesSummary({ onLoadingChange }) {
     setDialogError("");
     try {
       await markNoteAsRead(selectedSummary);
-      await loadSummaries();
       closeDialog();
       const leadId = selectedSummary.id;
       navigate(`/all-leads?focusLeadId=${encodeURIComponent(leadId)}`, {
@@ -414,7 +292,7 @@ export default function UnreadNotesSummary({ onLoadingChange }) {
     } finally {
       setDialogLoading(false);
     }
-  }, [closeDialog, loadSummaries, markNoteAsRead, navigate, selectedSummary]);
+  }, [closeDialog, markNoteAsRead, navigate, selectedSummary]);
 
   const dialogAuthor = useMemo(
     () => getNoteAuthorLabel(selectedSummary?.lastNote),
@@ -444,15 +322,14 @@ export default function UnreadNotesSummary({ onLoadingChange }) {
         minWidth: "320px",
         borderRadius: "12px",
         padding: 3,
-        backgroundColor: colors.bg[100],
-        border: `1px solid ${colors.grey[900]}`,
+        backgroundColor: backgroundColor,
         display: "flex",
         flexDirection: "column",
         gap: 1,
       }}
     >
       <Box display="flex" justifyContent="space-between" alignItems="center">
-        <Typography variant="h6" fontWeight={700}>
+        <Typography variant="h6" fontWeight={700} color={headingColor}>
           Unread Notes
         </Typography>
         <Chip
@@ -461,7 +338,7 @@ export default function UnreadNotesSummary({ onLoadingChange }) {
           color={totalUnread ? "warning" : "default"}
         />
       </Box>
-      <Typography variant="caption" color="text.secondary">
+      <Typography variant="caption" color={secondaryTextColor}>
         Highlights of unread conversations for recent leads.
       </Typography>
       <Box
@@ -473,21 +350,13 @@ export default function UnreadNotesSummary({ onLoadingChange }) {
           overflowY: summaries.length ? "auto" : "hidden",
         }}
       >
-        {loading ? (
-          <Typography variant="body2" color="text.secondary">
-            Loading unread notes...
-          </Typography>
-        ) : error ? (
-          <Typography variant="body2" color="error">
-            {error}
-          </Typography>
-        ) : !summaries.length ? (
-          <Typography variant="body2" color="text.secondary">
+        {!summaries.length ? (
+          <Typography variant="body2" color={secondaryTextColor}>
             No unread notes right now.
           </Typography>
         ) : (
           summaries.map((item) => {
-            const messagePreview = extractNoteMessage(item.lastNote);
+            const messagePreview = extractNoteMessage(item.lastNote || item.last_note);
             return (
               <Box
                 key={item.id}
@@ -502,25 +371,25 @@ export default function UnreadNotesSummary({ onLoadingChange }) {
                 }}
                 sx={{
                   borderRadius: "10px",
-                  border: `1px solid ${colors.grey[800]}`,
+                  border: `1px solid ${borderColor}`,
                   padding: 1.5,
-                  backgroundColor: colors.bg[200],
+                  backgroundColor: cardBackground,
                   cursor: "pointer",
                 }}
               >
                 <Box display="flex" justifyContent="space-between" gap={1}>
-                  <Typography variant="body2" fontWeight={600}>
+                  <Typography variant="body2" fontWeight={600} color={textColor}>
                     {item.title}
                   </Typography>
                   <Chip
                     size="small"
-                    label={`${item.unreadCount} unread`}
+                    label={`${item.unreadCount || item.unread_count} unread`}
                     color="warning"
                   />
                 </Box>
                 <Typography
                   variant="caption"
-                  color="text.secondary"
+                  color={secondaryTextColor}
                   display="block"
                 >
                   {messagePreview}
@@ -530,15 +399,6 @@ export default function UnreadNotesSummary({ onLoadingChange }) {
           })
         )}
       </Box>
-      <Button
-        size="small"
-        variant="text"
-        onClick={loadSummaries}
-        disabled={loading}
-        sx={{ alignSelf: "flex-end" }}
-      >
-        Refresh
-      </Button>
       <Dialog
         open={dialogOpen}
         onClose={closeDialog}

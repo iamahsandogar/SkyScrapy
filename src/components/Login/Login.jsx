@@ -83,6 +83,9 @@ export default function Login() {
       }
     } catch (err) {
       const message = err.message || "Invalid email or password";
+      if (email) {
+        sessionStorage.setItem("loginFailedEmail", email);
+      }
       setError(message);
       notifyError(message);
     } finally {
@@ -203,6 +206,7 @@ export default function Login() {
         <Box sx={{ display: "flex", justifyContent: "flex-end", mb: 3 }}>
           <Link
             to="/forgot-password"
+            state={{ email: credentials.email }}
             style={{
               color: colors.blueAccent[500],
               fontSize: "14px",

@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useState } from "react";
+import React, { useEffect, useState } from "react";
 import {
   Box,
   Typography,
@@ -145,12 +145,13 @@ function UnreadNotes({ leadId }) {
     };
   }, [leadId]);
 
-  const headingColor = useMemo(
-    () => (mode === "dark" ? colors.grey[100] : colors.grey[900]),
-    [mode, colors.grey]
-  );
-  const backgroundColor =
-    mode === "dark" ? colors.primary[600] : colors.bg[100];
+  // Theme-aware colors - matching ActiveLeads styling
+  const headingColor = colors.primary[900]; // white text for both modes like ActiveLeads
+  const primaryTextColor = colors.grey[100]; // white text for both modes
+  const secondaryTextColor = mode === "dark" ? colors.grey[200] : colors.grey[600]; // muted text
+  const errorColor = mode === "dark" ? colors.redAccent[400] : colors.redAccent[500];
+  const unreadBadgeColor = mode === "dark" ? colors.blueAccent[400] : colors.blueAccent[500];
+  const emptyTextColor = mode === "dark" ? colors.grey[200] : colors.grey[600];
 
   const leadMode = leadId ? "note" : "summary";
   const hasItems = items.length > 0;
@@ -160,26 +161,23 @@ function UnreadNotes({ leadId }) {
       display="flex"
       flexDirection="column"
       gap={2}
-      bgcolor={backgroundColor}
-      borderRadius="12px"
-      padding={3}
       width="100%"
     >
-      <Typography variant="p" fontWeight="bold" color={headingColor}>
+      <Typography variant="h6" fontWeight="bold" color={headingColor}>
         Unread Notes
       </Typography>
 
       {loading ? (
         <Box display="flex" alignItems="center" gap={1}>
-          <CircularProgress size={16} color="inherit" />
-          <Typography color={headingColor}>Loading unread notes…</Typography>
+          <CircularProgress size={16} sx={{ color: primaryTextColor }} />
+          <Typography color={secondaryTextColor}>Loading unread notes…</Typography>
         </Box>
       ) : error ? (
-        <Typography color={colors.redAccent[100] || colors.redAccent[400]}>
+        <Typography color={errorColor}>
           {error}
         </Typography>
       ) : !hasItems ? (
-        <Typography color={headingColor}>
+        <Typography color={emptyTextColor}>
           {leadMode === "note" ? "No unread notes" : "No unread summaries yet"}
         </Typography>
       ) : (
@@ -200,12 +198,12 @@ function UnreadNotes({ leadId }) {
                 >
                   <ListItemText
                     primary={
-                      <Typography fontWeight={600} color={headingColor}>
+                      <Typography fontWeight={600} color={primaryTextColor}>
                         {resolveNotePreview(item.data)}
                       </Typography>
                     }
                     secondary={resolveNoteDate(item.data)}
-                    secondaryTypographyProps={{ color: colors.grey[400] }}
+                    secondaryTypographyProps={{ color: secondaryTextColor }}
                   />
                 </ListItem>
               );
@@ -219,12 +217,22 @@ function UnreadNotes({ leadId }) {
               >
                 <ListItemText
                   primary={
-                    <Typography fontWeight={600} color={headingColor}>
-                      {data.title} ({data.unreadCount} unread)
-                    </Typography>
+                    <Box display="flex" alignItems="center" gap={1}>
+                      <Typography fontWeight={600} color={primaryTextColor}>
+                        {data.title}
+                      </Typography>
+                      <Typography
+                        component="span"
+                        fontSize="0.75rem"
+                        fontWeight={600}
+                        color={unreadBadgeColor}
+                      >
+                        ({data.unreadCount} unread)
+                      </Typography>
+                    </Box>
                   }
                   secondary={data.preview || data.date}
-                  secondaryTypographyProps={{ color: colors.grey[400] }}
+                  secondaryTypographyProps={{ color: secondaryTextColor }}
                 />
               </ListItem>
             );

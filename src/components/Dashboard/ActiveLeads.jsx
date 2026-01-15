@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useMemo, useState } from "react";
+import React, { useMemo, useState } from "react";
 import {
   Box,
   Typography,
@@ -10,16 +10,12 @@ import {
   List,
   ListItem,
   ListItemText,
-  CircularProgress,
   Divider,
 } from "@mui/material";
 import AddIcon from "@mui/icons-material/Add";
 import { useTheme } from "../../contexts/ThemeContext";
 import { tokens } from "../../design-system/tokens/colors.js";
-import apiRequest from "../services/api";
-import { getCachedLeadData } from "../../utils/prefetchData";
 import {
-  normalizeLeadsPayload,
   resolveTextValue,
   getLeadTitle,
   getFollowUpTimestamp,
@@ -124,14 +120,14 @@ const getFollowUpStatusLabel = (lead) => {
   return normalized === "" ? "none" : normalized;
 };
 
-function ActiveLeads({ onLoadingChange }) {
+function ActiveLeads({ data }) {
   const { mode } = useTheme();
   const themeColors = tokens(mode);
   const [dialogOpen, setDialogOpen] = useState(false);
-  const [leads, setLeads] = useState([]);
-  const [loadingLeads, setLoadingLeads] = useState(true);
-  const [fetchError, setFetchError] = useState("");
-  const [statuses, setStatuses] = useState([]);
+
+  // Extract data from props (from /api/common/dashboard/)
+  const leads = data?.leads || [];
+  const statuses = data?.statuses || [];
 
   const cardStyles = {
     flex: 1,
@@ -229,60 +225,6 @@ function ActiveLeads({ onLoadingChange }) {
       .map(({ lead }) => lead);
   }, [leads, statuses]);
 
-  const fetchLeads = useCallback(async () => {
-    setLoadingLeads(true);
-    setFetchError("");
-    try {
-      const response = await apiRequest("/api/leads/?page_size=200");
-      setLeads(normalizeLeadsPayload(response));
-    } catch (error) {
-      console.error("Failed to load leads", error);
-      setFetchError(error?.message || "Unable to load leads right now.");
-    } finally {
-      setLoadingLeads(false);
-    }
-  }, []);
-
-  useEffect(() => {
-    const fetchStatuses = async () => {
-      // Try cache first
-      const cachedData = getCachedLeadData();
-      if (cachedData?.statuses) {
-        setStatuses(cachedData.statuses);
-      }
-      
-      try {
-        // Single API call to get both statuses and sources
-        const response = await apiRequest("/ui/options/");
-        let statusesList = [];
-        
-        if (response?.statuses && Array.isArray(response.statuses)) {
-          statusesList = response.statuses;
-        } else if (response?.data?.statuses && Array.isArray(response.data.statuses)) {
-          statusesList = response.data.statuses;
-        }
-        
-        if (statusesList.length) {
-          setStatuses(statusesList);
-        }
-      } catch (error) {
-        console.error("Failed to load statuses for ActiveLeads", error);
-      }
-    };
-
-    void fetchStatuses();
-  }, []);
-
-  useEffect(() => {
-    void fetchLeads();
-  }, [fetchLeads]);
-
-  useEffect(() => {
-    if (typeof onLoadingChange === "function") {
-      onLoadingChange(loadingLeads);
-    }
-  }, [loadingLeads, onLoadingChange]);
-
   const handleOpenDialog = () => {
     setDialogOpen(true);
   };
@@ -373,13 +315,7 @@ function ActiveLeads({ onLoadingChange }) {
       >
         <DialogTitle>Upcoming Follow-ups</DialogTitle>
         <DialogContent dividers>
-          {loadingLeads ? (
-            <Box display="flex" justifyContent="center" py={4}>
-              <CircularProgress size={24} color="inherit" />
-            </Box>
-          ) : fetchError ? (
-            <Typography color="error">{fetchError}</Typography>
-          ) : !upcomingLeads.length ? (
+          {!upcomingLeads.length ? (
             <Typography>
               No upcoming follow-ups are scheduled right now.
             </Typography>

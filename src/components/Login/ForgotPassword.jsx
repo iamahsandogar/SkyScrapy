@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import {
   Box,
   Typography,
@@ -7,6 +7,7 @@ import {
   Button,
   Alert,
 } from "@mui/material";
+import { useLocation } from "react-router-dom";
 import { authAPI } from "../services/api";
 
 export default function ForgotPassword() {
@@ -14,6 +15,16 @@ export default function ForgotPassword() {
   const [loading, setLoading] = useState(false);
   const [message, setMessage] = useState("");
   const [error, setError] = useState("");
+  const location = useLocation();
+
+  useEffect(() => {
+    const savedEmail = sessionStorage.getItem("loginFailedEmail");
+    const stateEmail = location.state?.email;
+    const autoEmail = stateEmail || savedEmail || "";
+    if (autoEmail) {
+      setEmail(autoEmail);
+    }
+  }, [location.state]);
 
   const handleSubmit = async () => {
     if (!email) {

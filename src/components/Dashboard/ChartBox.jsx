@@ -1,8 +1,6 @@
-import { useEffect, useMemo, useState } from "react";
+import { useMemo } from "react";
 import { Card, CardContent, Typography, Box, Paper } from "@mui/material";
 import { PieChart, Pie, Tooltip, Cell, ResponsiveContainer } from "recharts";
-import apiRequest from "../services/api";
-import { getCachedLeadData } from "../../utils/prefetchData";
 import { getColors } from "../../design-system/tokens";
 import { useTheme } from "../../contexts/ThemeContext";
 
@@ -132,13 +130,13 @@ const StatusTooltip = ({ active, payload, total = 0, colors }) => {
   );
 };
 
-export default function ChartBox({ onLoadingChange }) {
+export default function ChartBox({ data }) {
   const { mode } = useTheme();
   const colors = getColors(mode);
   const isDark = mode === "dark";
   const headingColor = isDark ? colors.grey[100] : colors.primary[200];
   const subTextColor = isDark ? colors.grey[200] : colors.primary[200];
-  const cardBackground = isDark ? colors.primary[600] : colors.bg[100];
+  const cardBackground = isDark ? colors.primary[500] : colors.bg[100];
   const CARD_CONFIG = [
     {
       key: "completed",
@@ -166,90 +164,9 @@ export default function ChartBox({ onLoadingChange }) {
     },
   ];
 
-  const [leads, setLeads] = useState([]);
-  const [loading, setLoading] = useState(true);
-  const [statuses, setStatuses] = useState([]);
-
-  useEffect(() => {
-    const fetchLeads = async () => {
-      const cachedData = getCachedLeadData();
-      if (cachedData?.leads) {
-        setLeads(Array.isArray(cachedData.leads) ? cachedData.leads : []);
-        setLoading(false);
-        const cacheAge = Date.now() - (cachedData.timestamp || 0);
-        if (cacheAge > 30000) {
-          try {
-            const response = await apiRequest("/api/leads/");
-            let leadsList = [];
-            if (response && Array.isArray(response.leads)) {
-              leadsList = response.leads;
-            } else if (Array.isArray(response)) {
-              leadsList = response;
-            }
-            if (leadsList.length > 0) {
-              setLeads(leadsList);
-            }
-          } catch (err) {
-            console.error("Failed to refresh leads:", err);
-          }
-        }
-        return;
-      }
-
-      try {
-        setLoading(true);
-        const response = await apiRequest("/api/leads/");
-        if (response && Array.isArray(response.leads)) {
-          setLeads(response.leads);
-        } else if (Array.isArray(response)) {
-          setLeads(response);
-        } else {
-          setLeads([]);
-        }
-      } catch (err) {
-        console.error("Failed to fetch leads:", err);
-        setLeads([]);
-      } finally {
-        setLoading(false);
-      }
-    };
-
-    fetchLeads();
-  }, []);
-
-  useEffect(() => {
-    if (typeof onLoadingChange === "function") {
-      onLoadingChange(loading);
-    }
-  }, [loading, onLoadingChange]);
-
-  useEffect(() => {
-    const fetchStatuses = async () => {
-      const cachedData = getCachedLeadData();
-      if (cachedData?.statuses) {
-        setStatuses(cachedData.statuses);
-      }
-      try {
-        // Single API call to get both statuses and sources
-        const response = await apiRequest("/ui/options/");
-        let statusesList = [];
-        
-        if (response?.statuses && Array.isArray(response.statuses)) {
-          statusesList = response.statuses;
-        } else if (response?.data?.statuses && Array.isArray(response.data.statuses)) {
-          statusesList = response.data.statuses;
-        }
-        
-        if (statusesList.length > 0) {
-          setStatuses(statusesList);
-        }
-      } catch (error) {
-        console.error("Failed to fetch statuses for cards:", error);
-      }
-    };
-
-    fetchStatuses();
-  }, []);
+  // Extract data from props (from /api/common/dashboard/)
+  const leads = data?.leads || [];
+  const statuses = data?.statuses || [];
 
   const matchStatusValue = (lead, targetPhrase) => {
     const statusLabel = resolveLeadStatusLabel(lead, statuses);
