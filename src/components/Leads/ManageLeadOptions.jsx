@@ -6,6 +6,13 @@ import {
   Button,
   Paper,
   IconButton,
+  Snackbar,
+  Alert,
+  Dialog,
+  DialogTitle,
+  DialogContent,
+  DialogContentText,
+  DialogActions,
 } from "@mui/material";
 import EditIcon from "@mui/icons-material/Edit";
 import DeleteIcon from "@mui/icons-material/Delete";
@@ -32,6 +39,16 @@ export default function ManageLeadOptions() {
   const [editValue, setEditValue] = useState("");
   const [loading, setLoading] = useState(false);
   const [optionsLoaderOpen, setOptionsLoaderOpen] = useState(true);
+  const [toast, setToast] = useState({
+    open: false,
+    message: "",
+    severity: "success",
+  });
+  const [deleteDialog, setDeleteDialog] = useState({
+    open: false,
+    item: null,
+    label: "",
+  });
 
   const { notifyError } = useNotification();
 
@@ -169,6 +186,15 @@ export default function ManageLeadOptions() {
     return fetched;
   };
 
+  const showToast = (message, severity = "success") => {
+    setToast({ open: true, message, severity });
+  };
+
+  const handleToastClose = (_event, reason) => {
+    if (reason === "clickaway") return;
+    setToast((prev) => ({ ...prev, open: false }));
+  };
+
   /* ------------------------------------
      ADD STATUS / SOURCE
   -------------------------------------*/
@@ -191,6 +217,9 @@ export default function ManageLeadOptions() {
 
       setNewValue("");
       await reloadOptionsWithOverlay();
+      showToast(
+        `${type === "status" ? "Status" : "Source"} added successfully`
+      );
     } catch (error) {
       console.error("Add failed", error);
       notifyError(error.message || "Failed to add");
@@ -209,17 +238,6 @@ export default function ManageLeadOptions() {
       return;
     }
 
-    // Confirm deletion
-    if (
-      !window.confirm(
-        `Are you sure you want to delete "${
-          typeof item === "string" ? item : item.name
-        }"?`
-      )
-    ) {
-      return;
-    }
-
     try {
       const endpoint =
         type === "status"
@@ -229,12 +247,30 @@ export default function ManageLeadOptions() {
       await apiRequest(endpoint, {
         method: "DELETE",
       });
-
       await reloadOptionsWithOverlay();
+      await reloadOptionsWithOverlay();
+      showToast(
+        `${type === "status" ? "Status" : "Source"} deleted successfully`
+      );
     } catch (error) {
       console.error("Delete failed", error);
       notifyError(error.message || "Failed to delete");
     }
+  };
+
+  const openDeleteConfirmation = (item) => {
+    const label = typeof item === "string" ? item : item?.name || "this option";
+    setDeleteDialog({ open: true, item, label });
+  };
+
+  const handleDeleteConfirmed = async () => {
+    if (!deleteDialog.item) return;
+    await deleteItem(deleteDialog.item);
+    setDeleteDialog({ open: false, item: null, label: "" });
+  };
+
+  const handleDeleteDialogClose = () => {
+    setDeleteDialog({ open: false, item: null, label: "" });
   };
 
   /* ------------------------------------
@@ -318,7 +354,7 @@ export default function ManageLeadOptions() {
             </Typography>
 
             <IconButton
-              onClick={() => deleteItem(item)}
+              onClick={() => openDeleteConfirmation(item)}
               color="error"
               disabled={loading}
             >
@@ -327,6 +363,35 @@ export default function ManageLeadOptions() {
           </Box>
         ))}
       </Paper>
+      <Dialog open={deleteDialog.open} onClose={handleDeleteDialogClose}>
+        <DialogTitle>Confirm Deletion</DialogTitle>
+        <DialogContent>
+          <DialogContentText>
+            Are you sure you want to delete "{deleteDialog.label}"?
+          </DialogContentText>
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={handleDeleteDialogClose}>Cancel</Button>
+          <Button onClick={handleDeleteConfirmed} color="error" variant="contained">
+            Delete
+          </Button>
+        </DialogActions>
+      </Dialog>
+      <Snackbar
+        open={toast.open}
+        autoHideDuration={3000}
+        onClose={handleToastClose}
+        anchorOrigin={{ vertical: "bottom", horizontal: "center" }}
+      >
+        <Alert
+          onClose={handleToastClose}
+          severity={toast.severity}
+          variant="filled"
+          sx={{ width: "100%" }}
+        >
+          {toast.message}
+        </Alert>
+      </Snackbar>
     </>
   );
 }

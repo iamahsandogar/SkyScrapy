@@ -23,6 +23,7 @@ import {
   Dialog,
   DialogTitle,
   DialogContent,
+  DialogContentText,
   DialogActions,
 } from "@mui/material";
 import CloudDownloadIcon from "@mui/icons-material/CloudDownload";
@@ -156,6 +157,7 @@ export default function AllLeads() {
   const [actionAnchorEl, setActionAnchorEl] = useState(null);
   const [menuLead, setMenuLead] = useState(null);
   const [mobileMenuAnchorEl, setMobileMenuAnchorEl] = useState(null);
+  const [deleteDialog, setDeleteDialog] = useState({ open: false, lead: null });
 
   const actionOpen = Boolean(actionAnchorEl);
   const rowRefs = useRef({});
@@ -883,15 +885,28 @@ export default function AllLeads() {
   };
 
   const handleDeleteLead = async (id) => {
-    if (!confirm("Delete this lead?")) return;
     try {
       await apiRequest(`/api/leads/${id}`, { method: "DELETE" });
       setLeads(leads.filter((l) => String(l.id) !== String(id)));
       removeLeadFromCache(id);
+      setDeleteDialog({ open: false, lead: null });
     } catch (err) {
       console.error("Failed to delete lead:", err);
       notifyError("Failed to delete lead. Please try again.");
     }
+  };
+
+  const openDeleteDialog = (lead) => {
+    setDeleteDialog({ open: true, lead });
+  };
+
+  const closeDeleteDialog = () => {
+    setDeleteDialog({ open: false, lead: null });
+  };
+
+  const confirmDeleteLead = () => {
+    if (!deleteDialog.lead) return;
+    handleDeleteLead(deleteDialog.lead.id);
   };
 
   const handleExportLeadsCSV = () => {
@@ -1694,7 +1709,7 @@ export default function AllLeads() {
 
         <MenuItem
           onClick={() => {
-            handleDeleteLead(menuLead.id);
+            openDeleteDialog(menuLead);
             handleActionMenuClose();
           }}
           sx={{ color: "error.main" }}
@@ -1703,6 +1718,29 @@ export default function AllLeads() {
           Delete
         </MenuItem>
       </Menu>
+
+      <Dialog open={deleteDialog.open} onClose={closeDeleteDialog}>
+        <DialogTitle>Confirm Deletion</DialogTitle>
+        <DialogContent>
+          <DialogContentText>
+            {deleteDialog.lead
+              ? `Are you sure you want to delete "${
+                  deleteDialog.lead.title || "this lead"
+                }"?`
+              : "Are you sure you want to delete this lead?"}
+          </DialogContentText>
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={closeDeleteDialog}>Cancel</Button>
+          <Button
+            onClick={confirmDeleteLead}
+            color="error"
+            variant="contained"
+          >
+            Delete
+          </Button>
+        </DialogActions>
+      </Dialog>
 
       <Dialog
         open={notesDialogOpen}
