@@ -14,7 +14,6 @@ import { useLocation } from "react-router-dom";
 
 import apiRequest from "../services/api";
 import DotLoader from "../global/DotLoader";
-import Loading from "../global/Loading";
 import KanbanColumn from "./KanbanColumn";
 import KanbanCard from "./KanbanCard";
 import { useNotification } from "../../contexts/NotificationContext.jsx";
@@ -397,9 +396,10 @@ function KanbanBoard() {
           color: "#fff",
           zIndex: (theme) => theme.zIndex.drawer + 1,
           flexDirection: "column",
+          gap: 1,
         }}
       >
-        <Loading />
+        <DotLoader size={48} color="#0A66C2" />
         <Typography mt={1} variant="body2">
           Updating lead...
         </Typography>
