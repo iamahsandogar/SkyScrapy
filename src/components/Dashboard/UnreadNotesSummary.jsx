@@ -226,6 +226,7 @@ export default function UnreadNotesSummary({ data }) {
   const [selectedSummary, setSelectedSummary] = useState(null);
   const [dialogLoading, setDialogLoading] = useState(false);
   const [dialogError, setDialogError] = useState("");
+  const [markedAsReadLeadIds, setMarkedAsReadLeadIds] = useState(new Set());
 
   // Extract unread notes from props (from /api/common/dashboard/)
   const unreadNotesData = data?.unread_notes || { notes: [], unread_count: 0 };
@@ -285,8 +286,10 @@ export default function UnreadNotesSummary({ data }) {
       }
     });
     
-    return Array.from(leadNotesMap.values()).filter(s => s.unreadCount > 0);
-  }, [rawNotes, leadTitleMap]);
+    return Array.from(leadNotesMap.values())
+      .filter(s => s.unreadCount > 0)
+      .filter(s => !markedAsReadLeadIds.has(s.id));
+  }, [rawNotes, leadTitleMap, markedAsReadLeadIds]);
 
   const totalUnread = useMemo(() => {
     return summaries.reduce(
@@ -302,11 +305,10 @@ export default function UnreadNotesSummary({ data }) {
   }, []);
 
   const markNoteAsRead = useCallback(async (summary) => {
-    const noteId = normalizeNoteId(summary?.lastNote);
-    if (!summary?.id || !noteId) {
-      throw new Error("Missing identifiers for marking note as read.");
+    if (!summary?.id) {
+      throw new Error("Missing lead ID for marking notes as read.");
     }
-    await apiRequest(`/api/leads/${summary.id}/notes/${noteId}/read/`, {
+    await apiRequest(`/api/leads/${summary.id}/notes/mark-read/`, {
       method: "POST",
     });
   }, []);
@@ -324,6 +326,8 @@ export default function UnreadNotesSummary({ data }) {
     setDialogError("");
     try {
       await markNoteAsRead(selectedSummary);
+      // Remove from local list immediately
+      setMarkedAsReadLeadIds(prev => new Set([...prev, selectedSummary.id]));
       closeDialog();
     } catch (err) {
       console.error("Failed to mark note as read", err);
@@ -339,6 +343,8 @@ export default function UnreadNotesSummary({ data }) {
     setDialogError("");
     try {
       await markNoteAsRead(selectedSummary);
+      // Remove from local list immediately
+      setMarkedAsReadLeadIds(prev => new Set([...prev, selectedSummary.id]));
       closeDialog();
       const leadId = selectedSummary.id;
       navigate(`/all-leads?focusLeadId=${encodeURIComponent(leadId)}`, {
@@ -378,12 +384,14 @@ export default function UnreadNotesSummary({ data }) {
       sx={{
         flex: 1,
         minWidth: "320px",
+        maxHeight: 190,
         borderRadius: "12px",
         padding: 3,
         backgroundColor: backgroundColor,
         display: "flex",
         flexDirection: "column",
         gap: 1,
+        overflow: "hidden",
       }}
     >
       <Box display="flex" justifyContent="space-between" alignItems="center">
@@ -405,7 +413,8 @@ export default function UnreadNotesSummary({ data }) {
           display: "flex",
           flexDirection: "column",
           gap: 1,
-          overflowY: summaries.length ? "auto" : "hidden",
+          minHeight: 0,
+          overflowY: "auto",
         }}
       >
         {!summaries.length ? (
@@ -414,7 +423,9 @@ export default function UnreadNotesSummary({ data }) {
           </Typography>
         ) : (
           summaries.map((item) => {
-            const messagePreview = extractNoteMessage(item.lastNote || item.last_note);
+            const messagePreview = extractNoteMessage(
+              item.lastNote || item.last_note
+            );
             return (
               <Box
                 key={item.id}
@@ -436,7 +447,11 @@ export default function UnreadNotesSummary({ data }) {
                 }}
               >
                 <Box display="flex" justifyContent="space-between" gap={1}>
-                  <Typography variant="body2" fontWeight={600} color={textColor}>
+                  <Typography
+                    variant="body2"
+                    fontWeight={600}
+                    color={textColor}
+                  >
                     {item.title}
                   </Typography>
                   <Chip
@@ -472,11 +487,10 @@ export default function UnreadNotesSummary({ data }) {
             display="flex"
             alignItems="center"
             justifyContent="space-between"
-            mb={1}
+            mb={2}
           >
-            <Typography variant="caption" color="text.secondary">
-              {dialogAuthor}
-              {dialogTimestamp ? ` · ${dialogTimestamp}` : ""}
+            <Typography variant="subtitle2" color="text.secondary">
+              Unread messages
             </Typography>
             <Chip
               label={`${dialogUnreadCount} unread`}
@@ -484,11 +498,34 @@ export default function UnreadNotesSummary({ data }) {
               color="warning"
             />
           </Box>
-          <Typography variant="body1" paragraph>
-            {dialogMessage || "No message content is available."}
-          </Typography>
+          <Box sx={{ display: "flex", flexDirection: "column", gap: 2 }}>
+            {selectedSummary?.notes
+              ?.filter((note) => !note.is_read)
+              .map((note, index) => (
+                <Box
+                  key={note.id || note.pk || index}
+                  sx={{
+                    p: 1.5,
+                    borderRadius: 2,
+                    bgcolor: "action.hover",
+                  }}
+                >
+                  <Box display="flex" justifyContent="space-between" mb={0.5}>
+                    <Typography variant="caption" color="text.secondary">
+                      {getNoteAuthorLabel(note)}
+                    </Typography>
+                    <Typography variant="caption" color="text.secondary">
+                      {getNoteTimestamp(note)}
+                    </Typography>
+                  </Box>
+                  <Typography variant="body2">
+                    {extractNoteMessage(note)}
+                  </Typography>
+                </Box>
+              ))}
+          </Box>
           {dialogError && (
-            <Typography variant="caption" color="error">
+            <Typography variant="caption" color="error" mt={1}>
               {dialogError}
             </Typography>
           )}

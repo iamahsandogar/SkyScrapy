@@ -24,6 +24,15 @@ export default function AdminDashboard() {
   const [loading, setLoading] = useState(true);
   const [dashboardData, setDashboardData] = useState(null);
 
+  const parseEmployeesResponse = (response) => {
+    if (!response) return [];
+    if (Array.isArray(response)) return response;
+    if (Array.isArray(response.employees)) return response.employees;
+    if (Array.isArray(response.data)) return response.data;
+    if (Array.isArray(response.data?.employees)) return response.data.employees;
+    return [];
+  };
+
   // Fetch all dashboard data from single API endpoint
   useEffect(() => {
     const fetchDashboardData = async () => {
@@ -31,12 +40,14 @@ export default function AdminDashboard() {
         setLoading(true);
         
         // Fetch dashboard data and employees in parallel
+        const employeesPromise = apiRequest("/ui/employees/").catch((err) => {
+          console.warn("Failed to fetch employees:", err);
+          return null;
+        });
+
         const [dashboardResponse, employeesResponse] = await Promise.all([
           apiRequest("/api/common/dashboard/"),
-          // apiRequest("/ui/employees/").catch(err => {
-          //   console.warn("Failed to fetch employees:", err);
-          //   return [];
-          // })
+          employeesPromise,
         ]);
         
         console.log("Dashboard API Response:", dashboardResponse);
@@ -65,7 +76,7 @@ export default function AdminDashboard() {
           const totalLeadsCount = (dashboardResponse.lead_statuses || []).reduce((sum, s) => sum + s.count, 0);
           
           // Parse employees response
-          const employeesList = employeesResponse?.employees || employeesResponse || [];
+          const employeesList = parseEmployeesResponse(employeesResponse);
           
           const dashboardPayload = {
             leads: allLeads,

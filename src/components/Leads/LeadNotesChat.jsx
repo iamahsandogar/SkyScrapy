@@ -559,10 +559,10 @@ export default function LeadNotesChat({ leadId }) {
 
   const handleMarkAsRead = async (note) => {
     const noteId = normalizeNoteId(note);
-    if (!leadId || !noteId) return;
+    if (!leadId) return;
     try {
-      await apiRequest(`/api/leads/${leadId}/notes/${noteId}/read/`, {
-        method: "POST",
+      await apiRequest(`/api/leads/${leadId}/notes/mark-read/`, {
+        method: "PATCH",
       });
       setNotes((prev) =>
         prev.map((entry) =>
@@ -590,13 +590,9 @@ export default function LeadNotesChat({ leadId }) {
     setError("");
 
     try {
-      await Promise.all(
-        unreadIds.map((id) =>
-          apiRequest(`/api/leads/${leadId}/notes/${id}/read/`, {
-            method: "POST",
-          }).catch(() => null)
-        )
-      );
+      await apiRequest(`/api/leads/${leadId}/notes/mark-read/`, {
+        method: "PATCH",
+      });
       await fetchNotes();
     } catch (err) {
       console.error("Failed to mark all notes as read", err);

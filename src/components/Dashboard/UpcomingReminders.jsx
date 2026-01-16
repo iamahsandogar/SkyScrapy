@@ -275,7 +275,7 @@ function UpcomingReminders({ data }) {
   return (
     <>
       <Box
-        sx={cardStyles}
+        sx={{...cardStyles, maxHeight: 190}}
         role="button"
         tabIndex={0}
         onClick={handleOpenDialog}

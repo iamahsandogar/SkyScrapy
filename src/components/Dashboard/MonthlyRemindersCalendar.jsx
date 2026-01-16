@@ -567,7 +567,7 @@ export default function MonthlyRemindersCalendar({ data }) {
             })}
           </Box>
 
-          <Stack spacing={1} mt={3}>
+          {/* <Stack spacing={1} mt={3}>
             <Typography variant="subtitle2" fontWeight={600}>
               {formatSelectedDayLabel(selectedDate)}
             </Typography>
@@ -598,8 +598,8 @@ export default function MonthlyRemindersCalendar({ data }) {
                 </Paper>
               ))
             )}
-          </Stack>
-
+          </Stack> */}
+{/* 
           <Divider sx={{ my: 2 }} />
 
           <Stack spacing={1}>
@@ -656,7 +656,7 @@ export default function MonthlyRemindersCalendar({ data }) {
                 </Paper>
               ))
             )}
-          </Stack>
+          </Stack> */}
     </Paper>
   );
 }

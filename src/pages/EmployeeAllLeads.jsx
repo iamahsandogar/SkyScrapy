@@ -25,6 +25,7 @@ import {
   DialogContent,
   DialogContentText,
   DialogActions,
+  CircularProgress,
 } from "@mui/material";
 
 import CloudDownloadIcon from "@mui/icons-material/CloudDownload";
@@ -51,40 +52,40 @@ import {
 import MoreVertIcon from "@mui/icons-material/MoreVert";
 import DotLoader from "../components/global/DotLoader";
 
-const getChipStyles = (status) => {
-  switch (status) {
-    case "Completed":
-      return {
-        backgroundColor: colors.greenAccent[800],
-        color: colors.greenAccent[400],
-        border: `1px solid ${colors.greenAccent[400]}`,
-      };
-    case "Pending":
-      return {
-        backgroundColor: colors.yellowAccent[800],
-        color: colors.yellowAccent[400],
-        border: `1px solid ${colors.yellowAccent[400]}`,
-      };
-    case "Rejected":
-      return {
-        backgroundColor: colors.redAccent[800],
-        color: colors.redAccent[400],
-        border: `1px solid ${colors.redAccent[400]}`,
-      };
-    case "In Progress":
-      return {
-        backgroundColor: colors.blueAccent[800],
-        color: colors.blueAccent[400],
-        border: `1px solid ${colors.blueAccent[400]}`,
-      };
-    default:
-      return {
-        backgroundColor: colors.grey[800],
-        color: colors.grey[400],
-        border: `1px solid ${colors.grey[400]}`,
-      };
-  }
-};
+// const getChipStyles = (status) => {
+//   switch (status) {
+//     case "Completed":
+//       return {
+//         backgroundColor: colors.greenAccent[800],
+//         color: colors.greenAccent[400],
+//         border: `1px solid ${colors.greenAccent[400]}`,
+//       };
+//     case "Pending":
+//       return {
+//         backgroundColor: colors.yellowAccent[800],
+//         color: colors.yellowAccent[400],
+//         border: `1px solid ${colors.yellowAccent[400]}`,
+//       };
+//     case "Rejected":
+//       return {
+//         backgroundColor: colors.redAccent[800],
+//         color: colors.redAccent[400],
+//         border: `1px solid ${colors.redAccent[400]}`,
+//       };
+//     case "In Progress":
+//       return {
+//         backgroundColor: colors.blueAccent[800],
+//         color: colors.blueAccent[400],
+//         border: `1px solid ${colors.blueAccent[400]}`,
+//       };
+//     default:
+//       return {
+//         backgroundColor: colors.grey[800],
+//         color: colors.grey[400],
+//         border: `1px solid ${colors.grey[400]}`,
+//       };
+//   }
+// };
 
 const ALL_COLUMNS = [
   { key: "title", label: "Lead Title" },
@@ -107,6 +108,7 @@ const DEFAULT_COLUMNS = [
   "title",
   "linkedIn",
   "status",
+  "sources",
   "assignedTo",
   "followUpAt",
   "followupStatus",
@@ -122,12 +124,12 @@ const tableHeaderCellStyles = {
   fontWeight: 700,
 };
 
-const tableBodyCellStyles = {
-  maxWidth: 150,
-  overflow: "hidden",
-  textOverflow: "ellipsis",
-  whiteSpace: "nowrap",
-};
+// const tableBodyCellStyles = {
+//   maxWidth: 150,
+//   overflow: "hidden",
+//   textOverflow: "ellipsis",
+//   whiteSpace: "nowrap",
+// };
 
 export default function EmployeeAllLeads() {
   const location = useLocation();
@@ -152,6 +154,9 @@ export default function EmployeeAllLeads() {
   const [actionLoading, setActionLoading] = useState(false);
   const [actionMessage, setActionMessage] = useState("");
   const [deleteDialog, setDeleteDialog] = useState({ open: false, lead: null });
+  // Track individual dropdown loading states
+  const [statusUpdatingLeadId, setStatusUpdatingLeadId] = useState(null);
+  const [followUpUpdatingLeadId, setFollowUpUpdatingLeadId] = useState(null);
 
   const actionOpen = Boolean(actionAnchorEl);
   const rowRefs = useRef({});
@@ -471,10 +476,9 @@ export default function EmployeeAllLeads() {
 
   // Handler to update lead status
   const handleStatusChange = async (lead, newStatusId) => {
-    setActionLoading(true);
-    setActionMessage("Updating status...");
+    const leadId = lead.id;
+    setStatusUpdatingLeadId(leadId);
     try {
-      const leadId = lead.id;
 
       // Get the current lead data to preserve all fields
       const currentLead = leads.find((l) => l.id === leadId);
@@ -544,17 +548,15 @@ export default function EmployeeAllLeads() {
       console.error("Failed to update lead status:", error);
       alert("Failed to update lead status");
     } finally {
-      setActionLoading(false);
-      setActionMessage("");
+      setStatusUpdatingLeadId(null);
     }
   };
 
   // Handler to update follow-up status
   const handleFollowUpStatusChange = async (lead, newFollowUpStatus) => {
-    setActionLoading(true);
-    setActionMessage("Updating follow-up status...");
+    const leadId = lead.id;
+    setFollowUpUpdatingLeadId(leadId);
     try {
-      const leadId = lead.id;
 
       // Handle "None" - convert to null for API
       const statusValue =
@@ -606,8 +608,7 @@ export default function EmployeeAllLeads() {
         }`
       );
     } finally {
-      setActionLoading(false);
-      setActionMessage("");
+      setFollowUpUpdatingLeadId(null);
     }
   };
 
@@ -1348,81 +1349,90 @@ export default function EmployeeAllLeads() {
 
                     {visibleColumns.includes("status") && (
                       <TableCell>
-                        <Select
-                          value={(() => {
-                            // Get the status ID from the lead
-                            // Status cannot be None, so if empty, use first available status
-                            const statusId = lead.status;
-                            if (
-                              statusId === null ||
-                              statusId === undefined ||
-                              statusId === ""
-                            ) {
-                              // If no status, default to first available status
-                              if (statuses.length > 0) {
-                                const firstStatus = statuses[0];
-                                return typeof firstStatus === "object" &&
-                                  firstStatus !== null
-                                  ? firstStatus.id || firstStatus.pk
-                                  : firstStatus;
+                        <Box sx={{ position: "relative", display: "inline-flex", alignItems: "center" }}>
+                          <Select
+                            value={(() => {
+                              // Get the status ID from the lead
+                              // Status cannot be None, so if empty, use first available status
+                              const statusId = lead.status;
+                              if (
+                                statusId === null ||
+                                statusId === undefined ||
+                                statusId === ""
+                              ) {
+                                // If no status, default to first available status
+                                if (statuses.length > 0) {
+                                  const firstStatus = statuses[0];
+                                  return typeof firstStatus === "object" &&
+                                    firstStatus !== null
+                                    ? firstStatus.id || firstStatus.pk
+                                    : firstStatus;
+                                }
+                                return "";
                               }
-                              return "";
-                            }
-                            // If status is an object, extract the ID
-                            if (
-                              typeof statusId === "object" &&
-                              statusId !== null
-                            ) {
-                              return statusId.id || statusId.pk || "";
-                            }
-                            return String(statusId);
-                          })()}
-                          onChange={(e) => {
-                            // Convert to integer - status cannot be null/empty
-                            const selectedId = parseInt(e.target.value, 10);
-                            if (!isNaN(selectedId)) {
-                              handleStatusChange(lead, selectedId);
-                            }
-                          }}
-                          size="small"
-                          sx={{
-                            minWidth: 120,
-                            height: 32,
-                            "& .MuiSelect-select": {
-                              padding: "4px 8px",
-                              fontSize: "0.875rem",
-                            },
-                          }}
-                          MenuProps={{
-                            PaperProps: {
-                              style: {
-                                maxHeight: 300,
+                              // If status is an object, extract the ID
+                              if (
+                                typeof statusId === "object" &&
+                                statusId !== null
+                              ) {
+                                return statusId.id || statusId.pk || "";
+                              }
+                              return String(statusId);
+                            })()}
+                            onChange={(e) => {
+                              // Convert to integer - status cannot be null/empty
+                              const selectedId = parseInt(e.target.value, 10);
+                              if (!isNaN(selectedId)) {
+                                handleStatusChange(lead, selectedId);
+                              }
+                            }}
+                            size="small"
+                            disabled={statusUpdatingLeadId === lead.id}
+                            sx={{
+                              minWidth: 120,
+                              height: 32,
+                              "& .MuiSelect-select": {
+                                padding: "4px 8px",
+                                fontSize: "0.875rem",
                               },
-                            },
-                          }}
-                        >
-                          {statuses.map((status, index) => {
-                            // Handle different status structures - match CreateLead form logic
-                            const statusId =
-                              typeof status === "object" && status !== null
-                                ? status.id || status.pk
-                                : status;
-                            const statusName =
-                              typeof status === "string"
-                                ? status
-                                : status.name ||
-                                  status.label ||
-                                  status.status_name ||
-                                  String(statusId);
-                            const key = statusId || index;
+                            }}
+                            MenuProps={{
+                              PaperProps: {
+                                style: {
+                                  maxHeight: 300,
+                                },
+                              },
+                            }}
+                          >
+                            {statuses.map((status, index) => {
+                              // Handle different status structures - match CreateLead form logic
+                              const statusId =
+                                typeof status === "object" && status !== null
+                                  ? status.id || status.pk
+                                  : status;
+                              const statusName =
+                                typeof status === "string"
+                                  ? status
+                                  : status.name ||
+                                    status.label ||
+                                    status.status_name ||
+                                    String(statusId);
+                              const key = statusId || index;
 
-                            return (
-                              <MenuItem key={key} value={statusId}>
-                                {statusName}
-                              </MenuItem>
-                            );
-                          })}
-                        </Select>
+                              return (
+                                <MenuItem key={key} value={statusId}>
+                                  {statusName}
+                                </MenuItem>
+                              );
+                            })}
+                          </Select>
+                          {statusUpdatingLeadId === lead.id && (
+                            <CircularProgress
+                              size={16}
+                              sx={{ ml: 1 }}
+                            />
+                          )}
+                        </Box>
                       </TableCell>
                     )}
 
@@ -1440,61 +1450,70 @@ export default function EmployeeAllLeads() {
 
                     {visibleColumns.includes("followupStatus") && (
                       <TableCell>
-                        <Select
-                          value={(() => {
-                            // Explicitly handle null/undefined/empty values for "None"
-                            const status =
-                              lead.follow_up_status || lead.followupStatus;
-                            return status === null ||
-                              status === undefined ||
-                              status === ""
-                              ? ""
-                              : status;
-                          })()}
-                          onChange={(e) => {
-                            // Explicitly handle "None" selection (empty string)
-                            // This ensures "None" is easily mutable
-                            const selectedValue =
-                              e.target.value === "" ? "" : e.target.value;
-                            handleFollowUpStatusChange(lead, selectedValue);
-                          }}
-                          size="small"
-                          sx={{
-                            minWidth: 120,
-                            height: 32,
-                            "& .MuiSelect-select": {
-                              padding: "4px 8px",
-                              fontSize: "0.875rem",
-                            },
-                          }}
-                          MenuProps={{
-                            PaperProps: {
-                              style: {
-                                maxHeight: 300,
+                        <Box sx={{ position: "relative", display: "inline-flex", alignItems: "center" }}>
+                          <Select
+                            value={(() => {
+                              // Explicitly handle null/undefined/empty values for "None"
+                              const status =
+                                lead.follow_up_status || lead.followupStatus;
+                              return status === null ||
+                                status === undefined ||
+                                status === ""
+                                ? ""
+                                : status;
+                            })()}
+                            onChange={(e) => {
+                              // Explicitly handle "None" selection (empty string)
+                              // This ensures "None" is easily mutable
+                              const selectedValue =
+                                e.target.value === "" ? "" : e.target.value;
+                              handleFollowUpStatusChange(lead, selectedValue);
+                            }}
+                            size="small"
+                            disabled={followUpUpdatingLeadId === lead.id}
+                            sx={{
+                              minWidth: 120,
+                              height: 32,
+                              "& .MuiSelect-select": {
+                                padding: "4px 8px",
+                                fontSize: "0.875rem",
                               },
-                            },
-                          }}
-                          SelectProps={{
-                            displayEmpty: true,
-                            renderValue: (val) => {
-                              // Show "None" for empty/null/undefined values
-                              if (
-                                val === "" ||
-                                val === null ||
-                                val === undefined
-                              ) {
-                                return "None";
-                              }
-                              return val;
-                            },
-                          }}
-                        >
-                          <MenuItem value="">
-                            <em>None</em>
-                          </MenuItem>
-                          <MenuItem value="done">done</MenuItem>
-                          <MenuItem value="pending">pending</MenuItem>
-                        </Select>
+                            }}
+                            MenuProps={{
+                              PaperProps: {
+                                style: {
+                                  maxHeight: 300,
+                                },
+                              },
+                            }}
+                            SelectProps={{
+                              displayEmpty: true,
+                              renderValue: (val) => {
+                                // Show "None" for empty/null/undefined values
+                                if (
+                                  val === "" ||
+                                  val === null ||
+                                  val === undefined
+                                ) {
+                                  return "None";
+                                }
+                                return val;
+                              },
+                            }}
+                          >
+                            <MenuItem value="">
+                              <em>None</em>
+                            </MenuItem>
+                            <MenuItem value="done">done</MenuItem>
+                            <MenuItem value="pending">pending</MenuItem>
+                          </Select>
+                          {followUpUpdatingLeadId === lead.id && (
+                            <CircularProgress
+                              size={16}
+                              sx={{ ml: 1 }}
+                            />
+                          )}
+                        </Box>
                       </TableCell>
                     )}
 

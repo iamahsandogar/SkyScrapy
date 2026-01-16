@@ -347,14 +347,22 @@ export default function CreateLead() {
           userData.role === "0";
       }
 
-      // Only fetch employees API if user is admin
-      if (isCurrentUserAdmin) {
-        try {
-          console.log("Admin user - Fetching employees from /ui/employees/");
-          const employeesResponse = await apiRequest("/ui/employees/");
-          console.log("Employees API response:", employeesResponse);
+      // Fetch employees/users for the assignment dropdown (all users can assign leads)
+      // Use /api/leads/ which returns all users including admins in the 'users' field
+      try {
+        console.log("Fetching all users from /api/leads/");
+        const leadsResponse = await apiRequest("/api/leads/");
+        console.log("Leads API response (for users):", leadsResponse);
 
-          // Handle multiple response structures
+        // Extract users from the leads response - this includes all users (admins + employees)
+        if (leadsResponse?.users && Array.isArray(leadsResponse.users)) {
+          employeesList = leadsResponse.users;
+          console.log("Extracted users from /api/leads/:", employeesList.length);
+        } else {
+          // Fallback to /ui/employees/ if users not in leads response
+          console.log("No users in leads response, falling back to /ui/employees/");
+          const employeesResponse = await apiRequest("/ui/employees/");
+          
           if (Array.isArray(employeesResponse)) {
             employeesList = employeesResponse;
           } else if (employeesResponse?.employees) {
@@ -364,28 +372,22 @@ export default function CreateLead() {
               ? employeesResponse.data
               : employeesResponse.data?.employees || [];
           }
-
-          console.log("Parsed employees (before filter):", employeesList);
-
-          const filteredEmployees = filterEmployeesForDropdown(employeesList);
-          console.log(
-            "Filtered employees (admin view - all active + admins):",
-            filteredEmployees
-          );
-
-          employeesList = filteredEmployees;
-        } catch (error) {
-          console.error("Failed to fetch employees:", error);
-          console.error("Employees error details:", {
-            message: error.message,
-            endpoint: "/ui/employees/",
-          });
-          employeesList = [];
         }
-      } else {
-        // For employees, don't call the API - they don't show the dropdown
-        // The "Assigned To" field is hidden for employees when creating new leads
-        console.log("Employee user - Skipping employees API call");
+
+        console.log("Parsed users (before filter):", employeesList);
+
+        const filteredEmployees = filterEmployeesForDropdown(employeesList);
+        console.log(
+          "Filtered users (all active users + admins):",
+          filteredEmployees
+        );
+
+        employeesList = filteredEmployees;
+      } catch (error) {
+        console.error("Failed to fetch users:", error);
+        console.error("Users error details:", {
+          message: error.message,
+        });
         employeesList = [];
       }
       // Update state with fetched data (even if some are empty)
@@ -426,22 +428,31 @@ export default function CreateLead() {
 
   const fetchLatestEmployeesFromApi = async () => {
     try {
-      console.log("Refreshing employee list from /ui/employees/");
-      const response = await apiRequest("/ui/employees/");
-      const parsed = parseEmployeesPayload(response);
-      const filtered = filterEmployeesForDropdown(parsed);
+      console.log("Refreshing users list from /api/leads/");
+      const response = await apiRequest("/api/leads/");
+      let usersList = [];
+      
+      if (response?.users && Array.isArray(response.users)) {
+        usersList = response.users;
+      } else {
+        // Fallback to /ui/employees/
+        const empResponse = await apiRequest("/ui/employees/");
+        usersList = parseEmployeesPayload(empResponse);
+      }
+      
+      const filtered = filterEmployeesForDropdown(usersList);
       setEmployees(filtered);
 
       const cachedData = getCachedLeadData() || {};
       const updatedCache = {
         ...cachedData,
-        employees: parsed,
+        employees: usersList,
         timestamp: Date.now(),
       };
       localStorage.setItem("leadDataCache", JSON.stringify(updatedCache));
       return filtered;
     } catch (error) {
-      console.error("Failed to refresh employees on CreateLead:", error);
+      console.error("Failed to refresh users on CreateLead:", error);
       return [];
     }
   };
@@ -1631,11 +1642,9 @@ export default function CreateLead() {
 
               {/* ROW 2 */}
               <Box display="flex" gap={2} flexWrap="wrap">
-                {/* Only show "Assigned To" field for admins */}
-                {/* For employees (creating or editing), field is hidden and auto-assigned to themselves */}
-                {!isAdmin ? null : (
-                  <Box flex={1} minWidth={200}>
-                    <RequiredLabel text="Assigned To" />
+                {/* Show "Assigned To" field for all users - employees can also assign leads */}
+                <Box flex={1} minWidth={200}>
+                  <RequiredLabel text="Assigned To" />
                     <TextField
                       sx={MuiSelectPadding}
                       select
@@ -1731,7 +1740,6 @@ export default function CreateLead() {
                       })}
                     </TextField>
                   </Box>
-                )}
 
                 {/* Follow up DATE */}
                 <Box flex={1} minWidth={200}>
