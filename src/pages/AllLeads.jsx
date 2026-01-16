@@ -26,6 +26,7 @@ import {
   DialogContentText,
   DialogActions,
   CircularProgress,
+  Switch,
 } from "@mui/material";
 import CloudDownloadIcon from "@mui/icons-material/CloudDownload";
 import AddIcon from "@mui/icons-material/Add";
@@ -93,6 +94,7 @@ const ALL_COLUMNS = [
   { key: "assignedTo", label: "Assigned To" },
   { key: "followUpAt", label: "Follow-up At" },
   { key: "followupStatus", label: "Follow-up Status" },
+  { key: "isActive", label: "Active" },
   { key: "source", label: "Source" },
   { key: "description", label: "Description" },
   { key: "company", label: "Company" },
@@ -111,6 +113,7 @@ const DEFAULT_COLUMNS = [
   "assignedTo",
   "followUpAt",
   "followupStatus",
+  "isActive",
 ];
 const tableHeaderCellStyles = {
   whiteSpace: "nowrap", // correct value
@@ -144,7 +147,8 @@ export default function AllLeads() {
   const [statusFilter, setStatusFilter] = useState("All");
   const [anchorEl, setAnchorEl] = useState(null);
   const [visibleColumns, setVisibleColumns] = useState(() => {
-    return JSON.parse(localStorage.getItem("leadColumns")) || DEFAULT_COLUMNS;
+    const stored = JSON.parse(localStorage.getItem("leadColumns")) || DEFAULT_COLUMNS;
+    return stored.includes("isActive") ? stored : [...stored, "isActive"]; // ensure toggle column shows
   });
   const [selectedLead, setSelectedLead] = useState(null);
   const [isModalOpen, setIsModalOpen] = useState(false);
@@ -163,6 +167,7 @@ export default function AllLeads() {
   // Track individual dropdown loading states
   const [statusUpdatingLeadId, setStatusUpdatingLeadId] = useState(null);
   const [followUpUpdatingLeadId, setFollowUpUpdatingLeadId] = useState(null);
+  const [activeTogglingLeadId, setActiveTogglingLeadId] = useState(null);
 
   const actionOpen = Boolean(actionAnchorEl);
   const rowRefs = useRef({});
@@ -453,13 +458,26 @@ export default function AllLeads() {
         setIsPageLoading(false);
 
         // Update cache with fresh leads data, statuses, and employees (store all leads, filter on display)
+        // Use user-specific cache key
+        const storedUserForCache = localStorage.getItem("user");
+        let cacheKey = "leadDataCache";
+        if (storedUserForCache) {
+          try {
+            const userDataForCache = JSON.parse(storedUserForCache);
+            const userIdForCache = userDataForCache.id || userDataForCache.pk || userDataForCache.uuid;
+            if (userIdForCache) cacheKey = `leadDataCache_${userIdForCache}`;
+          } catch (e) {
+            // Use default key
+          }
+        }
+        
         const currentCache = getCachedLeadData();
         if (currentCache) {
           currentCache.leads = leadsList;
           currentCache.statuses = statusesList;
           currentCache.employees = usersList;
           currentCache.timestamp = Date.now();
-          localStorage.setItem("leadDataCache", JSON.stringify(currentCache));
+          localStorage.setItem(cacheKey, JSON.stringify(currentCache));
         } else {
           // Create new cache entry if none exists
           const newCache = {
@@ -469,7 +487,7 @@ export default function AllLeads() {
             leads: leadsList,
             timestamp: Date.now(),
           };
-          localStorage.setItem("leadDataCache", JSON.stringify(newCache));
+          localStorage.setItem(cacheKey, JSON.stringify(newCache));
         }
       } catch (err) {
         console.error("Failed to fetch leads:", err);
@@ -734,6 +752,48 @@ export default function AllLeads() {
     if (!leadId) return;
     warmUpLeadForm();
     navigate(`/edit-lead/${leadId}`);
+  };
+
+  // Handler to toggle lead active status
+  const handleToggleActive = async (lead) => {
+    const leadId = lead.id || lead.pk || lead.uuid;
+    if (!leadId) return;
+
+    const currentActive =
+      lead.is_always_active ?? lead.always_active ?? false;
+    const nextActive = !currentActive;
+
+    setActiveTogglingLeadId(leadId);
+    try {
+      const response = await apiRequest(`/api/leads/${leadId}/always-active/`, {
+        method: "PATCH",
+        body: JSON.stringify({ always_active: nextActive }),
+      });
+
+      // Update lead in local state
+      const newActiveStatus =
+        response?.is_always_active ??
+        response?.always_active ??
+        nextActive;
+      setLeads((prevLeads) =>
+        prevLeads.map((l) =>
+          (l.id || l.pk || l.uuid) === leadId
+            ? { ...l, is_always_active: newActiveStatus, always_active: newActiveStatus }
+            : l
+        )
+      );
+
+      // Update cache
+      const updatedLead = { ...lead, is_always_active: newActiveStatus, always_active: newActiveStatus };
+      addLeadToCache(updatedLead);
+
+      notifySuccess(`Lead ${newActiveStatus ? "activated" : "deactivated"} successfully`);
+    } catch (error) {
+      console.error("Failed to toggle lead active status:", error);
+      notifyError("Failed to update lead status");
+    } finally {
+      setActiveTogglingLeadId(null);
+    }
   };
 
   // Helper function to get lead field value handling both camelCase and snake_case
@@ -1336,6 +1396,9 @@ export default function AllLeads() {
               {visibleColumns.includes("positionTitle") && (
                 <TableCell sx={tableHeaderCellStyles}>Position Title</TableCell>
               )}
+              {visibleColumns.includes("isActive") && (
+                <TableCell sx={{ ...tableHeaderCellStyles, textAlign: "center" }}>Active</TableCell>
+              )}
               <TableCell sx={{ ...tableHeaderCellStyles, textAlign: "center" }}>
                 Notes
               </TableCell>
@@ -1653,6 +1716,18 @@ export default function AllLeads() {
                     {visibleColumns.includes("positionTitle") && (
                       <TableCell>
                         {getLeadFieldValue(lead, "positionTitle") || "-"}
+                      </TableCell>
+                    )}
+
+                    {visibleColumns.includes("isActive") && (
+                      <TableCell align="center">
+                        <Switch
+                          checked={lead.is_always_active || lead.always_active || false}
+                          onChange={() => handleToggleActive(lead)}
+                          disabled={activeTogglingLeadId === (lead.id || lead.pk || lead.uuid)}
+                          size="small"
+                          color="primary"
+                        />
                       </TableCell>
                     )}
                     <TableCell align="center">

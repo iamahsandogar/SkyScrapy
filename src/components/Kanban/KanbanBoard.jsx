@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useState } from "react";
+import React, { useEffect, useState } from "react";
 import { Backdrop, Box, Typography } from "@mui/material";
 import {
   DndContext,
@@ -13,12 +13,12 @@ import dayjs from "dayjs";
 import { useLocation } from "react-router-dom";
 
 import apiRequest from "../services/api";
-import { addLeadToCache, getCachedLeadData } from "../../utils/prefetchData";
 import DotLoader from "../global/DotLoader";
 import Loading from "../global/Loading";
 import KanbanColumn from "./KanbanColumn";
 import KanbanCard from "./KanbanCard";
 import { useNotification } from "../../contexts/NotificationContext.jsx";
+import { addLeadToCache, getCachedLeadData } from "../../utils/prefetchData";
 
 const columnOrder = ["Overdue", "Due Today", "Upcoming", "Done"];
 
@@ -81,16 +81,51 @@ const filterLeadsByUser = (leadsList = []) => {
   return leadsList;
 };
 
-function KanbanBoard() {
-  const { cachedLeadData, cachedLeads } = useMemo(() => {
-    const cached = getCachedLeadData();
-    const filteredLeads = filterLeadsByUser(cached?.leads ?? []);
-    return { cachedLeadData: cached, cachedLeads: filteredLeads };
-  }, []);
+// Flatten the reminders payload into a single leads list
+const extractLeadsFromRemindersPayload = (payload) => {
+  if (!payload || typeof payload !== "object") return [];
 
-  const [columns, setColumns] = useState(() => categorizeLeads(cachedLeads));
-  const [leads, setLeads] = useState(cachedLeads);
-  const [statuses, setStatuses] = useState(cachedLeadData?.statuses ?? []);
+  // Expected sections from the reminders endpoint
+  const sections = ["overdue", "due_today", "upcoming", "done"];
+  const collected = [];
+
+  sections.forEach((sectionKey) => {
+    const section = payload[sectionKey];
+    if (!section) return;
+
+    // Common shape: { count, leads: [...] }
+    if (Array.isArray(section.leads)) {
+      collected.push(...section.leads);
+      return;
+    }
+
+    // Fallbacks in case API returns different keys
+    if (Array.isArray(section.items)) {
+      collected.push(...section.items);
+      return;
+    }
+    if (Array.isArray(section.data)) {
+      collected.push(...section.data);
+    }
+  });
+
+  return collected;
+};
+
+// Parse statuses from /ui/options/statuses/ response
+const parseStatusesResponse = (payload) => {
+  if (!payload) return [];
+  if (Array.isArray(payload)) return payload;
+  if (Array.isArray(payload.statuses)) return payload.statuses;
+  if (Array.isArray(payload.data)) return payload.data;
+  if (Array.isArray(payload.data?.statuses)) return payload.data.statuses;
+  return [];
+};
+
+function KanbanBoard() {
+  const [columns, setColumns] = useState(() => categorizeLeads([]));
+  const [leads, setLeads] = useState([]);
+  const [statuses, setStatuses] = useState([]);
   const [loading, setLoading] = useState(true);
   const [markingDoneLeadId, setMarkingDoneLeadId] = useState(null);
   const [activeId, setActiveId] = useState(null);
@@ -107,74 +142,76 @@ function KanbanBoard() {
   useEffect(() => {
     let isMounted = true;
 
-    const fetchStatuses = async () => {
-      const cachedData = getCachedLeadData();
-      if (cachedData?.statuses?.length && isMounted) {
+    // Immediately hydrate from cache (if available) to avoid empty UI while fetching
+    const cachedData = getCachedLeadData();
+    if (cachedData) {
+      const cachedLeads = filterLeadsByUser(cachedData.leads || []);
+      setLeads(cachedLeads);
+      setColumns(categorizeLeads(cachedLeads));
+      if (cachedData.statuses?.length) {
         setStatuses(cachedData.statuses);
       }
+      setLoading(false);
+    }
 
-      try {
-        // Single API call to get both statuses and sources
-        const response = await apiRequest("/ui/options/");
-        if (!isMounted) return;
-        
-        let statusesList = [];
-        if (response?.statuses && Array.isArray(response.statuses)) {
-          statusesList = response.statuses;
-        } else if (response?.data?.statuses && Array.isArray(response.data.statuses)) {
-          statusesList = response.data.statuses;
-        }
-        
-        if (statusesList.length) {
-          setStatuses(statusesList);
-        }
-      } catch (error) {
-        console.error("Failed to load reminder statuses:", error);
-      }
-    };
-
-    const fetchLeads = async () => {
-      if (!isMounted) return;
+    const fetchReminders = async () => {
       setLoading(true);
-      const cachedData = getCachedLeadData();
-
-      if (cachedData?.leads) {
-        if (!isMounted) return;
-        const filteredLeads = filterLeadsByUser(cachedData.leads);
-        setLeads(filteredLeads);
-        setColumns(categorizeLeads(filteredLeads));
-
-        if (Array.isArray(cachedData.statuses)) {
-          setStatuses(cachedData.statuses);
-        }
-
-        setLoading(false);
-        return;
-      }
-
       try {
-        const data = await apiRequest("/api/leads/reminders/");
-        let leadsList = [];
+        const [remindersPayload, statusesPayload] = await Promise.all([
+          apiRequest("/api/leads/reminders/"),
+          apiRequest("/ui/options/").catch((err) => {
+            console.warn("Failed to fetch reminder statuses:", err);
+            return null;
+          }),
+        ]);
 
-        if (Array.isArray(data?.leads)) {
-          leadsList = data.leads;
-        } else if (Array.isArray(data)) {
-          leadsList = data;
-        } else if (Array.isArray(data?.data)) {
-          leadsList = data.data;
-        } else if (Array.isArray(data?.data?.leads)) {
-          leadsList = data.data.leads;
-        }
+        // Leads
+        const leadsList = extractLeadsFromRemindersPayload(remindersPayload);
+
+        // Statuses
+        const statusesFromReminders = parseStatusesPayload(remindersPayload);
+        const statusesFromOptions = parseStatusesResponse(statusesPayload);
+        const mergedStatuses = statusesFromOptions?.length
+          ? statusesFromOptions
+          : statusesFromReminders?.length
+          ? statusesFromReminders
+          : [];
 
         if (!isMounted) return;
+
         const filteredLeads = filterLeadsByUser(leadsList);
         setLeads(filteredLeads);
         setColumns(categorizeLeads(filteredLeads));
+        if (mergedStatuses.length) {
+          setStatuses(mergedStatuses);
+        }
 
-        if (Array.isArray(data?.statuses)) {
-          setStatuses(data.statuses);
-        } else if (Array.isArray(data?.data?.statuses)) {
-          setStatuses(data.data.statuses);
+        // Refresh cache so next visit is instant (uses addLeadToCache which is user-specific)
+        try {
+          const existingCache = getCachedLeadData() || {};
+          const cacheData = {
+            ...existingCache,
+            leads: leadsList,
+            statuses: mergedStatuses.length
+              ? mergedStatuses
+              : existingCache.statuses || [],
+            timestamp: Date.now(),
+          };
+          // Get user-specific cache key
+          const storedUser = localStorage.getItem("user");
+          let cacheKey = "leadDataCache";
+          if (storedUser) {
+            try {
+              const userData = JSON.parse(storedUser);
+              const userId = userData.id || userData.pk || userData.uuid;
+              if (userId) cacheKey = `leadDataCache_${userId}`;
+            } catch (e) {
+              // Use default key
+            }
+          }
+          localStorage.setItem(cacheKey, JSON.stringify(cacheData));
+        } catch (cacheErr) {
+          console.warn("Failed to update reminders cache:", cacheErr);
         }
       } catch (error) {
         console.error("Failed to fetch reminders:", error);
@@ -185,8 +222,7 @@ function KanbanBoard() {
       }
     };
 
-    fetchStatuses();
-    fetchLeads();
+    fetchReminders();
 
     return () => {
       isMounted = false;
@@ -277,6 +313,7 @@ function KanbanBoard() {
         body: JSON.stringify({ follow_up_status: "done" }),
       });
 
+      // Keep local cache in sync so AllLeads/EmployeeAllLeads reflect instantly
       addLeadToCache(updatedLead);
     } catch (error) {
       console.error("Failed to mark lead as done:", error);

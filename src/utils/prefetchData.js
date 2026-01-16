@@ -6,6 +6,31 @@ let lastPrefetchTime = 0;
 const PREFETCH_COOLDOWN = 15000; // 15 seconds - prevent duplicate calls within this window
 
 /**
+ * Get the current user's ID for cache key isolation
+ * Each user gets their own cache to avoid data leakage between admin/employee
+ */
+const getCurrentUserId = () => {
+  try {
+    const storedUser = localStorage.getItem("user");
+    if (!storedUser) return null;
+    const userData = JSON.parse(storedUser);
+    return userData.id || userData.pk || userData.uuid || null;
+  } catch (e) {
+    console.warn("Error getting current user ID:", e);
+    return null;
+  }
+};
+
+/**
+ * Get the cache key for the current user
+ * Returns user-specific key like "leadDataCache_123" or fallback "leadDataCache"
+ */
+const getCacheKey = () => {
+  const userId = getCurrentUserId();
+  return userId ? `leadDataCache_${userId}` : "leadDataCache";
+};
+
+/**
  * Pre-fetch statuses, sources, employees, and optionally leads data and store in localStorage.
  * Pass `{ includeLeads: false }` if you only need metadata (used by lead form navigation).
  * This is called after login to make data instantly available.
@@ -154,8 +179,9 @@ export const prefetchLeadData = async ({ includeLeads = true } = {}) => {
       timestamp: Date.now(),
     };
 
-    localStorage.setItem("leadDataCache", JSON.stringify(cacheData));
-    console.log("Lead data pre-fetched and cached:", {
+    const cacheKey = getCacheKey();
+    localStorage.setItem(cacheKey, JSON.stringify(cacheData));
+    console.log(`Lead data pre-fetched and cached for user (${cacheKey}):`, {
       statusesCount: statusesList.length,
       sourcesCount: sourcesList.length,
       employeesCount: allEmployees.length,
@@ -177,10 +203,12 @@ export const prefetchLeadData = async ({ includeLeads = true } = {}) => {
 /**
  * Get cached lead data from localStorage
  * Returns null if cache is missing or expired (older than 5 minutes)
+ * Uses user-specific cache key to isolate data between users
  */
 export const getCachedLeadData = () => {
   try {
-    const cached = localStorage.getItem("leadDataCache");
+    const cacheKey = getCacheKey();
+    const cached = localStorage.getItem(cacheKey);
     if (!cached) return null;
 
     const cacheData = JSON.parse(cached);
@@ -188,8 +216,8 @@ export const getCachedLeadData = () => {
     const maxAge = 5 * 60 * 1000; // 5 minutes
 
     if (cacheAge > maxAge) {
-      console.log("Cache expired, will refresh");
-      localStorage.removeItem("leadDataCache");
+      console.log(`Cache expired for ${cacheKey}, will refresh`);
+      localStorage.removeItem(cacheKey);
       return null;
     }
 
@@ -201,10 +229,25 @@ export const getCachedLeadData = () => {
 };
 
 /**
- * Clear cached lead data
+ * Clear cached lead data for the current user
  */
 export const clearLeadDataCache = () => {
-  localStorage.removeItem("leadDataCache");
+  const cacheKey = getCacheKey();
+  localStorage.removeItem(cacheKey);
+};
+
+/**
+ * Clear all user caches (used on logout to clean up)
+ */
+export const clearAllUserCaches = () => {
+  const keysToRemove = [];
+  for (let i = 0; i < localStorage.length; i++) {
+    const key = localStorage.key(i);
+    if (key && key.startsWith("leadDataCache")) {
+      keysToRemove.push(key);
+    }
+  }
+  keysToRemove.forEach((key) => localStorage.removeItem(key));
 };
 
 /**
@@ -213,7 +256,8 @@ export const clearLeadDataCache = () => {
  */
 export const addLeadToCache = (newLead) => {
   try {
-    const cached = localStorage.getItem("leadDataCache");
+    const cacheKey = getCacheKey();
+    const cached = localStorage.getItem(cacheKey);
     if (cached) {
       const cacheData = JSON.parse(cached);
       if (cacheData.leads && Array.isArray(cacheData.leads)) {
@@ -237,7 +281,7 @@ export const addLeadToCache = (newLead) => {
 
         // Update timestamp
         cacheData.timestamp = Date.now();
-        localStorage.setItem("leadDataCache", JSON.stringify(cacheData));
+        localStorage.setItem(cacheKey, JSON.stringify(cacheData));
         console.log("Added new lead to cache:", newLead);
         return cacheData;
       }
@@ -250,7 +294,7 @@ export const addLeadToCache = (newLead) => {
         leads: [newLead],
         timestamp: Date.now(),
       };
-      localStorage.setItem("leadDataCache", JSON.stringify(newCache));
+      localStorage.setItem(cacheKey, JSON.stringify(newCache));
       console.log("Created new cache with lead:", newLead);
       return newCache;
     }
@@ -294,7 +338,8 @@ export const removeLeadFromCache = (leadLike) => {
   if (!normalized) return null;
 
   try {
-    const cached = localStorage.getItem("leadDataCache");
+    const cacheKey = getCacheKey();
+    const cached = localStorage.getItem(cacheKey);
     if (!cached) return null;
     const cacheData = JSON.parse(cached);
     if (!cacheData.leads || !Array.isArray(cacheData.leads)) {
@@ -314,7 +359,7 @@ export const removeLeadFromCache = (leadLike) => {
       leads: filteredLeads,
       timestamp: Date.now(),
     };
-    localStorage.setItem("leadDataCache", JSON.stringify(updatedCache));
+    localStorage.setItem(cacheKey, JSON.stringify(updatedCache));
     console.log("Removed lead from cache:", normalized);
     return updatedCache;
   } catch (error) {

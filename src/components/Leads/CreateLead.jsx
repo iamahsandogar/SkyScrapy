@@ -18,11 +18,7 @@ import {
 import { AdapterDayjs } from "@mui/x-date-pickers/AdapterDayjs";
 import dayjs from "dayjs";
 import apiRequest from "../services/api";
-import {
-  getCachedLeadData,
-  clearLeadDataCache,
-  addLeadToCache,
-} from "../../utils/prefetchData";
+import { clearLeadDataCache, addLeadToCache, getCachedLeadData } from "../../utils/prefetchData";
 import DotLoader from "../global/DotLoader";
 import { useNotification } from "../../contexts/NotificationContext.jsx";
 
@@ -33,19 +29,6 @@ const parseEmployeesPayload = (payload) => {
   if (Array.isArray(payload.data)) return payload.data;
   if (Array.isArray(payload.data?.employees)) return payload.data.employees;
   return [];
-};
-
-const filterEmployeesForDropdown = (employeesList = []) => {
-  return employeesList.filter(
-    (emp) =>
-      emp.status === "Active" ||
-      emp.is_active === true ||
-      emp.is_staff === true ||
-      emp.is_admin === true ||
-      emp.is_superuser === true ||
-      emp.role === 0 ||
-      emp.role === "0"
-  );
 };
 
 const getEmployeeDisplayName = (employee = {}) => {
@@ -93,11 +76,6 @@ const getEmployeeDisplayName = (employee = {}) => {
   return "Unknown Employee";
 };
 
-// Module-level flag to prevent duplicate API calls
-let isRefreshing = false;
-let lastRefreshTime = 0;
-const REFRESH_COOLDOWN = 10000; // 10 seconds - prevent duplicate calls within this window
-
 const MuiSelectPadding = {
   "& .MuiOutlinedInput-root": {
     padding: 0,
@@ -141,7 +119,6 @@ export default function CreateLead() {
   const [meta, setMeta] = useState({ status: [], source: [] });
   const [loadingMeta, setLoadingMeta] = useState(false);
   const [loadingLead, setLoadingLead] = useState(false);
-  const [user, setUser] = useState(null);
   const [isAdmin, setIsAdmin] = useState(false);
   const [isDataLoaded, setIsDataLoaded] = useState(false);
 
@@ -165,305 +142,108 @@ export default function CreateLead() {
 
   /* ------------------------------------
      FETCH ALL DATA FROM BACKEND (STATUS, SOURCE, EMPLOYEES)
-     This function is called for both admin and employee users
-     Uses cached data first for instant loading, then refreshes
+     No cache usage; single calls to ui/options and ui/employees
   -------------------------------------*/
   const fetchAllData = async () => {
     setLoadingMeta(true);
 
-    // Try to get cached data first for instant loading
-    const cachedData = getCachedLeadData();
-    const CACHE_MAX_AGE = 5 * 60 * 1000; // 5 minutes
+    // Get current user for role-based filtering
+    const storedUser = localStorage.getItem("user");
+    let currentUserId = null;
+    let isCurrentUserAdmin = false;
+    let userData = null;
 
-    if (cachedData && cachedData.timestamp) {
-      const cacheAge = Date.now() - cachedData.timestamp;
-      const isCacheFresh = cacheAge < CACHE_MAX_AGE;
-
-      if (isCacheFresh) {
-        console.log(
-          "Using cached lead data (cache is fresh, no API calls needed)"
-        );
-        setMeta({
-          status: cachedData.statuses || [],
-          source: cachedData.sources || [],
-        });
-
-        // Filter employees based on user role even from cache
-        const storedUser = localStorage.getItem("user");
-        let currentUserId = null;
-        let isCurrentUserAdmin = false;
-        let userData = null;
-
-        if (storedUser) {
-          userData = JSON.parse(storedUser);
-          currentUserId = userData.id || userData.pk || userData.uuid;
-          isCurrentUserAdmin =
-            userData.is_staff ||
-            userData.is_admin ||
-            userData.is_superuser ||
-            userData.role === 0 ||
-            userData.role === "0";
-        }
-
-        let filteredEmployees = [];
-        if (!isCurrentUserAdmin && !editId) {
-          // For employees creating a new lead: only show themselves and Admin users
-          if (cachedData.employees && cachedData.employees.length > 0) {
-            filteredEmployees = cachedData.employees.filter((e) => {
-              const empId = e.id || e.pk || e.uuid;
-              const isAdmin =
-                e.is_staff ||
-                e.is_admin ||
-                e.is_superuser ||
-                e.role === 0 ||
-                e.role === "0";
-
-              return String(empId) === String(currentUserId) || isAdmin;
-            });
-          }
-
-          // If no cached employees or filtered list is empty, create fallback from logged-in user
-          if (filteredEmployees.length === 0 && currentUserId && userData) {
-            const fallbackEmployee = {
-              id: currentUserId,
-              pk: currentUserId,
-              uuid: currentUserId,
-              firstName: userData.first_name || userData.firstName || "",
-              first_name: userData.first_name || userData.firstName || "",
-              lastName: userData.last_name || userData.lastName || "",
-              last_name: userData.last_name || userData.lastName || "",
-              is_staff: userData.is_staff || false,
-              is_admin: userData.is_admin || false,
-              is_superuser: userData.is_superuser || false,
-              role: userData.role || null,
-            };
-            filteredEmployees = [fallbackEmployee];
-            console.log(
-              "Using fallback employee from cache:",
-              fallbackEmployee
-            );
-          }
-        } else {
-          // For admins or when editing: show all employees from cache
-          filteredEmployees = cachedData.employees || [];
-        }
-
-        setEmployees(filteredEmployees);
-        setLoadingMeta(false);
-
-        // Use cache data only - no background API calls (like view modal)
-        console.log("Using cache data only - no API calls");
-        return;
-      } else {
-        console.log("Cache is stale, fetching fresh data...");
-      }
-    } else {
-      console.log("No cache available, fetching fresh data...");
+    if (storedUser) {
+      userData = JSON.parse(storedUser);
+      currentUserId = userData.id || userData.pk || userData.uuid;
+      isCurrentUserAdmin =
+        userData.is_staff ||
+        userData.is_admin ||
+        userData.is_superuser ||
+        userData.role === 0 ||
+        userData.role === "0";
     }
-
-    // No cache or cache is stale, fetch fresh data
-    await refreshDataInBackground();
-  };
-
-  const refreshDataInBackground = async () => {
-    // Prevent duplicate calls
-    const now = Date.now();
-    if (isRefreshing) {
-      console.log("Refresh already in progress, skipping duplicate call");
-      return;
-    }
-
-    if (now - lastRefreshTime < REFRESH_COOLDOWN) {
-      console.log(
-        "Refresh called too soon after last call, skipping to prevent duplicates"
-      );
-      return;
-    }
-
-    isRefreshing = true;
-    lastRefreshTime = now;
 
     try {
-      // Initialize with empty arrays
+      // Always fetch options; fetch employees only for admins
+      const requests = [apiRequest("/ui/options/")];
+      if (isCurrentUserAdmin) {
+        requests.push(apiRequest("/ui/employees/"));
+      }
+
+      const [optionsResponse, employeesResponse] = await Promise.all(requests);
+
+      // Parse statuses and sources
       let statusesList = [];
       let sourcesList = [];
+
+      if (optionsResponse) {
+        if (Array.isArray(optionsResponse.statuses)) {
+          statusesList = optionsResponse.statuses;
+        } else if (
+          optionsResponse?.data?.statuses &&
+          Array.isArray(optionsResponse.data.statuses)
+        ) {
+          statusesList = optionsResponse.data.statuses;
+        }
+
+        if (Array.isArray(optionsResponse.sources)) {
+          sourcesList = optionsResponse.sources;
+        } else if (
+          optionsResponse?.data?.sources &&
+          Array.isArray(optionsResponse.data.sources)
+        ) {
+          sourcesList = optionsResponse.data.sources;
+        }
+      }
+
+      // Parse employees
       let employeesList = [];
-
-      // Single API call to get both statuses and sources
-      try {
-        console.log("Fetching statuses and sources from /ui/options/");
-        const optionsResponse = await apiRequest("/ui/options/");
-        console.log("Options API response:", optionsResponse);
-
-        // Extract statuses from response
-        if (optionsResponse) {
-          if (Array.isArray(optionsResponse.statuses)) {
-            statusesList = optionsResponse.statuses;
-          } else if (
-            optionsResponse?.data?.statuses &&
-            Array.isArray(optionsResponse.data.statuses)
-          ) {
-            statusesList = optionsResponse.data.statuses;
-          }
-
-          // Extract sources from response
-          if (Array.isArray(optionsResponse.sources)) {
-            sourcesList = optionsResponse.sources;
-          } else if (
-            optionsResponse?.data?.sources &&
-            Array.isArray(optionsResponse.data.sources)
-          ) {
-            sourcesList = optionsResponse.data.sources;
-          }
-        }
-
-        console.log("Parsed statuses:", statusesList);
-        console.log("Parsed sources:", sourcesList);
-      } catch (error) {
-        console.error("Failed to fetch options:", error);
-        console.error("Options error details:", {
-          message: error.message,
-          endpoint: "/ui/options/",
-        });
-        statusesList = [];
-        sourcesList = [];
+      if (isCurrentUserAdmin) {
+        employeesList = parseEmployeesPayload(employeesResponse);
+      } else {
+        // For employees: avoid employees API; show only self
+        const selfEntry = {
+          id: currentUserId,
+          firstName: userData?.firstName || userData?.first_name || userData?.name,
+          lastName: userData?.lastName || userData?.last_name || "",
+          user_id: currentUserId,
+        };
+        employeesList = [selfEntry];
       }
 
-      // Fetch employees - handle errors individually so other calls can still succeed
-      // Get current user info first (needed for fallback)
-      const storedUser = localStorage.getItem("user");
-      let currentUserId = null;
-      let isCurrentUserAdmin = false;
-      let userData = null;
-
-      if (storedUser) {
-        userData = JSON.parse(storedUser);
-        currentUserId = userData.id || userData.pk || userData.uuid;
-        isCurrentUserAdmin =
-          userData.is_staff ||
-          userData.is_admin ||
-          userData.is_superuser ||
-          userData.role === 0 ||
-          userData.role === "0";
-      }
-
-      // Fetch employees/users for the assignment dropdown (all users can assign leads)
-      // Use /api/leads/ which returns all users including admins in the 'users' field
-      try {
-        console.log("Fetching all users from /api/leads/");
-        const leadsResponse = await apiRequest("/api/leads/");
-        console.log("Leads API response (for users):", leadsResponse);
-
-        // Extract users from the leads response - this includes all users (admins + employees)
-        if (leadsResponse?.users && Array.isArray(leadsResponse.users)) {
-          employeesList = leadsResponse.users;
-          console.log("Extracted users from /api/leads/:", employeesList.length);
-        } else {
-          // Fallback to /ui/employees/ if users not in leads response
-          console.log("No users in leads response, falling back to /ui/employees/");
-          const employeesResponse = await apiRequest("/ui/employees/");
-          
-          if (Array.isArray(employeesResponse)) {
-            employeesList = employeesResponse;
-          } else if (employeesResponse?.employees) {
-            employeesList = employeesResponse.employees;
-          } else if (employeesResponse?.data) {
-            employeesList = Array.isArray(employeesResponse.data)
-              ? employeesResponse.data
-              : employeesResponse.data?.employees || [];
-          }
-        }
-
-        console.log("Parsed users (before filter):", employeesList);
-
-        const filteredEmployees = filterEmployeesForDropdown(employeesList);
-        console.log(
-          "Filtered users (all active users + admins):",
-          filteredEmployees
-        );
-
-        employeesList = filteredEmployees;
-      } catch (error) {
-        console.error("Failed to fetch users:", error);
-        console.error("Users error details:", {
-          message: error.message,
-        });
-        employeesList = [];
-      }
-      // Update state with fetched data (even if some are empty)
-      setMeta({
-        status: statusesList,
-        source: sourcesList,
-      });
+      setMeta({ status: statusesList, source: sourcesList });
       setEmployees(employeesList);
 
-      setLoadingMeta(false);
+      // For employees (non-admin) on create, default Assigned To to self if not set
+      if (!isCurrentUserAdmin && !editId) {
+        const selfEmployee = employeesList.find((emp) => {
+          const profileId = emp.id || emp.pk || emp.uuid;
+          const userId = emp.user_id || emp.userId || emp.user_details?.id;
+          return (
+            (profileId && String(profileId) === String(currentUserId)) ||
+            (userId && String(userId) === String(currentUserId))
+          );
+        });
 
-      // Update cache with fresh data (only if we got some data)
-      if (
-        statusesList.length > 0 ||
-        sourcesList.length > 0 ||
-        employeesList.length > 0
-      ) {
-        const cacheData = {
-          statuses: statusesList,
-          sources: sourcesList,
-          employees: employeesList,
-          timestamp: Date.now(),
-        };
-        localStorage.setItem("leadDataCache", JSON.stringify(cacheData));
+        if (selfEmployee) {
+          const selfId =
+            selfEmployee.id || selfEmployee.pk || selfEmployee.uuid || currentUserId;
+          setFormData((prev) =>
+            prev.assigned_to ? prev : { ...prev, assigned_to: String(selfId) }
+          );
+        }
       }
-
-      // Log summary
-      console.log("Data fetch complete:", {
-        statusesCount: statusesList.length,
-        sourcesCount: sourcesList.length,
-        employeesCount: employeesList.length,
-      });
-    } finally {
-      // Always reset flag, even if there was an error
-      isRefreshing = false;
-    }
-  };
-
-  const fetchLatestEmployeesFromApi = async () => {
-    try {
-      console.log("Refreshing users list from /api/leads/");
-      const response = await apiRequest("/api/leads/");
-      let usersList = [];
-      
-      if (response?.users && Array.isArray(response.users)) {
-        usersList = response.users;
-      } else {
-        // Fallback to /ui/employees/
-        const empResponse = await apiRequest("/ui/employees/");
-        usersList = parseEmployeesPayload(empResponse);
-      }
-      
-      const filtered = filterEmployeesForDropdown(usersList);
-      setEmployees(filtered);
-
-      const cachedData = getCachedLeadData() || {};
-      const updatedCache = {
-        ...cachedData,
-        employees: usersList,
-        timestamp: Date.now(),
-      };
-      localStorage.setItem("leadDataCache", JSON.stringify(updatedCache));
-      return filtered;
     } catch (error) {
-      console.error("Failed to refresh users on CreateLead:", error);
-      return [];
+      console.error("Failed to fetch meta data:", error);
+      setMeta({ status: [], source: [] });
+      setEmployees([]);
+    } finally {
+      setLoadingMeta(false);
     }
   };
 
-  const findLeadInCache = (leadId) => {
-    const cachedData = getCachedLeadData();
-    if (!cachedData?.leads || !Array.isArray(cachedData.leads)) {
-      return null;
-    }
-    return cachedData.leads.find((lead) => String(lead.id) === String(leadId));
-  };
+  // Removed cache-based refresh helpers to avoid localStorage usage for meta data
 
   const fetchLeadFromApi = async (leadId) => {
     try {
@@ -483,23 +263,168 @@ export default function CreateLead() {
     }
   };
 
-  const fetchLeadForEdit = async (leadId, allowCacheFallback) => {
-    // First, try to get lead from cache (like view modal does)
-    const cachedLead = findLeadInCache(leadId);
-    if (cachedLead) {
-      console.log("Using cached lead data for edit (no API call needed)");
-      return { lead: cachedLead, fromCache: true };
+  const getLeadFromCache = (leadId) => {
+    // Try to get lead from user's cache for instant display
+    const cachedData = getCachedLeadData();
+    if (cachedData && Array.isArray(cachedData.leads)) {
+      const cachedLead = cachedData.leads.find((l) => {
+        const id = l.id || l.pk || l.uuid;
+        return String(id) === String(leadId);
+      });
+      if (cachedLead) {
+        console.log("Found lead in cache for instant display:", cachedLead);
+        return cachedLead;
+      }
+    }
+    return null;
+  };
+
+  // Helper function to populate form with lead data (used for both cache and API data)
+  const populateFormWithLeadData = (leadToEdit, isCurrentAdmin, fromCache = false) => {
+    try {
+      if (!leadToEdit) {
+        console.error("populateFormWithLeadData called with null/undefined data");
+        return;
+      }
+
+      // Handle different response formats - API might return { lead: {...} } or { data: {...} }
+      let leadData = leadToEdit;
+      if (leadToEdit.lead) {
+        leadData = leadToEdit.lead;
+        console.log("Lead data found in 'lead' property");
+      } else if (leadToEdit.data) {
+        leadData = leadToEdit.data;
+        console.log("Lead data found in 'data' property");
+      }
+
+      console.log("Processed lead data:", leadData);
+
+      if (!leadData || typeof leadData !== 'object') {
+        console.error("Invalid lead data structure:", leadData);
+        return;
+      }
+
+      // Ensure status is set as ID (number) if it comes as an object
+      let statusId = leadData.status;
+      if (typeof leadData.status === "object" && leadData.status !== null) {
+        statusId = leadData.status.id || leadData.status.pk || null;
+      }
+
+    // Extract assigned_to ID properly - handle nested structure
+    let assignedToId = leadData.assigned_to || leadData.assignedTo || null;
+    let assignedToProfileId = null;
+
+    if (assignedToId && typeof assignedToId === "object" && assignedToId !== null) {
+      assignedToProfileId = assignedToId.id || assignedToId.pk || assignedToId.uuid || null;
+      if (assignedToId.user_details && assignedToId.user_details.id) {
+        assignedToId = assignedToId.user_details.id;
+      } else {
+        assignedToId = assignedToProfileId;
+      }
     }
 
-    // If not in cache, try API
-    try {
-      const lead = await fetchLeadFromApi(leadId);
-      return { lead, fromCache: false };
-    } catch (apiError) {
-      if (!allowCacheFallback) {
-        throw apiError;
+    // For employees, ensure assigned_to is set to their own ID
+    if (!isCurrentAdmin) {
+      const storedUser = localStorage.getItem("user");
+      if (storedUser) {
+        const userData = JSON.parse(storedUser);
+        const currentUserId = userData.id || userData.pk || userData.uuid;
+        if (currentUserId) {
+          assignedToId = currentUserId;
+        }
       }
-      throw apiError;
+    }
+
+    // Parse follow_up_at datetime properly
+    let followUpDate = null;
+    let followUpTime = null;
+
+    if (leadData.follow_up_at || leadData.followUpAt) {
+      const dateTimeValue = leadData.follow_up_at || leadData.followUpAt;
+      const dateTime = dayjs(dateTimeValue);
+      if (dateTime.isValid()) {
+        followUpDate = dateTime.startOf("day");
+        followUpTime = dayjs().hour(dateTime.hour()).minute(dateTime.minute()).second(0).millisecond(0);
+      }
+    }
+
+    if (!followUpTime && (leadData.follow_up_time || leadData.followUpTime)) {
+      const timeValue = leadData.follow_up_time || leadData.followUpTime;
+      if (typeof timeValue === "string" && timeValue.includes(":")) {
+        followUpTime = dayjs(timeValue, "HH:mm");
+      } else {
+        followUpTime = dayjs(timeValue);
+      }
+      if (!followUpTime.isValid()) {
+        followUpTime = null;
+      }
+    }
+
+    let finalAssignedToId = assignedToId;
+    const originalAssignedTo = leadData.assigned_to || leadData.assignedTo;
+
+    // For admins, match with employees list
+    if (isCurrentAdmin) {
+      if (originalAssignedTo && typeof originalAssignedTo === "object" && originalAssignedTo.id) {
+        finalAssignedToId = originalAssignedTo.id;
+      } else if (!finalAssignedToId && assignedToProfileId) {
+        finalAssignedToId = assignedToProfileId;
+      }
+
+      if (employees.length > 0 && finalAssignedToId) {
+        let matchedEmployee = null;
+        
+        if (originalAssignedTo && typeof originalAssignedTo === "object" && originalAssignedTo.id) {
+          const profileIdStr = String(originalAssignedTo.id).trim();
+          matchedEmployee = employees.find((emp) => {
+            const empId = emp.id || emp.pk || emp.uuid;
+            return empId && String(empId).trim() === profileIdStr;
+          });
+        }
+
+        if (!matchedEmployee && assignedToId) {
+          matchedEmployee = employees.find((emp) => {
+            const empId = emp.id || emp.pk || emp.uuid;
+            const empUserId = emp.user_id || emp.userId || emp.user_details?.id;
+            return String(empId) === String(assignedToId) || String(empUserId) === String(assignedToId);
+          });
+        }
+
+        if (matchedEmployee) {
+          finalAssignedToId = matchedEmployee.id || matchedEmployee.pk || matchedEmployee.uuid;
+        }
+      }
+    }
+
+    // Don't validate assigned_to against employees list here - 
+    // the second useEffect will handle matching once employees load
+    // This prevents clearing the value when employees list isn't ready yet
+    let validatedAssignedToId = finalAssignedToId;
+
+    const formDataToSet = {
+      title: leadData.title || leadData.leadTitle || leadData.name || leadData.lead_title || "",
+      status: statusId,
+      source: leadData.source || leadData.lead_source || "",
+      description: leadData.description || leadData.notes || "",
+      company_name: leadData.company_name || leadData.company || leadData.companyName || "",
+      contact_first_name: leadData.contact_first_name || leadData.firstName || leadData.first_name || leadData.contactFirstName || "",
+      contact_last_name: leadData.contact_last_name || leadData.lastName || leadData.last_name || leadData.contactLastName || "",
+      contact_email: leadData.contact_email || leadData.email || leadData.contactEmail || "",
+      contact_phone: leadData.contact_phone || leadData.phone || leadData.contactPhone || "",
+      contact_position_title: leadData.contact_position_title || leadData.positionTitle || leadData.position_title || leadData.contactPositionTitle || "",
+      contact_linkedin_url: leadData.contact_linkedin_url || leadData.linkedIn || leadData.linkedin_url || leadData.contactLinkedinUrl || "",
+      assigned_to: validatedAssignedToId,
+      follow_up_at: followUpDate,
+      follow_up_time: followUpTime,
+      follow_up_status: leadData.follow_up_status || leadData.followupStatus || leadData.followUpStatus || "",
+    };
+
+    console.log(`Setting form data from ${fromCache ? 'cache' : 'API'}:`, formDataToSet);
+    setFormData(formDataToSet);
+    // Mark data as ready so UI shows cached state immediately; API refresh will overwrite
+    setIsDataLoaded(true);
+    } catch (error) {
+      console.error("Error in populateFormWithLeadData:", error);
     }
   };
 
@@ -509,7 +434,6 @@ export default function CreateLead() {
     let admin = false;
     if (storedUser) {
       const userData = JSON.parse(storedUser);
-      setUser(userData);
       // Check if user is admin/manager
       // role 0 = Admin/Manager, role 1 = Employee
       admin =
@@ -531,10 +455,6 @@ export default function CreateLead() {
       // First, fetch status, source, and employees
       await fetchAllData();
 
-      const latestEmployeesFromApi = isCurrentAdmin
-        ? await fetchLatestEmployeesFromApi()
-        : null;
-
       if (!editId) {
         setIsDataLoaded(true);
         return;
@@ -548,518 +468,32 @@ export default function CreateLead() {
           throw new Error(`Invalid lead ID: ${editId}`);
         }
 
-        console.log("Fetching lead data for edit, editId:", leadId);
-        const { lead: leadToEdit, fromCache } = await fetchLeadForEdit(
-          leadId,
-          isCurrentAdmin
-        );
+        // STEP 1: First, try to get lead from cache for instant display
+        const cachedLead = getLeadFromCache(leadId);
+        if (cachedLead) {
+          console.log("Populating form from cache first:", cachedLead);
+          populateFormWithLeadData(cachedLead, isCurrentAdmin, true);
+        }
 
-        console.log("Lead data received (raw):", leadToEdit);
+        // STEP 2: Then fetch fresh data from API (api/leads/<lead-id>/)
+        console.log("Fetching fresh lead data from API, editId:", leadId);
+        const leadToEdit = await fetchLeadFromApi(leadId);
+
+        console.log("Lead data received from API (raw):", leadToEdit);
 
         if (!leadToEdit) {
+          // If API fails but we have cache, use cache data
+          if (cachedLead) {
+            console.warn("API failed but using cached data");
+            setIsDataLoaded(true);
+            return;
+          }
           throw new Error("No data received from API - response was empty");
         }
 
-        // Handle different response formats - API might return { lead: {...} } or { data: {...} }
-        let leadData = leadToEdit;
-        if (leadToEdit.lead) {
-          leadData = leadToEdit.lead;
-          console.log("Lead data found in 'lead' property");
-        } else if (leadToEdit.data) {
-          leadData = leadToEdit.data;
-          console.log("Lead data found in 'data' property");
-        }
-
-        console.log("Processed lead data:", leadData);
-
-        // Ensure status is set as ID (number) if it comes as an object
-        let statusId = leadData.status;
-        if (typeof leadData.status === "object" && leadData.status !== null) {
-          statusId = leadData.status.id || leadData.status.pk || null;
-        }
-
-        // Extract assigned_to ID properly - handle nested structure
-        // API returns: assigned_to.user_details.id (user ID) or assigned_to.id (profile ID)
-        // For employees, we don't need to set this in formData (field is hidden)
-        // But we extract it for reference/logging
-        let assignedToId = leadData.assigned_to || leadData.assignedTo || null;
-        let assignedToProfileId = null; // Store profile ID as well for matching
-
-        if (
-          assignedToId &&
-          typeof assignedToId === "object" &&
-          assignedToId !== null
-        ) {
-          // Store profile ID (assigned_to.id) - this is what employees list might use
-          assignedToProfileId =
-            assignedToId.id || assignedToId.pk || assignedToId.uuid || null;
-
-          // Check user_details.id first (this is the actual user ID)
-          if (assignedToId.user_details && assignedToId.user_details.id) {
-            assignedToId = assignedToId.user_details.id;
-          } else {
-            // Fallback to profile ID
-            assignedToId = assignedToProfileId;
-          }
-        }
-
-        // For employees, ensure assigned_to is set to their own ID (even if not shown in form)
-        if (!isAdmin) {
-          const storedUser = localStorage.getItem("user");
-          if (storedUser) {
-            const userData = JSON.parse(storedUser);
-            const currentUserId = userData.id || userData.pk || userData.uuid;
-            if (currentUserId) {
-              assignedToId = currentUserId;
-              console.log(
-                "Employee editing lead - auto-assigning to employee ID:",
-                currentUserId
-              );
-            }
-          }
-        }
-
-        const employeesForLookup =
-          latestEmployeesFromApi?.length > 0
-            ? latestEmployeesFromApi
-            : employees;
-
-        // For admins: Try to match with employees list using both profile ID and user ID
-        // Employees list typically uses profile ID (assigned_to.id), so prioritize that
-        if (isAdmin && employeesForLookup.length > 0) {
-          const originalAssignedTo =
-            leadData.assigned_to || leadData.assignedTo;
-          let matchedEmployee = null;
-
-          // First, try matching with profile ID (assigned_to.id) - this is most common
-          if (
-            originalAssignedTo &&
-            typeof originalAssignedTo === "object" &&
-            originalAssignedTo.id
-          ) {
-            matchedEmployee = employeesForLookup.find((emp) => {
-              const empId = emp.id || emp.pk || emp.uuid;
-              return String(empId) === String(originalAssignedTo.id);
-            });
-
-            if (matchedEmployee) {
-              assignedToId =
-                matchedEmployee.id ||
-                matchedEmployee.pk ||
-                matchedEmployee.uuid;
-              console.log("✅ Matched employee by profile ID:", {
-                employee: `${
-                  matchedEmployee.firstName || matchedEmployee.first_name
-                } ${matchedEmployee.lastName || matchedEmployee.last_name}`,
-                profileId: originalAssignedTo.id,
-                employeeId: assignedToId,
-              });
-            }
-          }
-
-          // If not found by profile ID, try matching with user ID (assigned_to.user_details.id)
-          if (
-            !matchedEmployee &&
-            originalAssignedTo &&
-            typeof originalAssignedTo === "object" &&
-            originalAssignedTo.user_details?.id
-          ) {
-            matchedEmployee = employeesForLookup.find((emp) => {
-              const empId = emp.id || emp.pk || emp.uuid;
-              const empUserId =
-                emp.user_id || emp.userId || emp.user_details?.id;
-              return (
-                String(empId) === String(originalAssignedTo.user_details.id) ||
-                String(empUserId) === String(originalAssignedTo.user_details.id)
-              );
-            });
-
-            if (matchedEmployee) {
-              assignedToId =
-                matchedEmployee.id ||
-                matchedEmployee.pk ||
-                matchedEmployee.uuid;
-              console.log("✅ Matched employee by user ID:", {
-                employee: `${
-                  matchedEmployee.firstName || matchedEmployee.first_name
-                } ${matchedEmployee.lastName || matchedEmployee.last_name}`,
-                userId: originalAssignedTo.user_details.id,
-                employeeId: assignedToId,
-              });
-            }
-          }
-
-          // If still not found, try with the extracted assignedToId
-          if (!matchedEmployee && assignedToId) {
-            matchedEmployee = employeesForLookup.find((emp) => {
-              const empId = emp.id || emp.pk || emp.uuid;
-              const empUserId =
-                emp.user_id || emp.userId || emp.user_details?.id;
-              return (
-                String(empId) === String(assignedToId) ||
-                String(empUserId) === String(assignedToId)
-              );
-            });
-
-            if (matchedEmployee) {
-              assignedToId =
-                matchedEmployee.id ||
-                matchedEmployee.pk ||
-                matchedEmployee.uuid;
-              console.log("✅ Matched employee by extracted ID:", {
-                employee: `${
-                  matchedEmployee.firstName || matchedEmployee.first_name
-                } ${matchedEmployee.lastName || matchedEmployee.last_name}`,
-                extractedId: assignedToId,
-                employeeId: assignedToId,
-              });
-            }
-          }
-
-          if (!matchedEmployee) {
-            console.warn(
-              "⚠️ Could not find matching employee for assigned_to:",
-              {
-                originalAssignedTo: originalAssignedTo,
-                assignedToId: assignedToId,
-                assignedToProfileId: assignedToProfileId,
-                employeesCount: employeesForLookup.length,
-                employeeIds: employeesForLookup.map((e) => ({
-                  id: e.id,
-                  pk: e.pk,
-                  uuid: e.uuid,
-                  name: `${e.firstName || e.first_name} ${
-                    e.lastName || e.last_name
-                  }`,
-                })),
-              }
-            );
-          }
-        }
-
-        // Parse follow_up_at datetime properly
-        // follow_up_at now contains combined date and time as ISO datetime string
-        let followUpDate = null;
-        let followUpTime = null;
-
-        if (leadData.follow_up_at || leadData.followUpAt) {
-          const dateTimeValue = leadData.follow_up_at || leadData.followUpAt;
-          const dateTime = dayjs(dateTimeValue);
-
-          if (dateTime.isValid()) {
-            // Extract date part (set to start of day for date picker)
-            followUpDate = dateTime.startOf("day");
-            // Extract time part (create a dayjs object with just the time for time picker)
-            followUpTime = dayjs()
-              .hour(dateTime.hour())
-              .minute(dateTime.minute())
-              .second(0)
-              .millisecond(0);
-          } else {
-            console.warn("Invalid follow_up_at datetime:", dateTimeValue);
-          }
-        }
-
-        // Fallback: if follow_up_time exists separately (for backward compatibility)
-        if (
-          !followUpTime &&
-          (leadData.follow_up_time || leadData.followUpTime)
-        ) {
-          const timeValue = leadData.follow_up_time || leadData.followUpTime;
-          // Try parsing as time string (HH:mm format)
-          if (typeof timeValue === "string" && timeValue.includes(":")) {
-            followUpTime = dayjs(timeValue, "HH:mm");
-          } else {
-            followUpTime = dayjs(timeValue);
-          }
-          if (!followUpTime.isValid()) {
-            console.warn("Invalid follow_up_time:", timeValue);
-            followUpTime = null;
-          }
-        }
-
-        // For admins: Try to match assigned_to with employees list to get the correct ID
-        // Employees list might use profile ID or user ID, so we need to match both
-        // IMPORTANT: Always preserve the original assigned_to profile ID if we can't find a match
-        let finalAssignedToId = assignedToId;
-        const originalAssignedTo = leadData.assigned_to || leadData.assignedTo;
-
-        // For admins, prioritize preserving the profile ID (assigned_to.id) which is what the backend expects
-        if (isAdmin) {
-          // First, try to get the profile ID from the original assigned_to object
-          if (
-            originalAssignedTo &&
-            typeof originalAssignedTo === "object" &&
-            originalAssignedTo.id
-          ) {
-            // Use the profile ID as the default (this is what the backend expects)
-            finalAssignedToId = originalAssignedTo.id;
-            console.log(
-              "Using profile ID from assigned_to:",
-              finalAssignedToId
-            );
-          } else if (!finalAssignedToId && assignedToProfileId) {
-            // Fallback to stored profile ID if we have it
-            finalAssignedToId = assignedToProfileId;
-            console.log("Using stored profile ID:", finalAssignedToId);
-          }
-
-          // Then try to match with employees list if available
-          // This is CRITICAL: We need to match with employees list to get the correct ID format for the dropdown
-          // The dropdown uses employee.id/pk/uuid, so we MUST match and use that format
-          if (employees.length > 0 && finalAssignedToId) {
-            // Try to find matching employee using both profile ID and user ID
-            // We need to match the original assigned_to with employees to get the correct ID format
-            let matchedEmployee = null;
-
-            // PRIMARY MATCH: Direct match by profile ID (assigned_to.id === employee.id)
-            // This is the most common case - both use profile IDs
-            if (
-              originalAssignedTo &&
-              typeof originalAssignedTo === "object" &&
-              originalAssignedTo.id
-            ) {
-              const assignedToProfileId = String(originalAssignedTo.id).trim();
-
-              matchedEmployee = employees.find((emp) => {
-                const empId = emp.id || emp.pk || emp.uuid;
-                if (!empId) return false;
-
-                // Direct match: employee.id === assigned_to.id (both are profile IDs)
-                return String(empId).trim() === assignedToProfileId;
-              });
-
-              if (matchedEmployee) {
-                console.log(
-                  "✅ PRIMARY MATCH: assigned_to.id === employee.id",
-                  {
-                    assignedToId: originalAssignedTo.id,
-                    employeeId: matchedEmployee.id,
-                    employeeName: `${
-                      matchedEmployee.firstName || matchedEmployee.first_name
-                    } ${matchedEmployee.lastName || matchedEmployee.last_name}`,
-                    employeeEmail: matchedEmployee.email,
-                  }
-                );
-              }
-            }
-
-            // If not found, try matching by user ID (assigned_to.user_details.id)
-            if (
-              !matchedEmployee &&
-              originalAssignedTo &&
-              typeof originalAssignedTo === "object" &&
-              originalAssignedTo.user_details?.id
-            ) {
-              matchedEmployee = employees.find((emp) => {
-                const empId = emp.id || emp.pk || emp.uuid;
-                const empUserId =
-                  emp.user_id || emp.userId || emp.user_details?.id;
-                return (
-                  String(empId) ===
-                    String(originalAssignedTo.user_details.id) ||
-                  String(empUserId) ===
-                    String(originalAssignedTo.user_details.id)
-                );
-              });
-            }
-
-            // IMPORTANT: Also try matching assigned_to.id as a user ID
-            // Sometimes assigned_to.id might actually be a user ID, not a profile ID
-            if (
-              !matchedEmployee &&
-              originalAssignedTo &&
-              typeof originalAssignedTo === "object" &&
-              originalAssignedTo.id
-            ) {
-              matchedEmployee = employees.find((emp) => {
-                const empUserId =
-                  emp.user_id || emp.userId || emp.user_details?.id;
-                // Try matching the assigned_to.id as a user ID
-                return String(empUserId) === String(originalAssignedTo.id);
-              });
-            }
-
-            // If still not found, try matching with extracted assignedToId
-            if (!matchedEmployee && assignedToId) {
-              matchedEmployee = employees.find((emp) => {
-                const empId = emp.id || emp.pk || emp.uuid;
-                const empUserId =
-                  emp.user_id || emp.userId || emp.user_details?.id;
-                return (
-                  String(empId) === String(assignedToId) ||
-                  String(empUserId) === String(assignedToId) ||
-                  String(empId) === String(finalAssignedToId)
-                );
-              });
-            }
-
-            // Last resort: try matching finalAssignedToId as user ID
-            if (!matchedEmployee && finalAssignedToId) {
-              matchedEmployee = employees.find((emp) => {
-                const empUserId =
-                  emp.user_id || emp.userId || emp.user_details?.id;
-                return String(empUserId) === String(finalAssignedToId);
-              });
-            }
-
-            if (matchedEmployee) {
-              // Use the employee's profile ID (id/pk/uuid) for the form
-              // This MUST match the format used in the dropdown MenuItem values
-              finalAssignedToId =
-                matchedEmployee.id ||
-                matchedEmployee.pk ||
-                matchedEmployee.uuid;
-              console.log("✅ Matched employee for assigned_to:", {
-                employee: `${
-                  matchedEmployee.firstName || matchedEmployee.first_name
-                } ${matchedEmployee.lastName || matchedEmployee.last_name}`,
-                employeeId: finalAssignedToId,
-                employeeIdType: typeof finalAssignedToId,
-                originalAssignedToId: assignedToId,
-                originalAssignedTo: originalAssignedTo,
-              });
-            } else {
-              // If no match found, keep the profile ID we extracted earlier
-              // But log a warning so we can debug
-              console.warn(
-                "⚠️ Could not find matching employee in list, preserving original assigned_to profile ID:",
-                {
-                  preservedProfileId: finalAssignedToId,
-                  preservedProfileIdType: typeof finalAssignedToId,
-                  originalAssignedTo: originalAssignedTo,
-                  assignedToId: assignedToId,
-                  employeesCount: employees.length,
-                  sampleEmployeeIds: employees.slice(0, 5).map((e) => ({
-                    id: e.id,
-                    pk: e.pk,
-                    uuid: e.uuid,
-                    name: `${e.firstName || e.first_name} ${
-                      e.lastName || e.last_name
-                    }`,
-                  })),
-                }
-              );
-            }
-          } else {
-            console.warn(
-              "⚠️ Employees list is empty, cannot match assigned_to. Preserving original ID:",
-              finalAssignedToId
-            );
-          }
-        }
-
-        // Set form data with lead data - this will populate all fields
-        // Handle both snake_case (from API) and camelCase (from list) formats
-        const formDataToSet = {
-          title: leadData.title || leadData.leadTitle || "",
-          status: statusId,
-          source: leadData.source || "",
-          description: leadData.description || "",
-          company_name: leadData.company_name || leadData.company || "",
-          contact_first_name:
-            leadData.contact_first_name || leadData.firstName || "",
-          contact_last_name:
-            leadData.contact_last_name || leadData.lastName || "",
-          contact_email: leadData.contact_email || leadData.email || "",
-          contact_phone: leadData.contact_phone || leadData.phone || "",
-          contact_position_title:
-            leadData.contact_position_title || leadData.positionTitle || "",
-          contact_linkedin_url:
-            leadData.contact_linkedin_url || leadData.linkedIn || "",
-          assigned_to: finalAssignedToId,
-          follow_up_at: followUpDate,
-          follow_up_time: followUpTime,
-          follow_up_status:
-            leadData.follow_up_status || leadData.followupStatus || "",
-        };
-
-        // Validate that finalAssignedToId exists in employees list before setting form data
-        // This prevents MUI "out-of-range value" errors
-        let validatedAssignedToId = finalAssignedToId;
-        if (isAdmin && finalAssignedToId && employees.length > 0) {
-          const isValidId = employees.some((emp) => {
-            const empId = emp.id || emp.pk || emp.uuid;
-            return String(empId) === String(finalAssignedToId);
-          });
-
-          if (!isValidId) {
-            console.warn(
-              "⚠️ assigned_to ID not found in employees list, clearing value to prevent MUI error:",
-              {
-                invalidId: finalAssignedToId,
-                employeesCount: employees.length,
-                availableIds: employees.map((e) => e.id || e.pk || e.uuid),
-              }
-            );
-            validatedAssignedToId = null; // Clear invalid ID
-          }
-        }
-
-        console.log("Setting form data for edit:", {
-          ...formDataToSet,
-          assigned_to: validatedAssignedToId,
-        });
-        console.log("Assigned To Details:", {
-          finalAssignedToId: finalAssignedToId,
-          validatedAssignedToId: validatedAssignedToId,
-          originalAssignedTo: originalAssignedTo,
-          assignedToId: assignedToId,
-          assignedToProfileId: assignedToProfileId,
-          employeesCount: employeesForLookup.length,
-          employeesList: employeesForLookup.map((e) => ({
-            id: e.id,
-            pk: e.pk,
-            uuid: e.uuid,
-            name: `${e.firstName || e.first_name} ${e.lastName || e.last_name}`,
-          })),
-        });
-
-        setFormData({
-          ...formDataToSet,
-          assigned_to: validatedAssignedToId,
-        });
-
-        if (validatedAssignedToId) {
-          const assignedProfile =
-            (leadData.assigned_to && typeof leadData.assigned_to === "object"
-              ? leadData.assigned_to
-              : null) ||
-            (leadData.assignedTo && typeof leadData.assignedTo === "object"
-              ? leadData.assignedTo
-              : null);
-          const assignedEmployeeForDisplay = employeesForLookup.find((emp) => {
-            const empId = emp.id || emp.pk || emp.uuid;
-            return empId && String(empId) === String(validatedAssignedToId);
-          });
-          const fallbackDisplayName = getEmployeeDisplayName(
-            assignedEmployeeForDisplay || assignedProfile
-          );
-          console.log(
-            "Assigned to resolved display name:",
-            fallbackDisplayName
-          );
-        }
-
-        setIsDataLoaded(true);
-        console.log("Form data loaded and set for editing:", {
-          status: statusId,
-          assigned_to: formDataToSet.assigned_to,
-          assigned_to_type: typeof formDataToSet.assigned_to,
-          originalAssignedTo: leadData.assigned_to || leadData.assignedTo,
-          title: leadData.title || leadData.leadTitle,
-          contact_first_name: leadData.contact_first_name || leadData.firstName,
-          fromCache: fromCache,
-        });
-
-        // Show warning if using cached data (API might be down)
-        if (fromCache) {
-          console.warn(
-            "⚠️ Using cached lead data. Some fields might be outdated. API call failed."
-          );
-          // Don't show alert - just use cached data silently
-          // User can still edit and save, which will update the data
-        }
+        // STEP 3: Update form with fresh API data
+        console.log("Updating form with fresh API data");
+        populateFormWithLeadData(leadToEdit, isCurrentAdmin, false);
       } catch (error) {
         console.error("Failed to load lead - Full error:", error);
         console.error("Error message:", error.message);

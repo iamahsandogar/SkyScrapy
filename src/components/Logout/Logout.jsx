@@ -4,6 +4,7 @@ import { ListItemButton, ListItemIcon, ListItemText } from "@mui/material";
 import LogoutRoundedIcon from "@mui/icons-material/LogoutRounded";
 import { colors } from "../../design-system/tokens";
 import { authAPI } from "../../services/api"; // Add this import
+import { clearAllUserCaches } from "../../utils/prefetchData";
 
 const LogoutButton = () => {
   const handleLogout = async () => {
@@ -15,6 +16,9 @@ const LogoutButton = () => {
       console.error("Logout error:", error);
       // Continue with logout even if API call fails
     }
+    
+    // Clear all user caches to prevent data leakage between users
+    clearAllUserCaches();
   };
 
   return (

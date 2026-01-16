@@ -26,6 +26,7 @@ import {
   DialogContentText,
   DialogActions,
   CircularProgress,
+  Switch,
 } from "@mui/material";
 
 import CloudDownloadIcon from "@mui/icons-material/CloudDownload";
@@ -94,6 +95,7 @@ const ALL_COLUMNS = [
   { key: "assignedTo", label: "Assigned To" },
   { key: "followUpAt", label: "Follow-up At" },
   { key: "followupStatus", label: "Follow-up Status" },
+  { key: "isActive", label: "Active" },
   { key: "source", label: "Source" },
   { key: "description", label: "Description" },
   { key: "company", label: "Company" },
@@ -112,6 +114,7 @@ const DEFAULT_COLUMNS = [
   "assignedTo",
   "followUpAt",
   "followupStatus",
+  "isActive",
 ];
 
 const resolveLeadId = (lead) => {
@@ -138,7 +141,8 @@ export default function EmployeeAllLeads() {
   const [statusFilter, setStatusFilter] = useState("All");
   const [anchorEl, setAnchorEl] = useState(null);
   const [visibleColumns, setVisibleColumns] = useState(() => {
-    return JSON.parse(localStorage.getItem("leadColumns")) || DEFAULT_COLUMNS;
+    const stored = JSON.parse(localStorage.getItem("leadColumns")) || DEFAULT_COLUMNS;
+    return stored.includes("isActive") ? stored : [...stored, "isActive"]; // ensure toggle column shows
   });
   const [selectedLead, setSelectedLead] = useState(null);
   const [isModalOpen, setIsModalOpen] = useState(false);
@@ -157,6 +161,7 @@ export default function EmployeeAllLeads() {
   // Track individual dropdown loading states
   const [statusUpdatingLeadId, setStatusUpdatingLeadId] = useState(null);
   const [followUpUpdatingLeadId, setFollowUpUpdatingLeadId] = useState(null);
+  const [activeTogglingLeadId, setActiveTogglingLeadId] = useState(null);
 
   const actionOpen = Boolean(actionAnchorEl);
   const rowRefs = useRef({});
@@ -445,12 +450,18 @@ export default function EmployeeAllLeads() {
         setLeads(filteredLeads);
 
         // Update cache with fresh leads data and statuses (store all leads, filter on display)
+        // Use user-specific cache key
+        let cacheKey = "leadDataCache";
+        if (employeeId) {
+          cacheKey = `leadDataCache_${employeeId}`;
+        }
+        
         const currentCache = getCachedLeadData();
         if (currentCache) {
           currentCache.leads = leadsList;
           currentCache.statuses = statusesList;
           currentCache.timestamp = Date.now();
-          localStorage.setItem("leadDataCache", JSON.stringify(currentCache));
+          localStorage.setItem(cacheKey, JSON.stringify(currentCache));
         } else {
           // Create new cache entry if none exists
           const newCache = {
@@ -460,7 +471,7 @@ export default function EmployeeAllLeads() {
             leads: leadsList,
             timestamp: Date.now(),
           };
-          localStorage.setItem("leadDataCache", JSON.stringify(newCache));
+          localStorage.setItem(cacheKey, JSON.stringify(newCache));
         }
       } catch (err) {
         console.error("Failed to fetch leads:", err);
@@ -728,6 +739,47 @@ export default function EmployeeAllLeads() {
     navigate(`/edit-lead/${leadId}`);
   };
 
+  // Handler to toggle lead active status
+  const handleToggleActive = async (lead) => {
+    const leadId = lead.id || lead.pk || lead.uuid;
+    if (!leadId) return;
+
+    const currentActive =
+      lead.is_always_active ?? lead.always_active ?? false;
+    const nextActive = !currentActive;
+
+    setActiveTogglingLeadId(leadId);
+    try {
+      const response = await apiRequest(`/api/leads/${leadId}/always-active/`, {
+        method: "PATCH",
+        body: JSON.stringify({ always_active: nextActive }),
+      });
+
+      // Update lead in local state
+      const newActiveStatus =
+        response?.is_always_active ??
+        response?.always_active ??
+        nextActive;
+      setLeads((prevLeads) =>
+        prevLeads.map((l) =>
+          (l.id || l.pk || l.uuid) === leadId
+            ? { ...l, is_always_active: newActiveStatus, always_active: newActiveStatus }
+            : l
+        )
+      );
+
+      // Update cache
+      const updatedLead = { ...lead, is_always_active: newActiveStatus, always_active: newActiveStatus };
+      addLeadToCache(updatedLead);
+
+      console.log(`Lead ${newActiveStatus ? "activated" : "deactivated"} successfully`);
+    } catch (error) {
+      console.error("Failed to toggle lead active status:", error);
+    } finally {
+      setActiveTogglingLeadId(null);
+    }
+  };
+
   // Helper function to get lead field value handling both camelCase and snake_case
   const getLeadFieldValue = (lead, fieldKey) => {
     switch (fieldKey) {
@@ -898,54 +950,54 @@ export default function EmployeeAllLeads() {
   //   URL.revokeObjectURL(url);
   // };
 
-  const handleConvertToProject = async (lead) => {
-    try {
-      console.log("Converting lead to project:", lead);
+  // const handleConvertToProject = async (lead) => {
+  //   try {
+  //     console.log("Converting lead to project:", lead);
 
-      // Map lead fields to project fields
-      const leadTitle =
-        lead.title ||
-        (lead.contact_first_name && lead.contact_last_name
-          ? `${lead.contact_first_name} ${lead.contact_last_name}`
-          : lead.firstName && lead.lastName
-          ? `${lead.firstName} ${lead.lastName}`
-          : "Untitled Project");
+  //     // Map lead fields to project fields
+  //     const leadTitle =
+  //       lead.title ||
+  //       (lead.contact_first_name && lead.contact_last_name
+  //         ? `${lead.contact_first_name} ${lead.contact_last_name}`
+  //         : lead.firstName && lead.lastName
+  //         ? `${lead.firstName} ${lead.lastName}`
+  //         : "Untitled Project");
 
-      const leadDescription = lead.description || "";
-      const leadAssignedTo = lead.assigned_to || lead.assignedTo || null;
-      const leadStatus = lead.status || null;
+  //     const leadDescription = lead.description || "";
+  //     const leadAssignedTo = lead.assigned_to || lead.assignedTo || null;
+  //     const leadStatus = lead.status || null;
 
-      // Only send fields your backend expects
-      const newProject = {
-        title: leadTitle,
-        status: leadStatus,
-        description: leadDescription,
-        assigned_to: leadAssignedTo,
-        start_date: new Date().toISOString().split("T")[0],
-        end_date: null,
-      };
+  //     // Only send fields your backend expects
+  //     const newProject = {
+  //       title: leadTitle,
+  //       status: leadStatus,
+  //       description: leadDescription,
+  //       assigned_to: leadAssignedTo,
+  //       start_date: new Date().toISOString().split("T")[0],
+  //       end_date: null,
+  //     };
 
-      console.log("Project payload:", newProject);
+  //     console.log("Project payload:", newProject);
 
-      const projectResponse = await apiRequest("/api/projects/", {
-        method: "POST",
-        body: JSON.stringify(newProject),
-      });
+  //     const projectResponse = await apiRequest("/api/projects/", {
+  //       method: "POST",
+  //       body: JSON.stringify(newProject),
+  //     });
 
-      console.log("Project created:", projectResponse);
+  //     console.log("Project created:", projectResponse);
 
-      // Delete the lead after successful creation
-      await apiRequest(`/api/leads/${lead.id}/`, { method: "DELETE" });
-      setLeads(leads.filter((l) => l.id !== lead.id));
-      removeLeadFromCache(lead);
+  //     // Delete the lead after successful creation
+  //     await apiRequest(`/api/leads/${lead.id}/`, { method: "DELETE" });
+  //     setLeads(leads.filter((l) => l.id !== lead.id));
+  //     removeLeadFromCache(lead);
 
-      alert(`Lead "${leadTitle}" converted to project successfully!`);
-      navigate(`/management/projects`);
-    } catch (err) {
-      console.error("Failed to convert lead:", err);
-      alert("Failed to convert lead: " + (err.message || "Unknown error"));
-    }
-  };
+  //     alert(`Lead "${leadTitle}" converted to project successfully!`);
+  //     navigate(`/management/projects`);
+  //   } catch (err) {
+  //     console.error("Failed to convert lead:", err);
+  //     alert("Failed to convert lead: " + (err.message || "Unknown error"));
+  //   }
+  // };
 
   const handleOpenCustomize = (e) => setAnchorEl(e.currentTarget);
   const handleCloseCustomize = () => setAnchorEl(null);
@@ -1264,6 +1316,9 @@ export default function EmployeeAllLeads() {
               {visibleColumns.includes("positionTitle") && (
                 <TableCell sx={tableHeaderCellStyles}>Position Title</TableCell>
               )}
+              {visibleColumns.includes("isActive") && (
+                <TableCell sx={{ ...tableHeaderCellStyles, textAlign: "center" }}>Active</TableCell>
+              )}
 
               <TableCell sx={{ ...tableHeaderCellStyles, textAlign: "center" }}>
                 Notes
@@ -1567,6 +1622,18 @@ export default function EmployeeAllLeads() {
                     {visibleColumns.includes("positionTitle") && (
                       <TableCell>
                         {getLeadFieldValue(lead, "positionTitle") || "-"}
+                      </TableCell>
+                    )}
+
+                    {visibleColumns.includes("isActive") && (
+                      <TableCell align="center">
+                        <Switch
+                          checked={lead.is_always_active || lead.always_active || false}
+                          onChange={() => handleToggleActive(lead)}
+                          disabled={activeTogglingLeadId === (lead.id || lead.pk || lead.uuid)}
+                          size="small"
+                          color="primary"
+                        />
                       </TableCell>
                     )}
 

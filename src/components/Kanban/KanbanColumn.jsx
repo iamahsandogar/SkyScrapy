@@ -26,7 +26,7 @@ export default function KanbanColumn({
     <Box
       ref={setNodeRef}
       bgcolor="#f5f6f8"
-      p={{ xs: 1.5, md: 2 }}
+      px={{ xs: 1.5, md: 2 }}
       borderRadius={3}
       sx={{
         width: "100%",
@@ -40,7 +40,7 @@ export default function KanbanColumn({
         transform: highlightActive ? "scale(1.02)" : "scale(1)",
       }}
     >
-      <Typography variant="h6" mb={2} fontWeight={600}>
+      <Typography variant="h6" mb={2} fontWeight={600} sx={{position: 'sticky', top: 0, bgcolor: '#f5f6f8', zIndex: 10, pt: 1}}>
         {title} ({leads.length})
       </Typography>
 
