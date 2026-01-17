@@ -5,13 +5,17 @@ import {
 } from "@dnd-kit/sortable";
 import { useDroppable } from "@dnd-kit/core";
 import KanbanCard from "./KanbanCard";
+import KanbanCardSkeleton from "./KanbanCardSkeleton";
 
 export default function KanbanColumn({
   title,
   leads,
   onMarkAsDone,
+  onRevert,
   setColumns,
   getStatusName,
+  loading = false,
+  loadingCardId = null,
 }) {
   const isDoneColumn = title === "Done";
   const { setNodeRef, isOver } = useDroppable({
@@ -48,7 +52,14 @@ export default function KanbanColumn({
         items={leads.map((lead) => lead.id)}
         strategy={verticalListSortingStrategy}
       >
-        {leads.length === 0 ? (
+        {loading ? (
+          // Show skeleton cards while loading
+          <>
+            <KanbanCardSkeleton />
+            <KanbanCardSkeleton />
+            <KanbanCardSkeleton />
+          </>
+        ) : leads.length === 0 ? (
           <Typography
             variant="body2"
             color="text.secondary"
@@ -63,8 +74,10 @@ export default function KanbanColumn({
               lead={lead}
               column={title}
               onMarkAsDone={onMarkAsDone}
+              onRevert={onRevert}
               setColumns={setColumns}
               getStatusName={getStatusName}
+              isLoading={loadingCardId === lead.id}
             />
           ))
         )}

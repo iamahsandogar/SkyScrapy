@@ -52,6 +52,7 @@ import {
 import { useNotification } from "../contexts/NotificationContext.jsx";
 import MoreVertIcon from "@mui/icons-material/MoreVert";
 import DotLoader from "../components/global/DotLoader";
+import EditLeadModal from "../components/Leads/EditLeadModal";
 // const getChipStyles = (status) => {
 //   switch (status) {
 //     case "Completed":
@@ -164,6 +165,7 @@ export default function AllLeads() {
   const [menuLead, setMenuLead] = useState(null);
   const [mobileMenuAnchorEl, setMobileMenuAnchorEl] = useState(null);
   const [deleteDialog, setDeleteDialog] = useState({ open: false, lead: null });
+  const [editDialog, setEditDialog] = useState({ open: false, leadId: null, lead: null });
   // Track individual dropdown loading states
   const [statusUpdatingLeadId, setStatusUpdatingLeadId] = useState(null);
   const [followUpUpdatingLeadId, setFollowUpUpdatingLeadId] = useState(null);
@@ -743,15 +745,32 @@ export default function AllLeads() {
     prefetchLeadData({ includeLeads: false });
   };
 
+  const openEditDialog = (lead) => {
+    const leadId = resolveLeadId(lead);
+    if (!leadId) return;
+    setEditDialog({ open: true, leadId, lead });
+  };
+
+  const closeEditDialog = () => setEditDialog({ open: false, leadId: null, lead: null });
+
+  const handleLeadUpdated = (updatedLead) => {
+    if (!updatedLead) return;
+    const updatedId = resolveLeadId(updatedLead);
+    if (!updatedId) return;
+    setLeads((prev) =>
+      prev.map((lead) =>
+        resolveLeadId(lead) === updatedId ? { ...lead, ...updatedLead } : lead
+      )
+    );
+  };
+
   const handleOpenCreateLead = () => {
     warmUpLeadForm();
     navigate("/create-lead");
   };
 
-  const handleNavigateToEditLead = (leadId) => {
-    if (!leadId) return;
-    warmUpLeadForm();
-    navigate(`/edit-lead/${leadId}`);
+  const handleNavigateToEditLead = (lead) => {
+    openEditDialog(lead);
   };
 
   // Handler to toggle lead active status
@@ -1782,7 +1801,7 @@ export default function AllLeads() {
 
         <MenuItem
           onClick={() => {
-            handleNavigateToEditLead(menuLead?.id);
+            handleNavigateToEditLead(menuLead);
             handleActionMenuClose();
           }}
         >
@@ -1834,6 +1853,14 @@ export default function AllLeads() {
           </Button>
         </DialogActions>
       </Dialog>
+
+      <EditLeadModal
+        open={editDialog.open}
+        leadId={editDialog.leadId}
+        lead={editDialog.lead}
+        onClose={closeEditDialog}
+        onSuccess={handleLeadUpdated}
+      />
 
       <Dialog
         open={notesDialogOpen}

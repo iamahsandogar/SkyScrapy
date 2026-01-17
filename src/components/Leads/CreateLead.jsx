@@ -2,14 +2,12 @@ import {
   Backdrop,
   Box,
   Button,
-  MenuItem,
   Paper,
-  TextField,
   Typography,
 } from "@mui/material";
 import { useState, useEffect } from "react";
 import Topbar from "../global/Topbar";
-import { useParams, useNavigate } from "react-router-dom";
+import { useParams, useNavigate, useLocation } from "react-router-dom";
 import {
   LocalizationProvider,
   DatePicker,
@@ -21,99 +19,45 @@ import apiRequest from "../services/api";
 import { clearLeadDataCache, addLeadToCache, getCachedLeadData } from "../../utils/prefetchData";
 import DotLoader from "../global/DotLoader";
 import { useNotification } from "../../contexts/NotificationContext.jsx";
+import LeadFormFields from "./LeadFormFields";
+import { parseEmployeesPayload, isValidLinkedInURL } from "./leadFormUtils";
 
-const parseEmployeesPayload = (payload) => {
-  if (!payload) return [];
-  if (Array.isArray(payload)) return payload;
-  if (Array.isArray(payload.employees)) return payload.employees;
-  if (Array.isArray(payload.data)) return payload.data;
-  if (Array.isArray(payload.data?.employees)) return payload.data.employees;
-  return [];
-};
+const filterAssignableEmployees = (allEmployees = [], currentUserId = null, allowAll = false) => {
+  if (allowAll) return allEmployees;
 
-const getEmployeeDisplayName = (employee = {}) => {
-  if (!employee || typeof employee !== "object") {
-    return "Unknown Employee";
-  }
+  const isAdminUser = (emp) => {
+    if (!emp || typeof emp !== "object") return false;
+    return (
+      emp.is_admin ||
+      emp.is_staff ||
+      emp.is_superuser ||
+      emp.isAdmin ||
+      emp.isStaff ||
+      emp.isSuperuser ||
+      emp.role === 0 ||
+      emp.role === "0" ||
+      emp.role === "admin" ||
+      emp.role === "Admin"
+    );
+  };
 
-  const firstName = employee.firstName || employee.first_name || "";
-  const lastName = employee.lastName || employee.last_name || "";
-  if (firstName || lastName) {
-    return `${firstName} ${lastName}`.trim();
-  }
+  return (allEmployees || []).filter((emp) => {
+    const empId = emp.id || emp.pk || emp.uuid;
+    const userDetails = emp.user_details || emp.userDetails || emp.user;
+    const userId =
+      emp.user_id ||
+      emp.userId ||
+      (userDetails && typeof userDetails === "object" && (userDetails.id || userDetails.user_id || userDetails.userId));
 
-  const fallbackNames = [
-    employee.name,
-    employee.fullName,
-    employee.full_name,
-    employee.display_name,
-    employee.username,
-    employee.user_name,
-  ];
-
-  for (const candidate of fallbackNames) {
-    if (candidate && typeof candidate === "string") {
-      const trimmed = candidate.trim();
-      if (trimmed) return trimmed;
-    }
-  }
-
-  const userDetails =
-    employee.user_details || employee.userDetails || employee.user;
-  if (userDetails && typeof userDetails === "object") {
-    const udFirst = userDetails.firstName || userDetails.first_name || "";
-    const udLast = userDetails.lastName || userDetails.last_name || "";
-    if (udFirst || udLast) {
-      return `${udFirst} ${udLast}`.trim();
-    }
-    const udFallback =
-      userDetails.name || userDetails.fullName || userDetails.username;
-    if (udFallback && typeof udFallback === "string") {
-      return udFallback.trim();
-    }
-  }
-
-  return "Unknown Employee";
-};
-
-const MuiSelectPadding = {
-  "& .MuiOutlinedInput-root": {
-    padding: 0,
-  },
-  "& .MuiSelect-select": {
-    padding: "7px",
-    height: "auto",
-  },
-  "& .MuiPickersSectionList-sectionContent": {
-    padding: "7px",
-  },
-};
-
-const MuiTextFieldPadding = {
-  "& .MuiOutlinedInput-root": {
-    padding: 0,
-  },
-  "& .MuiOutlinedInput-input": {
-    padding: "7px",
-    height: "auto",
-  },
-};
-
-const MuiDatePickerPadding = {
-  "& .MuiOutlinedInput-root": {
-    padding: 0,
-  },
-  "& .MuiPickersInputBase-sectionsContainer": {
-    padding: "7px",
-  },
-  "& .MuiPickersSectionList-sectionContent": {
-    padding: 0,
-  },
+    const isSelf = currentUserId && (String(empId) === String(currentUserId) || String(userId) === String(currentUserId));
+    return isSelf || isAdminUser(emp);
+  });
 };
 
 export default function CreateLead() {
   const { editId } = useParams();
   const navigate = useNavigate();
+  const location = useLocation();
   const { notifyError, notifySuccess } = useNotification();
   const [employees, setEmployees] = useState([]);
   const [meta, setMeta] = useState({ status: [], source: [] });
@@ -202,14 +146,21 @@ export default function CreateLead() {
       if (isCurrentUserAdmin) {
         employeesList = parseEmployeesPayload(employeesResponse);
       } else {
-        // For employees: avoid employees API; show only self
-        const selfEntry = {
-          id: currentUserId,
-          firstName: userData?.firstName || userData?.first_name || userData?.name,
-          lastName: userData?.lastName || userData?.last_name || "",
-          user_id: currentUserId,
-        };
-        employeesList = [selfEntry];
+        // For employees: use cache to allow assigning to self or admins; fallback to self only
+        const cachedEmployees = parseEmployeesPayload(getCachedLeadData()?.employees);
+        const filtered = filterAssignableEmployees(cachedEmployees, currentUserId, false);
+
+        if (filtered.length > 0) {
+          employeesList = filtered;
+        } else {
+          const selfEntry = {
+            id: currentUserId,
+            firstName: userData?.firstName || userData?.first_name || userData?.name,
+            lastName: userData?.lastName || userData?.last_name || "",
+            user_id: currentUserId,
+          };
+          employeesList = [selfEntry];
+        }
       }
 
       setMeta({ status: statusesList, source: sourcesList });
@@ -241,6 +192,55 @@ export default function CreateLead() {
     } finally {
       setLoadingMeta(false);
     }
+  };
+
+  const loadMetaFromCache = (isCurrentAdmin) => {
+    const cachedData = getCachedLeadData();
+    const cachedStatuses = cachedData?.statuses || [];
+    const cachedSources = cachedData?.sources || [];
+
+    setMeta((prev) => ({
+      status: cachedStatuses.length > 0 ? cachedStatuses : prev.status,
+      source: cachedSources.length > 0 ? cachedSources : prev.source,
+    }));
+
+    if (isCurrentAdmin) {
+      setEmployees(cachedData?.employees || []);
+      return;
+    }
+
+    const storedUser = localStorage.getItem("user");
+    let currentUserId = null;
+    let userData = null;
+    if (storedUser) {
+      try {
+        userData = JSON.parse(storedUser);
+        currentUserId =
+          userData.id || userData.pk || userData.uuid || userData.user_id;
+      } catch (error) {
+        console.warn("Unable to parse user while loading cached meta:", error);
+      }
+    }
+
+    const filtered = filterAssignableEmployees(
+      parseEmployeesPayload(cachedData?.employees),
+      currentUserId,
+      false
+    );
+
+    if (filtered.length > 0) {
+      setEmployees(filtered);
+      return;
+    }
+
+    const fallbackEmployee = {
+      id: currentUserId,
+      firstName: userData?.firstName || userData?.first_name || userData?.name,
+      lastName: userData?.lastName || userData?.last_name || "",
+      user_id: currentUserId,
+    };
+
+    setEmployees([fallbackEmployee]);
   };
 
   // Removed cache-based refresh helpers to avoid localStorage usage for meta data
@@ -402,21 +402,21 @@ export default function CreateLead() {
     let validatedAssignedToId = finalAssignedToId;
 
     const formDataToSet = {
-      title: leadData.title || leadData.leadTitle || leadData.name || leadData.lead_title || "",
+      title: leadData.title || leadData.leadTitle || "",
       status: statusId,
-      source: leadData.source || leadData.lead_source || "",
-      description: leadData.description || leadData.notes || "",
-      company_name: leadData.company_name || leadData.company || leadData.companyName || "",
-      contact_first_name: leadData.contact_first_name || leadData.firstName || leadData.first_name || leadData.contactFirstName || "",
-      contact_last_name: leadData.contact_last_name || leadData.lastName || leadData.last_name || leadData.contactLastName || "",
-      contact_email: leadData.contact_email || leadData.email || leadData.contactEmail || "",
-      contact_phone: leadData.contact_phone || leadData.phone || leadData.contactPhone || "",
-      contact_position_title: leadData.contact_position_title || leadData.positionTitle || leadData.position_title || leadData.contactPositionTitle || "",
-      contact_linkedin_url: leadData.contact_linkedin_url || leadData.linkedIn || leadData.linkedin_url || leadData.contactLinkedinUrl || "",
+      source: leadData.source || "",
+      description: leadData.description || "",
+      company_name: leadData.company_name || leadData.company || "",
+      contact_first_name: leadData.contact_first_name || leadData.firstName || "",
+      contact_last_name: leadData.contact_last_name || leadData.lastName || "",
+      contact_email: leadData.contact_email || leadData.email || "",
+      contact_phone: leadData.contact_phone || leadData.phone || "",
+      contact_position_title: leadData.contact_position_title || leadData.positionTitle || "",
+      contact_linkedin_url: leadData.contact_linkedin_url || leadData.linkedIn || "",
       assigned_to: validatedAssignedToId,
       follow_up_at: followUpDate,
       follow_up_time: followUpTime,
-      follow_up_status: leadData.follow_up_status || leadData.followupStatus || leadData.followUpStatus || "",
+      follow_up_status: leadData.follow_up_status || leadData.followupStatus || "",
     };
 
     console.log(`Setting form data from ${fromCache ? 'cache' : 'API'}:`, formDataToSet);
@@ -429,13 +429,10 @@ export default function CreateLead() {
   };
 
   useEffect(() => {
-    // Get current user from localStorage
     const storedUser = localStorage.getItem("user");
     let admin = false;
     if (storedUser) {
       const userData = JSON.parse(storedUser);
-      // Check if user is admin/manager
-      // role 0 = Admin/Manager, role 1 = Employee
       admin =
         userData.is_staff ||
         userData.is_admin ||
@@ -443,81 +440,70 @@ export default function CreateLead() {
         userData.role === 0 ||
         userData.role === "0";
       setIsAdmin(admin);
-
-      // For employees creating a new lead, don't set assigned_to
-      // Backend will handle the assignment automatically
-      // We don't set assigned_to here to avoid sending invalid profile ID
     }
 
-    // Load all data (status, source, employees) when page opens
-    // Then load lead data if editing
-    const loadData = async (isCurrentAdmin) => {
-      // First, fetch status, source, and employees
-      await fetchAllData();
+    const targetPath = location.pathname;
+    const isEditRoute = targetPath.startsWith("/edit-lead");
 
-      if (!editId) {
-        setIsDataLoaded(true);
+    if (isEditRoute) {
+      setIsDataLoaded(false);
+    }
+
+    const initializeEditForm = async () => {
+      if (isEditRoute) {
+        if (!editId) {
+          console.warn("Edit route opened without editId yet, waiting for params...");
+          return;
+        }
+
+        loadMetaFromCache(admin);
+        setLoadingLead(true);
+        const leadId = String(editId).trim();
+
+        try {
+          if (!leadId || leadId === "undefined" || leadId === "null") {
+            throw new Error(`Invalid lead ID: ${editId}`);
+          }
+
+          const cachedLead = getLeadFromCache(leadId);
+          if (cachedLead) {
+            populateFormWithLeadData(cachedLead, admin, true);
+          }
+
+          console.log("Fetching fresh lead data from API, editId:", leadId);
+          const leadToEdit = await fetchLeadFromApi(leadId);
+
+          console.log("Lead data received from API (raw):", leadToEdit);
+
+          if (!leadToEdit) {
+            if (cachedLead) {
+              console.warn("API failed but using cached data");
+              setIsDataLoaded(true);
+              return;
+            }
+            throw new Error("No data received from API - response was empty");
+          }
+
+          populateFormWithLeadData(leadToEdit, admin, false);
+        } catch (error) {
+          console.error("Failed to load lead - Full error:", error);
+          const errorMessage = error.message || "Unknown error";
+          notifyError(
+            `Failed to load lead data.\n\nError: ${errorMessage}\n\nPlease check:\n1. The lead ID is correct\n2. You have permission to view this lead\n3. The API is accessible\n\nPlease refresh the page and try again.`
+          );
+        } finally {
+          setLoadingLead(false);
+        }
+
         return;
       }
 
-      setLoadingLead(true);
-      const leadId = String(editId).trim();
-
-      try {
-        if (!leadId || leadId === "undefined" || leadId === "null") {
-          throw new Error(`Invalid lead ID: ${editId}`);
-        }
-
-        // STEP 1: First, try to get lead from cache for instant display
-        const cachedLead = getLeadFromCache(leadId);
-        if (cachedLead) {
-          console.log("Populating form from cache first:", cachedLead);
-          populateFormWithLeadData(cachedLead, isCurrentAdmin, true);
-        }
-
-        // STEP 2: Then fetch fresh data from API (api/leads/<lead-id>/)
-        console.log("Fetching fresh lead data from API, editId:", leadId);
-        const leadToEdit = await fetchLeadFromApi(leadId);
-
-        console.log("Lead data received from API (raw):", leadToEdit);
-
-        if (!leadToEdit) {
-          // If API fails but we have cache, use cache data
-          if (cachedLead) {
-            console.warn("API failed but using cached data");
-            setIsDataLoaded(true);
-            return;
-          }
-          throw new Error("No data received from API - response was empty");
-        }
-
-        // STEP 3: Update form with fresh API data
-        console.log("Updating form with fresh API data");
-        populateFormWithLeadData(leadToEdit, isCurrentAdmin, false);
-      } catch (error) {
-        console.error("Failed to load lead - Full error:", error);
-        console.error("Error message:", error.message);
-        console.error("Error stack:", error.stack);
-
-        const errorMessage = error.message || "Unknown error";
-        notifyError(
-          `Failed to load lead data.\n\nError: ${errorMessage}\n\nPlease check:\n1. The lead ID is correct\n2. You have permission to view this lead\n3. The API is accessible\n\nPlease refresh the page and try again.`
-        );
-      } finally {
-        setLoadingLead(false);
-      }
+      await fetchAllData();
+      setIsDataLoaded(true);
     };
 
-    // Reset form data and loading state when editId changes
-    // Only reset if editId actually changed (not on initial mount)
-    if (editId) {
-      setIsDataLoaded(false);
-      // Don't clear form data here - let it load from API
-      // This prevents form from being cleared while loading
-    }
-
-    loadData(admin);
-  }, [editId]);
+    initializeEditForm();
+  }, [editId, location.pathname]);
 
   // Update assigned_to when employees list loads (in case it loads after form data is set)
   // This ensures the dropdown shows the correct employee even if employees load asynchronously
@@ -898,12 +884,6 @@ export default function CreateLead() {
     }
   };
 
-  const RequiredLabel = ({ text }) => (
-    <Typography fontWeight="bold" sx={{ mb: 0.5 }}>
-      {text} <span style={{ color: "red" }}>*</span>
-    </Typography>
-  );
-
   return (
     <>
       <Backdrop
@@ -942,412 +922,29 @@ export default function CreateLead() {
             </Box>
           ) : (
             <Box display="flex" flexDirection="column" gap={2}>
-              {/* ROW 1 */}
-              <Box display="flex" gap={2} flexWrap="wrap">
-                {/* Lead Title */}
-                <Box flex={1} minWidth={200}>
-                  {/* <Typography fontWeight="bold" sx={{ mb: 0.5 }}>
-                  Title
-                </Typography> */}
-                  <RequiredLabel text="Title" />
+              <LeadFormFields
+                formData={formData}
+                employees={employees}
+                meta={meta}
+                loadingMeta={loadingMeta}
+                onChange={handleChange}
+                onAssignedToChange={(value) =>
+                  setFormData({ ...formData, assigned_to: value })
+                }
+                onDateChange={handleDateChange}
+                onTimeChange={handleTimeChange}
+                onLinkedInBlur={() => {
+                  if (
+                    formData.contact_linkedin_url &&
+                    !isValidLinkedInURL(formData.contact_linkedin_url)
+                  ) {
+                    notifyError(
+                      "Please enter a valid LinkedIn URL (e.g., https://linkedin.com/in/username)"
+                    );
+                  }
+                }}
+              />
 
-                  <TextField
-                    sx={MuiTextFieldPadding}
-                    fullWidth
-                    name="title"
-                    value={formData.title}
-                    onChange={handleChange}
-                  />
-                </Box>
-
-                {/* Lead Status */}
-                <Box flex={1} minWidth={200}>
-                  {/* <Typography fontWeight="bold" sx={{ mb: 0.5 }}>
-                  Status
-                </Typography> */}
-                  <RequiredLabel text="Status" />
-
-                  <TextField
-                    sx={MuiSelectPadding}
-                    select
-                    fullWidth
-                    name="status"
-                    value={formData.status || ""}
-                    onChange={(e) => {
-                      const selectedId =
-                        e.target.value === "" ? null : parseInt(e.target.value);
-                      setFormData({ ...formData, status: selectedId });
-                    }}
-                    disabled={loadingMeta}
-                    displayempty="true"
-                    SelectProps={{
-                      displayEmpty: true,
-                      renderValue: (val) => {
-                        if (!val && val !== 0) return "Select Status";
-                        const selectedStatus = meta.status.find(
-                          (item) =>
-                            (typeof item === "object"
-                              ? item.id || item.pk
-                              : null) === val
-                        );
-                        return selectedStatus
-                          ? typeof selectedStatus === "string"
-                            ? selectedStatus
-                            : selectedStatus.name
-                          : "Select Status";
-                      },
-                    }}
-                  >
-                    {meta.status.map((item, index) => {
-                      const statusId =
-                        typeof item === "object" ? item.id || item.pk : null;
-                      const statusName =
-                        typeof item === "string" ? item : item.name;
-                      const key = statusId || index;
-                      return (
-                        <MenuItem key={key} value={statusId || ""}>
-                          {statusName}
-                        </MenuItem>
-                      );
-                    })}
-                  </TextField>
-                </Box>
-
-                {/* Source */}
-                <Box flex={1} minWidth={200}>
-                  <Typography fontWeight="bold" sx={{ mb: 0.5 }}>
-                    Source
-                  </Typography>
-                  <TextField
-                    sx={MuiSelectPadding}
-                    select
-                    fullWidth
-                    name="source"
-                    value={formData.source ?? ""}
-                    onChange={(e) =>
-                      setFormData({ ...formData, source: e.target.value })
-                    }
-                    disabled={loadingMeta}
-                    SelectProps={{
-                      displayEmpty: true,
-                      renderValue: (val) => {
-                        if (val === "" || val === null) return "None";
-                        return val;
-                      },
-                    }}
-                  >
-                    <MenuItem value="">None</MenuItem>
-                    {meta.source.length === 0 && !loadingMeta ? (
-                      <MenuItem value="" disabled>
-                        No sources available
-                      </MenuItem>
-                    ) : (
-                      meta.source.map((item, index) => {
-                        const value =
-                          typeof item === "string" ? item : item.name;
-                        const key =
-                          typeof item === "object" && item.id ? item.id : index;
-                        return (
-                          <MenuItem key={key} value={value}>
-                            {value}
-                          </MenuItem>
-                        );
-                      })
-                    )}
-                  </TextField>
-                </Box>
-              </Box>
-
-              {/* Description */}
-              <Box>
-                <Typography fontWeight="bold" sx={{ mb: 0.5 }}>
-                  Description
-                </Typography>
-                <TextField
-                  sx={MuiTextFieldPadding}
-                  fullWidth
-                  multiline
-                  rows={3}
-                  name="description"
-                  value={formData.description}
-                  onChange={handleChange}
-                />
-              </Box>
-
-              {/* ROW 2 */}
-              <Box display="flex" gap={2} flexWrap="wrap">
-                {/* Show "Assigned To" field for all users - employees can also assign leads */}
-                <Box flex={1} minWidth={200}>
-                  <RequiredLabel text="Assigned To" />
-                    <TextField
-                      sx={MuiSelectPadding}
-                      select
-                      fullWidth
-                      name="assigned_to"
-                      value={(() => {
-                        // Validate that assigned_to value exists in employees list
-                        // This prevents MUI "out-of-range value" errors
-                        if (!formData.assigned_to) return "";
-
-                        const assignedToStr = String(
-                          formData.assigned_to
-                        ).trim();
-                        if (!assignedToStr) return "";
-
-                        // Check if the value exists in employees list
-                        const isValid = employees.some((emp) => {
-                          const empId = emp.id || emp.pk || emp.uuid;
-                          const empUserId =
-                            emp.user_id || emp.userId || emp.user_details?.id;
-                          return (
-                            (empId && String(empId).trim() === assignedToStr) ||
-                            (empUserId &&
-                              String(empUserId).trim() === assignedToStr) ||
-                            (emp.pk &&
-                              String(emp.pk).trim() === assignedToStr) ||
-                            (emp.uuid &&
-                              String(emp.uuid).trim() === assignedToStr)
-                          );
-                        });
-
-                        // Only return the value if it's valid, otherwise return empty string
-                        return isValid ? assignedToStr : "";
-                      })()}
-                      onChange={(e) => {
-                        setFormData({
-                          ...formData,
-                          assigned_to: e.target.value,
-                        });
-                      }}
-                      disabled={loadingMeta}
-                      SelectProps={{
-                        displayEmpty: true,
-                        renderValue: (val) => {
-                          if (!val && val !== 0) return "Select Employee";
-
-                          // Convert val to string for consistent comparison
-                          const valStr = String(val).trim();
-                          if (!valStr) return "Select Employee";
-
-                          // Try to find employee by multiple ID fields with better matching
-                          const selectedEmp = employees.find((emp) => {
-                            const empId = emp.id || emp.pk || emp.uuid;
-                            const empUserId =
-                              emp.user_id || emp.userId || emp.user_details?.id;
-
-                            // Compare as strings to avoid type mismatch issues
-                            // Check all possible ID fields
-                            return (
-                              (empId && String(empId).trim() === valStr) ||
-                              (empUserId &&
-                                String(empUserId).trim() === valStr) ||
-                              (emp.pk && String(emp.pk).trim() === valStr) ||
-                              (emp.uuid && String(emp.uuid).trim() === valStr)
-                            );
-                          });
-
-                          if (selectedEmp) {
-                            return getEmployeeDisplayName(selectedEmp);
-                          }
-
-                          return "Select Employee";
-                        },
-                      }}
-                    >
-                      {/* <MenuItem value="" disabled>
-                        {loadingMeta
-                          ? "Loading..."
-                          : employees.length === 0
-                          ? "No employees available"
-                          : "Select Employee"}
-                      </MenuItem> */}
-
-                      {employees.map((emp) => {
-                        const empId = emp.id || emp.pk || emp.uuid;
-                        if (!empId) return null;
-
-                        return (
-                          <MenuItem key={empId} value={String(empId)}>
-                            {getEmployeeDisplayName(emp)}
-                          </MenuItem>
-                        );
-                      })}
-                    </TextField>
-                  </Box>
-
-                {/* Follow up DATE */}
-                <Box flex={1} minWidth={200}>
-                  <Typography fontWeight="bold" sx={{ mb: 0.5 }}>
-                    Follow Up Date
-                  </Typography>
-                  <LocalizationProvider dateAdapter={AdapterDayjs}>
-                    <DatePicker
-                      value={formData.follow_up_at}
-                      onChange={handleDateChange}
-                      slotProps={{
-                        textField: {
-                          fullWidth: true,
-                          sx: MuiDatePickerPadding,
-                        },
-                      }}
-                    />
-                  </LocalizationProvider>
-                </Box>
-                <Box flex={1} minWidth={200}>
-                  <Typography fontWeight="bold" sx={{ mb: 0.5 }}>
-                    Follow Up Time
-                  </Typography>
-                  <LocalizationProvider dateAdapter={AdapterDayjs}>
-                    <TimePicker
-                      value={formData.follow_up_time}
-                      onChange={handleTimeChange}
-                      ampm
-                      timeSteps={{ minutes: 1 }}
-                      slotProps={{
-                        textField: {
-                          fullWidth: true,
-                          sx: MuiDatePickerPadding,
-                        },
-                      }}
-                    />
-                  </LocalizationProvider>
-                </Box>
-                <Box flex={1} minWidth={200}>
-                  <Typography fontWeight="bold" sx={{ mb: 0.5 }}>
-                    Follow Up Status
-                  </Typography>
-                  <TextField
-                    sx={MuiSelectPadding}
-                    select
-                    fullWidth
-                    name="follow_up_status"
-                    value={formData.follow_up_status || ""}
-                    onChange={(e) =>
-                      setFormData({
-                        ...formData,
-                        follow_up_status: e.target.value,
-                      })
-                    }
-                    SelectProps={{
-                      displayEmpty: true,
-                      renderValue: (val) => (val === "" ? "None" : val),
-                    }}
-                  >
-                    {/* <MenuItem value="">None</MenuItem> */}
-                    {/* <MenuItem value="">None</MenuItem> */}
-                    <MenuItem value="done">done</MenuItem>
-                    <MenuItem value="pending">pending</MenuItem>
-                  </TextField>
-                </Box>
-              </Box>
-
-              {/* ROW 3 */}
-              <Box display="flex" gap={2} flexWrap="wrap">
-                <Box flex={1} minWidth={200}>
-                  <Typography fontWeight="bold" sx={{ mb: 0.5 }}>
-                    Company Name
-                  </Typography>
-                  <TextField
-                    sx={MuiTextFieldPadding}
-                    fullWidth
-                    name="company_name"
-                    value={formData.company_name}
-                    onChange={handleChange}
-                  />
-                </Box>
-                <Box flex={1} minWidth={200}>
-                  <Typography fontWeight="bold" sx={{ mb: 0.5 }}>
-                    Contact First Name
-                  </Typography>
-                  <TextField
-                    sx={MuiTextFieldPadding}
-                    fullWidth
-                    name="contact_first_name"
-                    value={formData.contact_first_name}
-                    onChange={handleChange}
-                  />
-                </Box>
-                <Box flex={1} minWidth={200}>
-                  <Typography fontWeight="bold" sx={{ mb: 0.5 }}>
-                    Contact Last Name
-                  </Typography>
-                  <TextField
-                    sx={MuiTextFieldPadding}
-                    fullWidth
-                    name="contact_last_name"
-                    value={formData.contact_last_name}
-                    onChange={handleChange}
-                  />
-                </Box>
-              </Box>
-
-              {/* ROW 4 */}
-              <Box display="flex" gap={2} flexWrap="wrap">
-                <Box flex={1} minWidth={200}>
-                  <Typography fontWeight="bold" sx={{ mb: 0.5 }}>
-                    Contact Email
-                  </Typography>
-                  <TextField
-                    sx={MuiTextFieldPadding}
-                    fullWidth
-                    name="contact_email"
-                    type="email"
-                    value={formData.contact_email}
-                    onChange={handleChange}
-                  />
-                </Box>
-                <Box flex={1} minWidth={200}>
-                  <Typography fontWeight="bold" sx={{ mb: 0.5 }}>
-                    Contact Phone
-                  </Typography>
-                  <TextField
-                    sx={MuiTextFieldPadding}
-                    fullWidth
-                    name="contact_phone"
-                    value={formData.contact_phone}
-                    onChange={handleChange}
-                  />
-                </Box>
-                <Box flex={1} minWidth={200}>
-                  <Typography fontWeight="bold" sx={{ mb: 0.5 }}>
-                    Contact Position Title
-                  </Typography>
-                  <TextField
-                    sx={MuiTextFieldPadding}
-                    fullWidth
-                    name="contact_position_title"
-                    value={formData.contact_position_title}
-                    onChange={handleChange}
-                  />
-                </Box>
-              </Box>
-
-              {/* ROW 5 - LinkedIn URL */}
-              <Box>
-                <Typography fontWeight="bold" sx={{ mb: 0.5 }}>
-                  Contact LinkedIn URL
-                </Typography>
-                <TextField
-                  sx={MuiTextFieldPadding}
-                  fullWidth
-                  name="contact_linkedin_url"
-                  value={formData.contact_linkedin_url}
-                  onChange={handleChange}
-                  placeholder="https://linkedin.com/in/username"
-                  onBlur={() => {
-                    if (
-                      formData.contact_linkedin_url &&
-                      !isValidLinkedInURL(formData.contact_linkedin_url)
-                    ) {
-                      notifyError(
-                        "Please enter a valid LinkedIn URL (e.g., https://linkedin.com/in/username)"
-                      );
-                    }
-                  }}
-                />
-              </Box>
-
-              {/* Submit */}
               <Box display="flex" gap={2} flexWrap="wrap">
                 <Button
                   variant="outlined"

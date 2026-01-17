@@ -42,6 +42,7 @@ import { FaLinkedin, FaComment } from "react-icons/fa";
 import VisibilityIcon from "@mui/icons-material/Visibility";
 import LeadDetailsModal from "../components/Leads/LeadDetailsModal";
 import LeadNotesChat from "../components/Leads/LeadNotesChat";
+import EditLeadModal from "../components/Leads/EditLeadModal";
 import MoreHorizIcon from "@mui/icons-material/MoreHoriz";
 import apiRequest from "../components/services/api";
 import {
@@ -149,19 +150,22 @@ export default function EmployeeAllLeads() {
   const [notesDialogOpen, setNotesDialogOpen] = useState(false);
   const [notesDialogLead, setNotesDialogLead] = useState(null);
   const [statuses, setStatuses] = useState([]);
+  const [employees, setEmployees] = useState([]);
   const [leadsLoading, setLeadsLoading] = useState(true);
   const [statusesLoading, setStatusesLoading] = useState(true);
   const [actionAnchorEl, setActionAnchorEl] = useState(null);
   const [menuLead, setMenuLead] = useState(null);
   const [mobileMenuAnchorEl, setMobileMenuAnchorEl] = useState(null);
-  const [currentUserId, setCurrentUserId] = useState(null);
+  const [deleteDialog, setDeleteDialog] = useState({ open: false, lead: null });
+  const [editDialog, setEditDialog] = useState({ open: false, leadId: null, lead: null });
   const [actionLoading, setActionLoading] = useState(false);
   const [actionMessage, setActionMessage] = useState("");
-  const [deleteDialog, setDeleteDialog] = useState({ open: false, lead: null });
   // Track individual dropdown loading states
   const [statusUpdatingLeadId, setStatusUpdatingLeadId] = useState(null);
   const [followUpUpdatingLeadId, setFollowUpUpdatingLeadId] = useState(null);
   const [activeTogglingLeadId, setActiveTogglingLeadId] = useState(null);
+  const leadsFetchInFlight = useRef(false);
+  const lastFetchedPathRef = useRef(null);
 
   const actionOpen = Boolean(actionAnchorEl);
   const rowRefs = useRef({});
@@ -197,16 +201,6 @@ export default function EmployeeAllLeads() {
     };
   }, [focusLeadId, leads]);
 
-  // Get current user info on mount
-  useEffect(() => {
-    const storedUser = localStorage.getItem("user");
-    if (storedUser) {
-      const userData = JSON.parse(storedUser);
-      const userId = userData.id || userData.pk || userData.uuid;
-      setCurrentUserId(userId);
-    }
-  }, []);
-
   // Fetch statuses from the single /api/leads response - use cache first
   useEffect(() => {
     const fetchStatuses = async () => {
@@ -233,7 +227,18 @@ export default function EmployeeAllLeads() {
 
   // Fetch leads - use cache first, then API
   useEffect(() => {
+    const pathKey = location.pathname;
+    if (lastFetchedPathRef.current === pathKey) {
+      return;
+    }
+    lastFetchedPathRef.current = pathKey;
+
     const fetchLeads = async () => {
+      if (leadsFetchInFlight.current) {
+        console.log("Leads fetch already in flight, skipping duplicate call");
+        return;
+      }
+      leadsFetchInFlight.current = true;
       setLeadsLoading(true);
       try {
         // Get current user to filter leads
@@ -368,6 +373,9 @@ export default function EmployeeAllLeads() {
           if (cachedData.statuses) {
             setStatuses(cachedData.statuses);
           }
+          if (cachedData.employees) {
+            setEmployees(cachedData.employees);
+          }
 
           const filteredLeads = filterLeadsByEmployee(cachedData.leads);
           console.log(
@@ -390,6 +398,9 @@ export default function EmployeeAllLeads() {
             // Also set statuses from cache if available
             if (cachedDataAfterDelay.statuses) {
               setStatuses(cachedDataAfterDelay.statuses);
+            }
+            if (cachedDataAfterDelay.employees) {
+              setEmployees(cachedDataAfterDelay.employees);
             }
 
             const filteredLeads = filterLeadsByEmployee(leadsList);
@@ -428,6 +439,7 @@ export default function EmployeeAllLeads() {
 
         // Extract statuses from the API response
         let statusesList = [];
+        let employeesList = [];
 
         if (data?.statuses && Array.isArray(data.statuses)) {
           statusesList = data.statuses;
@@ -436,6 +448,14 @@ export default function EmployeeAllLeads() {
             statusesList.length
           );
           setStatuses(statusesList);
+        }
+
+        if (Array.isArray(data?.users)) {
+          employeesList = data.users;
+          setEmployees(employeesList);
+        } else if (Array.isArray(data?.employees)) {
+          employeesList = data.employees;
+          setEmployees(employeesList);
         }
 
         console.log("=== PARSED LEADS LIST ===");
@@ -460,6 +480,7 @@ export default function EmployeeAllLeads() {
         if (currentCache) {
           currentCache.leads = leadsList;
           currentCache.statuses = statusesList;
+          currentCache.employees = employeesList;
           currentCache.timestamp = Date.now();
           localStorage.setItem(cacheKey, JSON.stringify(currentCache));
         } else {
@@ -467,7 +488,7 @@ export default function EmployeeAllLeads() {
           const newCache = {
             statuses: statusesList,
             sources: data?.sources || [],
-            employees: data?.users || [],
+            employees: employeesList,
             leads: leadsList,
             timestamp: Date.now(),
           };
@@ -478,12 +499,13 @@ export default function EmployeeAllLeads() {
         alert("Failed to load leads");
         setLeads([]);
       } finally {
+        leadsFetchInFlight.current = false;
         setLeadsLoading(false);
       }
     };
 
     void fetchLeads();
-  }, [location.pathname, currentUserId]);
+  }, [location.pathname]);
 
   // Handler to update lead status
   const handleStatusChange = async (lead, newStatusId) => {
@@ -733,10 +755,27 @@ export default function EmployeeAllLeads() {
     navigate("/create-lead");
   };
 
-  const handleNavigateToEditLead = (leadId) => {
+  const openEditDialog = (lead) => {
+    const leadId = resolveLeadId(lead);
     if (!leadId) return;
-    warmUpLeadForm();
-    navigate(`/edit-lead/${leadId}`);
+    setEditDialog({ open: true, leadId, lead });
+  };
+
+  const closeEditDialog = () => setEditDialog({ open: false, leadId: null, lead: null });
+
+  const handleLeadUpdated = (updatedLead) => {
+    if (!updatedLead) return;
+    const updatedId = resolveLeadId(updatedLead);
+    if (!updatedId) return;
+    setLeads((prev) =>
+      prev.map((lead) =>
+        resolveLeadId(lead) === updatedId ? { ...lead, ...updatedLead } : lead
+      )
+    );
+  };
+
+  const handleNavigateToEditLead = (lead) => {
+    openEditDialog(lead);
   };
 
   // Handler to toggle lead active status
@@ -790,15 +829,7 @@ export default function EmployeeAllLeads() {
       case "status":
         return getStatusName(lead.status);
       case "assignedTo":
-        // For employees, assigned_to should always be themselves
-        const storedUser = localStorage.getItem("user");
-        if (storedUser) {
-          const userData = JSON.parse(storedUser);
-          const firstName = userData.first_name || userData.firstName || "";
-          const lastName = userData.last_name || userData.lastName || "";
-          return `${firstName} ${lastName}`.trim() || "Me";
-        }
-        return "Me";
+        return getEmployeeName(lead.assigned_to || lead.assignedTo);
       case "followUpAt":
         // follow_up_at now contains combined date and time as ISO datetime string
         const followUpDateTime = lead.follow_up_at || lead.followUpAt;
@@ -853,6 +884,47 @@ export default function EmployeeAllLeads() {
     // Handle null, undefined, empty string, or "None"
     if (!assignedTo && assignedTo !== 0) {
       return "None";
+    }
+
+    // If assigned_to is a primitive ID, try to resolve self vs others
+    if (typeof assignedTo !== "object") {
+      const storedUser = localStorage.getItem("user");
+      if (storedUser) {
+        const userData = JSON.parse(storedUser);
+        const currentUserId =
+          userData.id || userData.pk || userData.uuid || userData.user_id;
+        if (currentUserId && String(currentUserId) === String(assignedTo)) {
+          const firstName = userData.first_name || userData.firstName || "";
+          const lastName = userData.last_name || userData.lastName || "";
+          const name = `${firstName} ${lastName}`.trim();
+          return name || "Me";
+        }
+      }
+
+      // Try to resolve from employees list (admins cached from API)
+      const matched = employees.find((emp) => {
+        const empId = emp.id || emp.pk || emp.uuid;
+        const userDetails = emp.user_details || emp.userDetails || emp.user;
+        const empUserId =
+          emp.user_id ||
+          emp.userId ||
+          (userDetails && typeof userDetails === "object" && (userDetails.id || userDetails.user_id || userDetails.userId));
+        return (
+          (empId && String(empId) === String(assignedTo)) ||
+          (empUserId && String(empUserId) === String(assignedTo))
+        );
+      });
+      if (matched) {
+        const firstName = matched.first_name || matched.firstName || matched.name || matched.fullName || "";
+        const lastName = matched.last_name || matched.lastName || "";
+        const userDetails = matched.user_details || matched.userDetails || matched.user;
+        const udFirst = userDetails?.first_name || userDetails?.firstName || "";
+        const udLast = userDetails?.last_name || userDetails?.lastName || "";
+        const name = `${firstName || udFirst} ${lastName || udLast}`.trim();
+        if (name) return name;
+      }
+
+      return String(assignedTo);
     }
 
     // If assigned_to is an object with user_details, extract name directly from it
@@ -1021,44 +1093,45 @@ export default function EmployeeAllLeads() {
   };
 
   // Filter logic
-  const filteredLeads = leads.filter((l) => {
-    const qLower = q.trim().toLowerCase();
+const filteredLeads = leads.filter((l) => {
+  const qLower = q.trim().toLowerCase();
 
-    if (statusFilter !== "All") {
-      const leadStatusName = getStatusName(l.status);
-      if (
-        statusFilter === "None" &&
-        leadStatusName &&
-        leadStatusName !== "None"
-      )
-        return false;
-      if (statusFilter !== "None" && leadStatusName !== statusFilter)
+  if (statusFilter !== "All") {
+    const leadStatusName = (getStatusName(l.status) || "").toString().trim();
+    const filterName = statusFilter.toString().trim();
+
+    if (filterName === "None") {
+      if (leadStatusName !== "None") return false;
+    } else {
+      if (leadStatusName.toLowerCase() !== filterName.toLowerCase())
         return false;
     }
+  }
 
-    if (!qLower) return true;
+  if (!qLower) return true;
 
-    // All searchable fields
-    const fieldsToSearch = [
-      l.title || "",
-      l.firstName || "",
-      l.lastName || "",
-      l.email || "",
-      l.phone || "",
-      l.company || "",
-      l.positionTitle || "",
-      l.source || "",
-      l.description || "",
-      l.followUpAt ? new Date(l.followUpAt).toLocaleDateString() : "",
-      l.followupStatus || "",
-      l.assignedTo || "",
-      l.linkedIn || "",
-    ];
+  // All searchable fields
+  const fieldsToSearch = [
+    l.title || "",
+    l.firstName || "",
+    l.lastName || "",
+    l.email || "",
+    l.phone || "",
+    l.company || "",
+    l.positionTitle || "",
+    l.source || "",
+    l.description || "",
+    l.followUpAt ? new Date(l.followUpAt).toLocaleDateString() : "",
+    l.followupStatus || "",
+    l.assignedTo || "",
+    l.linkedIn || "",
+  ];
 
-    return fieldsToSearch.some((field) =>
-      field.toString().toLowerCase().includes(qLower)
-    );
-  });
+  return fieldsToSearch.some((field) =>
+    field.toString().toLowerCase().includes(qLower)
+  );
+});
+
 
   return (
     <Box>
@@ -1686,7 +1759,7 @@ export default function EmployeeAllLeads() {
 
         <MenuItem
           onClick={() => {
-            handleNavigateToEditLead(menuLead?.id);
+            handleNavigateToEditLead(menuLead);
             handleActionMenuClose();
           }}
         >
@@ -1737,6 +1810,17 @@ export default function EmployeeAllLeads() {
           </Button>
         </DialogActions>
       </Dialog>
+
+      <EditLeadModal
+        open={editDialog.open}
+        leadId={editDialog.leadId}
+        lead={editDialog.lead}
+        onClose={closeEditDialog}
+        onSuccess={(updatedLead) => {
+          handleLeadUpdated(updatedLead);
+          closeEditDialog();
+        }}
+      />
 
       <Dialog
         open={notesDialogOpen}
