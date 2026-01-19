@@ -50,6 +50,7 @@ import {
 } from "../utils/prefetchData";
 import MoreVertIcon from "@mui/icons-material/MoreVert";
 
+
 const getChipStyles = (status) => {
   switch (status) {
     case "Completed":
@@ -134,7 +135,7 @@ export default function EmployeeAllLeads() {
   const location = useLocation();
   const [leads, setLeads] = useState([]);
   const [q, setQ] = useState("");
-  const [statusFilter, setStatusFilter] = useState("All");
+  const [statusFilter, setStatusFilter] = useState("ALL");
   const [anchorEl, setAnchorEl] = useState(null);
   const [visibleColumns, setVisibleColumns] = useState(() => {
     const stored = JSON.parse(localStorage.getItem("leadColumns")) || DEFAULT_COLUMNS;
@@ -1305,44 +1306,29 @@ export default function EmployeeAllLeads() {
   };
 
   // Filter logic
-  const filteredLeads = leads.filter((l) => {
-    const qLower = q.trim().toLowerCase();
-
-    if (statusFilter !== "All") {
-      const leadStatusName = getStatusName(l.status);
-      if (
-        statusFilter === "None" &&
-        leadStatusName &&
-        leadStatusName !== "None"
-      )
+  const filteredLeads = useMemo(() => {
+    return leads.filter((lead) => {
+      // STATUS FILTER
+      if (statusFilter !== "ALL") {
+        const leadStatusId =
+          typeof lead.status === "object"
+            ? lead.status?.id
+            : lead.status;
+  
+        if (String(leadStatusId) !== String(statusFilter)) {
+          return false;
+        }
+      }
+  
+      // SEARCH FILTER (optional)
+      if (q && !lead.title?.toLowerCase().includes(q.toLowerCase())) {
         return false;
-      if (statusFilter !== "None" && leadStatusName !== statusFilter)
-        return false;
-    }
-
-    if (!qLower) return true;
-
-    // All searchable fields
-    const fieldsToSearch = [
-      l.title || "",
-      l.firstName || "",
-      l.lastName || "",
-      l.email || "",
-      l.phone || "",
-      l.company || "",
-      l.positionTitle || "",
-      l.source || "",
-      l.description || "",
-      l.followUpAt ? new Date(l.followUpAt).toLocaleDateString() : "",
-      l.followupStatus || "",
-      l.assignedTo || "",
-      l.linkedIn || "",
-    ];
-
-    return fieldsToSearch.some((field) =>
-      field.toString().toLowerCase().includes(qLower)
-    );
-  });
+      }
+  
+      return true;
+    });
+  }, [leads, statusFilter, q]);
+  
 
   return (
     <Box>
@@ -1480,36 +1466,26 @@ export default function EmployeeAllLeads() {
           onChange={(e) => setQ(e.target.value)}
           size="small"
         />
-        <FormControl size="small">
-          <InputLabel>Status</InputLabel>
-          <Select
-            label="Status"
-            value={statusFilter}
-            onChange={(e) => setStatusFilter(e.target.value)}
-          >
-            <MenuItem value="All">All</MenuItem>
-            <MenuItem value="None">None</MenuItem>
-            {statuses.map((status, index) => {
-              // Handle different status structures
-              const statusName =
-                typeof status === "string"
-                  ? status
-                  : status.name ||
-                    status.label ||
-                    status.status_name ||
-                    String(status.id || status.pk || index);
+       <FormControl size="small" sx={{ minWidth: 180 }}>
+  <InputLabel>Status</InputLabel>
+  <Select
+    value={statusFilter}
+    label="Status"
+    onChange={(e) => setStatusFilter(e.target.value)}
+  >
+    <MenuItem value="ALL">All</MenuItem>
 
-              return (
-                <MenuItem
-                  key={status.id || status.pk || statusName || index}
-                  value={statusName}
-                >
-                  {statusName}
-                </MenuItem>
-              );
-            })}
-          </Select>
-        </FormControl>
+    {statuses.map((status) => (
+      <MenuItem
+        key={status.id ?? status.pk ?? status.uuid}
+        value={status.id ?? status.pk ?? status.uuid}
+      >
+        {status.name || status.status_name || status.label}
+      </MenuItem>
+    ))}
+  </Select>
+</FormControl>
+
       </Box>
 
       {/* Leads Table */}
