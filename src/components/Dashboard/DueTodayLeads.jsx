@@ -228,7 +228,7 @@ function DueTodayLeads({ data }) {
         open={dialogOpen}
         onClose={handleCloseDialog}
         fullWidth
-        maxWidth="md"
+        maxWidth="sm"
       >
         <DialogTitle>Due Today Leads</DialogTitle>
         <DialogContent dividers>
