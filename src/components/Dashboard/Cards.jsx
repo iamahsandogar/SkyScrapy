@@ -1,4 +1,9 @@
 import { Box, Paper, Typography } from "@mui/material";
+import PeopleIcon from "@mui/icons-material/People";
+import AssignmentIcon from "@mui/icons-material/Assignment";
+import CheckCircleIcon from "@mui/icons-material/CheckCircle";
+import PendingIcon from "@mui/icons-material/Pending";
+import CancelIcon from "@mui/icons-material/Cancel";
 import { getColors } from "../../design-system/tokens";
 import { useTheme } from "../../contexts/ThemeContext";
 
@@ -62,6 +67,7 @@ export default function Cards({ data, mode = "admin" }) {
       loading: loading,
       accentGroup: "blueAccent",
       caption: "Active team members",
+      icon: PeopleIcon,
     },
     {
       key: "leads",
@@ -70,6 +76,7 @@ export default function Cards({ data, mode = "admin" }) {
       loading: loading,
       accentGroup: "purpleAccent",
       caption: "Leads in the pipeline",
+      icon: AssignmentIcon,
     },
     {
       key: "completed",
@@ -78,6 +85,7 @@ export default function Cards({ data, mode = "admin" }) {
       loading: loading,
       accentGroup: "greenAccent",
       caption: `${completedPercent}% of total leads`,
+      icon: CheckCircleIcon,
     },
     {
       key: "pending",
@@ -86,6 +94,7 @@ export default function Cards({ data, mode = "admin" }) {
       loading: loading,
       accentGroup: "yellowAccent",
       caption: `${pendingPercent}% awaiting action`,
+      icon: PendingIcon,
     },
   ];
 
@@ -96,6 +105,7 @@ export default function Cards({ data, mode = "admin" }) {
     loading: loading,
     accentGroup: "redAccent",
     caption: `${rejectedPercent}% of total leads`,
+    icon: CancelIcon,
   };
 
   const metricCards =
@@ -124,16 +134,39 @@ export default function Cards({ data, mode = "admin" }) {
                 borderRadius: 3,
                 boxShadow: "none",
                 backgroundColor,
+                position: "relative",
+                overflow: "hidden",
               }}
             >
               <Box display="flex" flexDirection="column" gap={1}>
-                <Typography
-                  variant="subtitle1"
-                  fontWeight={700}
-                  sx={{ color: headingColor }}
-                >
-                  {card.label}
-                </Typography>
+                <Box display="flex" alignItems="center" justifyContent="space-between">
+                  <Typography
+                    variant="subtitle1"
+                    fontWeight={700}
+                    sx={{ color: headingColor }}
+                  >
+                    {card.label}
+                  </Typography>
+                  {card.icon && (
+                    <Box
+                      sx={{
+                        p: 1,
+                        borderRadius: 2,
+                        backgroundColor: `${valueColor}20`,
+                        display: "flex",
+                        alignItems: "center",
+                        justifyContent: "center",
+                      }}
+                    >
+                      <card.icon
+                        sx={{
+                          color: valueColor,
+                          fontSize: 24,
+                        }}
+                      />
+                    </Box>
+                  )}
+                </Box>
 
                 <Typography
                   variant="h3"
