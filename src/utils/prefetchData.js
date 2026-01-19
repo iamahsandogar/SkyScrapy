@@ -283,6 +283,16 @@ export const addLeadToCache = (newLead) => {
         cacheData.timestamp = Date.now();
         localStorage.setItem(cacheKey, JSON.stringify(cacheData));
         console.log("Added new lead to cache:", newLead);
+        
+        // Dispatch custom event to notify other components (e.g., EmployeeAllLeads)
+        const action = existingIndex >= 0 ? "updated" : "added";
+        window.dispatchEvent(
+          new CustomEvent("leadCacheUpdated", {
+            detail: { lead: newLead, action },
+          })
+        );
+        console.log(`🔔 Dispatched leadCacheUpdated event (${action}):`, newLead.id || newLead.pk || newLead.uuid);
+        
         return cacheData;
       }
     } else {
@@ -296,6 +306,15 @@ export const addLeadToCache = (newLead) => {
       };
       localStorage.setItem(cacheKey, JSON.stringify(newCache));
       console.log("Created new cache with lead:", newLead);
+      
+      // Dispatch custom event to notify other components (e.g., EmployeeAllLeads)
+      window.dispatchEvent(
+        new CustomEvent("leadCacheUpdated", {
+          detail: { lead: newLead, action: "added" },
+        })
+      );
+      console.log("🔔 Dispatched leadCacheUpdated event (added):", newLead.id || newLead.pk || newLead.uuid);
+      
       return newCache;
     }
   } catch (error) {

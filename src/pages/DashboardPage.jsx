@@ -1,5 +1,12 @@
-import AdminDashboard from "./Dashboard/AdminDashboard";
-import EmployeeDashboard from "./Dashboard/EmployeeDashboard";
+import { lazy, Suspense } from "react";
+import { Box, Typography } from "@mui/material";
+import DotLoader from "../components/global/DotLoader";
+import { getColors } from "../design-system/tokens";
+import { useTheme } from "../contexts/ThemeContext";
+
+// Lazy load dashboard components
+const AdminDashboard = lazy(() => import("./Dashboard/AdminDashboard"));
+const EmployeeDashboard = lazy(() => import("./Dashboard/EmployeeDashboard"));
 
 const getUserRole = () => {
   const storedUser = localStorage.getItem("user");
@@ -24,5 +31,39 @@ const getUserRole = () => {
 
 export default function DashboardPage() {
   const role = getUserRole();
-  return role === "admin" ? <AdminDashboard /> : <EmployeeDashboard />;
+  const theme = useTheme();
+  const mode = theme?.mode ?? theme?.palette?.mode ?? "light";
+  const colors = getColors(mode);
+  
+  const overlayBg =
+    mode === "dark" ? "rgba(5, 9, 20, 0.85)" : "rgba(255, 255, 255, 0.85)";
+  const overlayTextColor =
+    mode === "dark" ? colors.grey[100] : colors.grey[900];
+
+  const DashboardFallback = (
+    <Box
+      sx={{
+        position: "fixed",
+        inset: 0,
+        zIndex: 1400,
+        bgcolor: overlayBg,
+        display: "flex",
+        alignItems: "center",
+        justifyContent: "center",
+        flexDirection: "column",
+        gap: 1,
+      }}
+    >
+      <DotLoader size={56} color={colors.blueAccent[500]} />
+      <Typography sx={{ color: overlayTextColor }}>
+        Loading dashboard…
+      </Typography>
+    </Box>
+  );
+
+  return (
+    <Suspense fallback={DashboardFallback}>
+      {role === "admin" ? <AdminDashboard /> : <EmployeeDashboard />}
+    </Suspense>
+  );
 }

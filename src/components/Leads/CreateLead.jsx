@@ -1,5 +1,4 @@
 import {
-  Backdrop,
   Box,
   Button,
   Paper,
@@ -17,7 +16,6 @@ import { AdapterDayjs } from "@mui/x-date-pickers/AdapterDayjs";
 import dayjs from "dayjs";
 import apiRequest from "../services/api";
 import { clearLeadDataCache, addLeadToCache, getCachedLeadData } from "../../utils/prefetchData";
-import DotLoader from "../global/DotLoader";
 import { useNotification } from "../../contexts/NotificationContext.jsx";
 import LeadFormFields from "./LeadFormFields";
 import { parseEmployeesPayload, isValidLinkedInURL } from "./leadFormUtils";
@@ -886,22 +884,6 @@ export default function CreateLead() {
 
   return (
     <>
-      <Backdrop
-        open={loadingMeta || (editId && !isDataLoaded)}
-        sx={{
-          zIndex: (theme) => theme.zIndex.drawer,
-          color: "#fff",
-          flexDirection: "column",
-          gap: 1,
-        }}
-      >
-        <DotLoader size={48} color="#0A66C2" />
-        <Typography variant="body2" mt={1}>
-          {editId && !isDataLoaded
-            ? "Loading lead details..."
-            : "Loading statuses and sources..."}
-        </Typography>
-      </Backdrop>
       <Topbar>
         <Typography variant="h5" fontWeight="bold">
           {editId ? "Edit Lead" : "Create Lead"}
@@ -911,17 +893,7 @@ export default function CreateLead() {
       {/* Main Area */}
       <Box mt={2} sx={{ boxShadow: "none" }}>
         <Paper sx={{ p: 3, borderRadius: 3, boxShadow: "none" }} elevation={1}>
-          {loadingLead && editId ? (
-            <Box
-              display="flex"
-              justifyContent="center"
-              alignItems="center"
-              minHeight={200}
-            >
-              <Typography>Loading lead data...</Typography>
-            </Box>
-          ) : (
-            <Box display="flex" flexDirection="column" gap={2}>
+          <Box display="flex" flexDirection="column" gap={2}>
               <LeadFormFields
                 formData={formData}
                 employees={employees}
@@ -975,7 +947,6 @@ export default function CreateLead() {
                 </Button>
               </Box>
             </Box>
-          )}
         </Paper>
       </Box>
     </>

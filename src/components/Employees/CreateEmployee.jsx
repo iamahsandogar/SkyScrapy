@@ -24,7 +24,7 @@ const MuiTextFieldPadding = {
 };
 
 export default function CreateEmployee() {
-  const [showPassword, setShowPassword] = useState(false);
+  // const [showPassword, setShowPassword] = useState(false);
   const [loading, setLoading] = useState(false);
   const navigate = useNavigate();
 
@@ -32,7 +32,7 @@ export default function CreateEmployee() {
     first_name: "",
     last_name: "",
     email: "",
-    password: "",
+    // password: "",
     phone: "",
     alternate_phone: "",
   });
@@ -45,8 +45,7 @@ export default function CreateEmployee() {
     if (
       !formData.first_name ||
       !formData.last_name ||
-      !formData.email ||
-      !formData.password
+      !formData.email
     ) {
       alert("Please fill all required fields");
       return;
@@ -67,7 +66,6 @@ export default function CreateEmployee() {
         first_name: formData.first_name.trim(),
         last_name: formData.last_name.trim(),
         email: formData.email.trim(),
-        password: formData.password,
         ...(trimmedPhone && { phone: trimmedPhone }),
         ...(formData.alternate_phone && {
           alternate_phone: formData.alternate_phone.trim(),
@@ -86,7 +84,7 @@ export default function CreateEmployee() {
         first_name: "",
         last_name: "",
         email: "",
-        password: "",
+        // password: "",
         phone: "",
         alternate_phone: "",
       });
@@ -112,111 +110,100 @@ export default function CreateEmployee() {
         </Typography>
       </Topbar>
 
-      <Paper sx={{ p: 3, borderRadius: 3, mt: 2, boxShadow: "none" }}>
-        <Box display="flex" flexDirection="column" gap={2}>
-          <Box display="flex" gap={2}>
-            <Box flex={1}>
-              <RequiredLabel text="First Name" />
-              <TextField
-                sx={MuiTextFieldPadding}
-                fullWidth
-                name="first_name"
-                value={formData.first_name}
-                onChange={handleChange}
-                placeholder="Enter first name"
-              />
+      <Paper
+        sx={{
+          p: { xs: 2, md: 4 },
+          borderRadius: 3,
+          width: "100%",
+          boxShadow: "none",
+          mt: 3,
+          maxWidth: "none",
+        }}
+      >
+        <form autoComplete="off" onSubmit={e => { e.preventDefault(); handleSubmit(); }}>
+          <Box display="flex" flexDirection="column" gap={3}>
+            <Box display="flex" flexDirection={{ xs: "column", sm: "row" }} gap={2}>
+              <Box flex={1}>
+                <RequiredLabel text="First Name" />
+                <TextField
+                  sx={MuiTextFieldPadding}
+                  fullWidth
+                  name="first_name"
+                  value={formData.first_name}
+                  onChange={handleChange}
+                  placeholder="Enter first name"
+                />
+              </Box>
+              <Box flex={1}>
+                <RequiredLabel text="Last Name" />
+                <TextField
+                  sx={MuiTextFieldPadding}
+                  fullWidth
+                  name="last_name"
+                  value={formData.last_name}
+                  onChange={handleChange}
+                  placeholder="Enter last name"
+                />
+              </Box>
             </Box>
 
-            <Box flex={1}>
-              <RequiredLabel text="Last Name" />
-              <TextField
-                sx={MuiTextFieldPadding}
-                fullWidth
-                name="last_name"
-                value={formData.last_name}
-                onChange={handleChange}
-                placeholder="Enter last name"
-              />
-            </Box>
-          </Box>
-
-          <Box display="flex" gap={2}>
-            <Box flex={1}>
-              <RequiredLabel text="Email" />
-              <TextField
-                sx={MuiTextFieldPadding}
-                fullWidth
-                name="email"
-                value={formData.email}
-                onChange={handleChange}
-                placeholder="Enter email"
-              />
+            <Box display="flex" flexDirection={{ xs: "column", sm: "row" }} gap={2}>
+              <Box flex={1}>
+                <RequiredLabel text="Email" />
+                <TextField
+                  sx={MuiTextFieldPadding}
+                  fullWidth
+                  name="email"
+                  value={formData.email}
+                  onChange={handleChange}
+                  placeholder="Enter email"
+                />
+              </Box>
+              {/* Password field intentionally omitted */}
             </Box>
 
-            <Box flex={1}>
-              <RequiredLabel text="Password" />
-              <TextField
-                fullWidth
-                sx={MuiTextFieldPadding}
-                name="password"
-                type={showPassword ? "text" : "password"}
-                value={formData.password}
-                onChange={handleChange}
-                placeholder="Enter password"
-                InputProps={{
-                  endAdornment: (
-                    <InputAdornment position="end">
-                      <IconButton
-                        onClick={() => setShowPassword(!showPassword)}
-                      >
-                        {showPassword ? <VisibilityOff /> : <Visibility />}
-                      </IconButton>
-                    </InputAdornment>
-                  ),
-                }}
-              />
-            </Box>
-          </Box>
-
-          <Box display="flex" gap={2}>
-            <Box flex={1}>
-              <Typography fontWeight="bold" sx={{ mb: 0.5 }}>
-                Phone
-              </Typography>
-              <TextField
-                sx={MuiTextFieldPadding}
-                fullWidth
-                name="phone"
-                value={formData.phone}
-                onChange={handleChange}
-                placeholder="Enter phone no"
-              />
+            <Box display="flex" flexDirection={{ xs: "column", sm: "row" }} gap={2}>
+              <Box flex={1}>
+                <Typography fontWeight="bold" sx={{ mb: 0.5 }}>
+                  Phone
+                </Typography>
+                <TextField
+                  sx={MuiTextFieldPadding}
+                  fullWidth
+                  name="phone"
+                  value={formData.phone}
+                  onChange={handleChange}
+                  placeholder="Enter phone no"
+                />
+              </Box>
+              <Box flex={1}>
+                <Typography fontWeight="bold" sx={{ mb: 0.5 }}>
+                  Alternate Phone
+                </Typography>
+                <TextField
+                  sx={MuiTextFieldPadding}
+                  fullWidth
+                  name="alternate_phone"
+                  value={formData.alternate_phone}
+                  onChange={handleChange}
+                  placeholder="Enter alternative phone no"
+                />
+              </Box>
             </Box>
 
-            <Box flex={1}>
-              <Typography fontWeight="bold" sx={{ mb: 0.5 }}>
-                Alternate Phone
-              </Typography>
-              <TextField
-                sx={MuiTextFieldPadding}
-                fullWidth
-                name="alternate_phone"
-                value={formData.alternate_phone}
-                onChange={handleChange}
-                placeholder="Enter alternative phone no"
-              />
+            <Box display="flex" justifyContent="flex-end">
+              <Button
+                variant="contained"
+                sx={{ minWidth: 160, fontWeight: 600, fontSize: "1rem" }}
+                onClick={handleSubmit}
+                disabled={loading}
+                type="submit"
+              >
+                {loading ? "Creating..." : "Add Employee"}
+              </Button>
             </Box>
           </Box>
-
-          <Button
-            variant="contained"
-            sx={{ width: "fit-content", mt: 2 }}
-            onClick={handleSubmit}
-            disabled={loading}
-          >
-            {loading ? "Creating..." : "Add Employee"}
-          </Button>
-        </Box>
+        </form>
       </Paper>
     </>
   );

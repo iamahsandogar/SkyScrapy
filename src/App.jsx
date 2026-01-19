@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useState, lazy, Suspense } from "react";
 import { Routes, Route, Navigate } from "react-router-dom";
 import Layout from "./components/Layout.jsx";
 
@@ -10,12 +10,17 @@ import AllLeads from "./pages/AllLeads.jsx";
 import EmployeeAllLeads from "./pages/EmployeeAllLeads.jsx";
 import CreateLead from "./components/Leads/CreateLead.jsx";
 import CreateEmployee from "./components/Employees/CreateEmployee.jsx";
-import ManageEmployees from "./components/Employees/ManageEmployees.jsx";
 import KanbanBoard from "./components/Kanban/KanbanBoard.jsx";
 import AllProjects from "./components/Projects/AllProjects.jsx";
 import AuthGuard from "./components/Auth/AuthGuard.jsx";
 import Login from "./components/Login/Login.jsx";
 import ManageLeadOptions from "./components/Leads/ManageLeadOptions.jsx";
+import DotLoader from "./components/global/DotLoader.jsx";
+import { colors } from "./design-system/tokens/index.js";
+import { Box, Typography } from "@mui/material";
+
+// Lazy load ManageEmployees
+const ManageEmployees = lazy(() => import("./components/Employees/ManageEmployees.jsx"));
 
 // Component to conditionally render AllLeads based on user role
 function RoleBasedAllLeads({ adminComponent, employeeComponent }) {
@@ -77,7 +82,27 @@ export default function App() {
           <Route path="/create-employee" element={<CreateEmployee />} />
           <Route
             path="/management/manage-employees"
-            element={<ManageEmployees />}
+            element={
+              <Suspense
+                fallback={
+                  <Box
+                    display="flex"
+                    flexDirection="column"
+                    alignItems="center"
+                    justifyContent="center"
+                    gap={2}
+                    sx={{ minHeight: "400px" }}
+                  >
+                    <DotLoader size={48} color={colors.blueAccent[500]} />
+                    <Typography color="text.secondary">
+                      Loading employee management...
+                    </Typography>
+                  </Box>
+                }
+              >
+                <ManageEmployees />
+              </Suspense>
+            }
           />
           <Route
             path="/management/manage-lead-options"

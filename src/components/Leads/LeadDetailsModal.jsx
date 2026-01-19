@@ -43,6 +43,7 @@ function LeadDetailsModal({
         hour12: true, // AM/PM format
       });
     } catch (error) {
+      console.log(error);
       return "-";
     }
   };
@@ -84,9 +85,9 @@ function LeadDetailsModal({
             {getField("linkedIn", "contact_linkedin_url")}
           </Typography>
           <Typography>
-            <strong>Status:</strong>{" "}
-            {getStatusName ? getStatusName(lead.status) : lead.status || "-"}
+            <strong>Status:</strong> {lead.status?.name || "-"}
           </Typography>
+
           <Typography>
             <strong>Assigned To:</strong>{" "}
             {getEmployeeName

@@ -1,5 +1,4 @@
 import {
-  Backdrop,
   Box,
   Typography,
   Table,
@@ -51,7 +50,6 @@ import {
 } from "../utils/prefetchData";
 import { useNotification } from "../contexts/NotificationContext.jsx";
 import MoreVertIcon from "@mui/icons-material/MoreVert";
-import DotLoader from "../components/global/DotLoader";
 import EditLeadModal from "../components/Leads/EditLeadModal";
 // const getChipStyles = (status) => {
 //   switch (status) {
@@ -143,9 +141,14 @@ const resolveLeadId = (lead) => {
 
 export default function AllLeads() {
   const location = useLocation();
-  const [leads, setLeads] = useState([]);
+  // Try to get cached leads immediately for instant display
+  const cachedData = getCachedLeadData();
+  const initialLeads = cachedData?.leads ? cachedData.leads : [];
+  const [leads, setLeads] = useState(initialLeads);
   const [q, setQ] = useState("");
-  const [statusFilter, setStatusFilter] = useState("All");
+  const [statusFilter, setStatusFilter] = useState("ALL");
+  const [assignedFilter, setAssignedFilter] = useState("All");
+  const [followUpFilter, setFollowUpFilter] = useState("All");
   const [anchorEl, setAnchorEl] = useState(null);
   const [visibleColumns, setVisibleColumns] = useState(() => {
     const stored = JSON.parse(localStorage.getItem("leadColumns")) || DEFAULT_COLUMNS;
@@ -159,7 +162,8 @@ export default function AllLeads() {
   const [employees, setEmployees] = useState([]); // Store employees for mapping
   const [actionLoading, setActionLoading] = useState(false);
   const [actionMessage, setActionMessage] = useState("");
-  const [isPageLoading, setIsPageLoading] = useState(true);
+  // Only show loading spinner if there is no cache
+  const [isPageLoading, setIsPageLoading] = useState(initialLeads.length === 0);
   // Lead actions menu
   const [actionAnchorEl, setActionAnchorEl] = useState(null);
   const [menuLead, setMenuLead] = useState(null);
@@ -170,6 +174,8 @@ export default function AllLeads() {
   const [statusUpdatingLeadId, setStatusUpdatingLeadId] = useState(null);
   const [followUpUpdatingLeadId, setFollowUpUpdatingLeadId] = useState(null);
   const [activeTogglingLeadId, setActiveTogglingLeadId] = useState(null);
+  const [assignedUpdatingLeadId, setAssignedUpdatingLeadId] = useState(null);
+  const [followUpAtUpdatingLeadId, setFollowUpAtUpdatingLeadId] = useState(null);
 
   const actionOpen = Boolean(actionAnchorEl);
   const rowRefs = useRef({});
@@ -378,7 +384,8 @@ export default function AllLeads() {
         );
 
         setLeads(filteredLeads);
-        setIsPageLoading(false);
+        // Only hide loading if there was no cache
+        if (initialLeads.length === 0) setIsPageLoading(false);
         // Continue to fetch fresh data from API (don't return early)
       }
 
@@ -642,6 +649,160 @@ export default function AllLeads() {
     }
   };
 
+  // Handler to update assigned_to
+  const handleAssignedChange = async (lead, newAssignedId) => {
+    const leadId = lead.id;
+    setAssignedUpdatingLeadId(leadId);
+    try {
+      // Get the current lead data to preserve all fields
+      const currentLead = leads.find((l) => l.id === leadId) || lead;
+
+      // Prepare payload with all required lead fields, updating only assigned_to
+      const payload = {
+        title: currentLead.title || "",
+        status: currentLead.status || null,
+        source: currentLead.source || "",
+        description: currentLead.description || "",
+        company_name: currentLead.company_name || "",
+        contact_first_name: currentLead.contact_first_name || "",
+        contact_last_name: currentLead.contact_last_name || "",
+        contact_email: currentLead.contact_email || "",
+        contact_phone: currentLead.contact_phone || "",
+        contact_position_title: currentLead.contact_position_title || "",
+        contact_linkedin_url: currentLead.contact_linkedin_url || "",
+        assigned_to:
+          newAssignedId === "" || newAssignedId === null || newAssignedId === undefined
+            ? null
+            : newAssignedId,
+        ...((currentLead.follow_up_at || currentLead.followUpAt) &&
+        (currentLead.follow_up_at || currentLead.followUpAt) !== null &&
+        (currentLead.follow_up_at || currentLead.followUpAt) !== ""
+          ? { follow_up_at: currentLead.follow_up_at || currentLead.followUpAt }
+          : {}),
+        ...((currentLead.follow_up_status || currentLead.followupStatus) &&
+        (currentLead.follow_up_status || currentLead.followupStatus) !== null &&
+        (currentLead.follow_up_status || currentLead.followupStatus) !== ""
+          ? { follow_up_status: currentLead.follow_up_status || currentLead.followupStatus }
+          : {}),
+      };
+
+      const response = await apiRequest(`/api/leads/${leadId}/`, {
+        method: "PATCH",
+        body: JSON.stringify(payload),
+      });
+
+      // Use the API response if available (it should contain the full lead object with proper assigned_to structure)
+      // Otherwise, construct from current lead
+      let updatedLead = null;
+      if (response && typeof response === 'object') {
+        // Handle different response formats
+        if (response.lead) {
+          updatedLead = response.lead;
+        } else if (response.data) {
+          updatedLead = response.data.lead || response.data;
+        } else {
+          updatedLead = { ...currentLead, ...response };
+        }
+      } else {
+        // Fallback: construct from current lead (assigned_to will be just an ID)
+        updatedLead = {
+        ...currentLead,
+        assigned_to: payload.assigned_to,
+        assignedTo: payload.assigned_to,
+      };
+      }
+
+      // Ensure we have all fields from currentLead merged in
+      updatedLead = { ...currentLead, ...updatedLead };
+
+      setLeads((prevLeads) =>
+        prevLeads.map((l) => (l.id === leadId ? { ...l, ...updatedLead } : l))
+      );
+
+      // Dispatch event with the updated lead (this will notify EmployeeAllLeads)
+      // IMPORTANT: Always dispatch the event, even if cache update fails
+      console.log("📤 Admin assigned lead, dispatching event with lead:", updatedLead);
+      addLeadToCache(updatedLead);
+      
+      // Also dispatch event directly to ensure it's received (backup)
+      window.dispatchEvent(
+        new CustomEvent("leadCacheUpdated", {
+          detail: { lead: updatedLead, action: "updated" },
+        })
+      );
+      console.log("📤 Directly dispatched leadCacheUpdated event for lead:", updatedLead.id || updatedLead.pk || updatedLead.uuid);
+      notifySuccess("Lead assignment updated");
+    } catch (error) {
+      console.error("Failed to update assignment:", error);
+      notifyError("Failed to update assignment");
+    } finally {
+      setAssignedUpdatingLeadId(null);
+    }
+  };
+
+  // Handler to update follow_up_at
+  const handleFollowUpAtChange = async (lead, newDateTime) => {
+    const leadId = lead.id;
+    setFollowUpAtUpdatingLeadId(leadId);
+    try {
+      // Get the current lead data to preserve all fields
+      const currentLead = leads.find((l) => l.id === leadId) || lead;
+
+      const followUpValue =
+        newDateTime === "" || newDateTime === null || newDateTime === undefined
+          ? null
+          : new Date(newDateTime).toISOString();
+
+      // Prepare payload with all required lead fields, updating only follow_up_at
+      const payload = {
+        title: currentLead.title || "",
+        status: currentLead.status || null,
+        source: currentLead.source || "",
+        description: currentLead.description || "",
+        company_name: currentLead.company_name || "",
+        contact_first_name: currentLead.contact_first_name || "",
+        contact_last_name: currentLead.contact_last_name || "",
+        contact_email: currentLead.contact_email || "",
+        contact_phone: currentLead.contact_phone || "",
+        contact_position_title: currentLead.contact_position_title || "",
+        contact_linkedin_url: currentLead.contact_linkedin_url || "",
+        ...((currentLead.follow_up_status || currentLead.followupStatus) &&
+        (currentLead.follow_up_status || currentLead.followupStatus) !== null &&
+        (currentLead.follow_up_status || currentLead.followupStatus) !== ""
+          ? { follow_up_status: currentLead.follow_up_status || currentLead.followupStatus }
+          : {}),
+      };
+
+      // Only include follow_up_at if we have a value
+      if (followUpValue) {
+        payload.follow_up_at = followUpValue;
+      }
+
+      await apiRequest(`/api/leads/${leadId}/`, {
+        method: "PATCH",
+        body: JSON.stringify(payload),
+      });
+
+      const updatedLead = {
+        ...currentLead,
+        follow_up_at: followUpValue,
+        followUpAt: followUpValue,
+      };
+
+      setLeads((prevLeads) =>
+        prevLeads.map((l) => (l.id === leadId ? { ...l, ...updatedLead } : l))
+      );
+
+      addLeadToCache(updatedLead);
+      notifySuccess("Follow-up date updated");
+    } catch (error) {
+      console.error("Failed to update follow-up at:", error);
+      notifyError("Failed to update follow-up date");
+    } finally {
+      setFollowUpAtUpdatingLeadId(null);
+    }
+  };
+
   // Function to get status name from ID
   const getStatusName = (statusId) => {
     // Handle null, undefined, or empty values
@@ -762,6 +923,18 @@ export default function AllLeads() {
         resolveLeadId(lead) === updatedId ? { ...lead, ...updatedLead } : lead
       )
     );
+    
+    // Ensure cache is updated and event is dispatched (backup in case EditLeadModal didn't dispatch)
+    console.log("📤 handleLeadUpdated called, updating cache and dispatching event:", updatedLead);
+    addLeadToCache(updatedLead);
+    
+    // Also dispatch event directly to ensure it's received
+    window.dispatchEvent(
+      new CustomEvent("leadCacheUpdated", {
+        detail: { lead: updatedLead, action: "updated" },
+      })
+    );
+    console.log("📤 Directly dispatched leadCacheUpdated event from handleLeadUpdated");
   };
 
   const handleOpenCreateLead = () => {
@@ -963,6 +1136,88 @@ export default function AllLeads() {
     return "None";
   };
 
+  // Helper to extract employee ID from various structures
+  const getEmployeeIdValue = (assignedTo) => {
+    if (assignedTo === null || assignedTo === undefined || assignedTo === "") return "";
+    if (typeof assignedTo === "object") {
+      // Check user_details.id first (this is typically the user ID we need)
+      if (assignedTo.user_details && assignedTo.user_details.id) {
+        return assignedTo.user_details.id;
+      }
+      // Check user.id for nested user object
+      if (assignedTo.user && assignedTo.user.id) {
+        return assignedTo.user.id;
+      }
+      return (
+        assignedTo.id ||
+        assignedTo.pk ||
+        assignedTo.uuid ||
+        assignedTo.user_id ||
+        assignedTo.userId ||
+        assignedTo.profile_id ||
+        assignedTo.profileId ||
+        ""
+      );
+    }
+    return assignedTo;
+  };
+
+  // Helper to format datetime for datetime-local input
+  const formatDateTimeLocal = (value) => {
+    if (!value) return "";
+    const date = new Date(value);
+    if (Number.isNaN(date.getTime())) return "";
+    const tzOffset = date.getTimezoneOffset() * 60000;
+    const localISOTime = new Date(date.getTime() - tzOffset)
+      .toISOString()
+      .slice(0, 16);
+    return localISOTime;
+  };
+
+  // Build select options for assigned employee dropdown
+  const assignedSelectOptions = useMemo(() => {
+    const opts = [{ value: "", label: "None" }];
+    const seenIds = new Set();
+
+    employees.forEach((emp, idx) => {
+      // Extract ID - could be nested in user_details
+      const id = getEmployeeIdValue(emp);
+      if (!id || seenIds.has(String(id))) return;
+      seenIds.add(String(id));
+
+      // Extract name - check user_details first, then direct properties
+      const userDetails = emp.user_details || emp.userDetails || emp.user || {};
+      const firstName =
+        userDetails.first_name ||
+        userDetails.firstName ||
+        emp.first_name ||
+        emp.firstName ||
+        emp.name ||
+        "";
+      const lastName =
+        userDetails.last_name ||
+        userDetails.lastName ||
+        emp.last_name ||
+        emp.lastName ||
+        "";
+      const fullName = `${firstName} ${lastName}`.trim();
+      const label = fullName || `Employee ${idx + 1}`;
+
+      opts.push({ value: id, label });
+    });
+
+    // Ensure currently assigned IDs that may not be in employees array are present
+    leads.forEach((lead) => {
+      const id = getEmployeeIdValue(lead.assigned_to || lead.assignedTo);
+      if (id && !seenIds.has(String(id))) {
+        seenIds.add(String(id));
+        opts.push({ value: id, label: getEmployeeName(lead.assigned_to || lead.assignedTo) });
+      }
+    });
+
+    return opts;
+  }, [employees, leads]);
+
   const handleDeleteLead = async (id) => {
     try {
       await apiRequest(`/api/leads/${id}`, { method: "DELETE" });
@@ -1105,82 +1360,76 @@ export default function AllLeads() {
     setVisibleColumns([]);
     localStorage.setItem("leadColumns", JSON.stringify([]));
   };
+
+  const normalizeFollowUpDate = (value) => {
+    if (!value) return "None";
+    const parsed = new Date(value);
+    if (Number.isNaN(parsed.getTime())) return "None";
+    return parsed.toISOString().split("T")[0];
+  };
+
+  const assignedFilterOptions = useMemo(() => {
+    const options = new Map();
+    options.set("All", { value: "All", label: "All" });
+    options.set("None", { value: "None", label: "None" });
+
+    leads.forEach((lead) => {
+      const name = getEmployeeName(lead.assigned_to || lead.assignedTo);
+      if (name && name !== "None") {
+        options.set(name, { value: name, label: name });
+      }
+    });
+
+    return Array.from(options.values());
+  }, [leads, employees]);
+
+  const followUpFilterOptions = useMemo(() => {
+    const options = new Map();
+    options.set("All", { value: "All", label: "All" });
+    options.set("None", { value: "None", label: "None" });
+
+    leads.forEach((lead) => {
+      const rawFollowUp = lead.follow_up_at || lead.followUpAt;
+      const normalized = normalizeFollowUpDate(rawFollowUp);
+      if (normalized !== "None") {
+        const label = new Date(rawFollowUp).toLocaleDateString("en-US", {
+          year: "numeric",
+          month: "short",
+          day: "numeric",
+        });
+        options.set(normalized, { value: normalized, label });
+      }
+    });
+
+    return Array.from(options.values());
+  }, [leads]);
   // ===== FILTER LOGIC =====
-  const filteredLeads = leads.filter((l) => {
-    const qLower = q.trim().toLowerCase();
-
-    if (statusFilter !== "All") {
-      const leadStatusName = getStatusName(l.status);
-      if (
-        statusFilter === "None" &&
-        leadStatusName &&
-        leadStatusName !== "None"
-      )
+  const filteredLeads = useMemo(() => {
+    return leads.filter((lead) => {
+      // STATUS FILTER
+      if (statusFilter !== "ALL") {
+        const leadStatusId =
+          typeof lead.status === "object"
+            ? lead.status?.id
+            : lead.status;
+  
+        if (String(leadStatusId) !== String(statusFilter)) {
+          return false;
+        }
+      }
+  
+      // SEARCH FILTER (if you already have it)
+      if (q && !lead.title?.toLowerCase().includes(q.toLowerCase())) {
         return false;
-      if (statusFilter !== "None" && leadStatusName !== statusFilter)
-        return false;
-    }
-
-    if (!qLower) return true;
-
-    // Get assigned employee name for searching
-    const assignedEmployeeName = getEmployeeName(l.assigned_to || l.assignedTo);
-
-    // All searchable fields
-    const fieldsToSearch = [
-      l.title || "",
-      l.firstName || l.contact_first_name || "",
-      l.lastName || l.contact_last_name || "",
-      l.email || l.contact_email || "",
-      l.phone || l.contact_phone || "",
-      l.company || l.company_name || "",
-      l.positionTitle || l.contact_position_title || "",
-      l.source || "",
-      l.description || "",
-      l.followUpAt || l.follow_up_at
-        ? new Date(l.followUpAt || l.follow_up_at).toLocaleDateString()
-        : "",
-      l.followupStatus || l.follow_up_status || "",
-      assignedEmployeeName, // Include employee name in search
-      l.linkedIn || l.contact_linkedin_url || "",
-    ];
-
-    return fieldsToSearch.some((field) =>
-      field.toString().toLowerCase().includes(qLower)
-    );
-  });
+      }
+  
+      return true;
+    });
+  }, [leads, statusFilter, q]);
+  
 
   return (
     <Box>
-      <Backdrop
-        open={isPageLoading}
-        sx={{
-          color: "#fff",
-          zIndex: (theme) => theme.zIndex.drawer,
-          flexDirection: "column",
-        }}
-      >
-        <DotLoader size={48} color="#0A66C2" />
-        <Typography mt={1} variant="body2">
-          Loading leads...
-        </Typography>
-      </Backdrop>
-      <Backdrop
-        open={actionLoading}
-        sx={{
-          zIndex: (theme) => theme.zIndex.drawer + 1,
-          color: "#fff",
-          flexDirection: "column",
-          gap: 1,
-        }}
-      >
-        <DotLoader size={48} color="#0A66C2" />
-        {actionMessage && (
-          <Typography variant="body2" sx={{ textAlign: "center" }}>
-            {actionMessage}
-          </Typography>
-        )}
-      </Backdrop>
       <Topbar>
         <Typography variant="h5" fontWeight="bold">
           All Leads
@@ -1320,34 +1569,49 @@ export default function AllLeads() {
           onChange={(e) => setQ(e.target.value)}
           size="small"
         />
-        <FormControl size="small">
-          <InputLabel>Status</InputLabel>
-          <Select
-            label="Status"
-            value={statusFilter}
-            onChange={(e) => setStatusFilter(e.target.value)}
-          >
-            <MenuItem value="All">All</MenuItem>
-            <MenuItem value="None">None</MenuItem>
-            {statuses.map((status, index) => {
-              // Handle different status structures
-              const statusName =
-                typeof status === "string"
-                  ? status
-                  : status.name ||
-                    status.label ||
-                    status.status_name ||
-                    String(status.id || status.pk || index);
+        <FormControl size="small" sx={{ minWidth: 180 }}>
+  <InputLabel>Status</InputLabel>
+  <Select
+    value={statusFilter}
+    label="Status"
+    onChange={(e) => setStatusFilter(e.target.value)}
+  >
+    <MenuItem value="ALL">All</MenuItem>
 
-              return (
-                <MenuItem
-                  key={status.id || status.pk || statusName || index}
-                  value={statusName}
-                >
-                  {statusName}
-                </MenuItem>
-              );
-            })}
+    {statuses.map((status) => (
+      <MenuItem key={status.id} value={status.id}>
+        {status.name}
+      </MenuItem>
+    ))}
+  </Select>
+</FormControl>
+
+        <FormControl size="small" sx={{ minWidth: 180 }}>
+          <InputLabel>Assigned To</InputLabel>
+          <Select
+            label="Assigned To"
+            value={assignedFilter}
+            onChange={(e) => setAssignedFilter(e.target.value)}
+          >
+            {assignedFilterOptions.map((option) => (
+              <MenuItem key={option.value} value={option.value}>
+                {option.label}
+              </MenuItem>
+            ))}
+          </Select>
+        </FormControl>
+        <FormControl size="small" sx={{ minWidth: 180 }}>
+          <InputLabel>Follow-up At</InputLabel>
+          <Select
+            label="Follow-up At"
+            value={followUpFilter}
+            onChange={(e) => setFollowUpFilter(e.target.value)}
+          >
+            {followUpFilterOptions.map((option) => (
+              <MenuItem key={option.value} value={option.value}>
+                {option.label}
+              </MenuItem>
+            ))}
           </Select>
         </FormControl>
       </Box>
@@ -1606,13 +1870,73 @@ export default function AllLeads() {
 
                     {visibleColumns.includes("assignedTo") && (
                       <TableCell>
-                        {getLeadFieldValue(lead, "assignedTo") || "None"}
+                        <Box sx={{ position: "relative", display: "inline-flex", alignItems: "center" }}>
+                          <Select
+                            value={(() => {
+                              const id = getEmployeeIdValue(lead.assigned_to || lead.assignedTo);
+                              return id === null || id === undefined ? "" : String(id);
+                            })()}
+                            onChange={(e) => handleAssignedChange(lead, e.target.value)}
+                            size="small"
+                            disabled={assignedUpdatingLeadId === lead.id}
+                            sx={{
+                              minWidth: 160,
+                              height: 32,
+                              "& .MuiSelect-select": {
+                                padding: "4px 8px",
+                                fontSize: "0.875rem",
+                              },
+                            }}
+                            MenuProps={{
+                              PaperProps: {
+                                style: {
+                                  maxHeight: 300,
+                                },
+                              },
+                            }}
+                          >
+                            {assignedSelectOptions.map((option) => (
+                              <MenuItem key={option.value || "none"} value={option.value}>
+                                {option.label}
+                              </MenuItem>
+                            ))}
+                          </Select>
+                          {assignedUpdatingLeadId === lead.id && (
+                            <CircularProgress size={16} sx={{ ml: 1 }} />
+                          )}
+                        </Box>
                       </TableCell>
                     )}
 
                     {visibleColumns.includes("followUpAt") && (
                       <TableCell>
-                        {getLeadFieldValue(lead, "followUpAt") || "-"}
+                        <Box sx={{ position: "relative", display: "inline-flex", alignItems: "center" }}>
+                          <TextField
+                            type="datetime-local"
+                            value={formatDateTimeLocal(lead.follow_up_at || lead.followUpAt)}
+                            onChange={(e) => handleFollowUpAtChange(lead, e.target.value)}
+                            size="small"
+                            InputLabelProps={{ shrink: true }}
+                            inputProps={{
+                              style: { cursor: "pointer" },
+                            }}
+                            sx={{
+                              minWidth: 200,
+                              "& input": {
+                                cursor: "pointer",
+                              },
+                              "& input::-webkit-calendar-picker-indicator": {
+                                cursor: "pointer",
+                                padding: "4px",
+                                marginRight: "-4px",
+                              },
+                            }}
+                            disabled={followUpAtUpdatingLeadId === lead.id}
+                          />
+                          {followUpAtUpdatingLeadId === lead.id && (
+                            <CircularProgress size={16} sx={{ ml: 1 }} />
+                          )}
+                        </Box>
                       </TableCell>
                     )}
 

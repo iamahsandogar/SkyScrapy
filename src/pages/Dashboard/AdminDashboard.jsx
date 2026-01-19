@@ -1,16 +1,16 @@
+
 import { useCallback, useEffect, useState } from "react";
 import { Box, Typography, Button } from "@mui/material";
 import AddIcon from "@mui/icons-material/Add";
 import { useNavigate } from "react-router-dom";
 import Topbar from "../../components/global/Topbar";
-import ActiveLeads from "../../components/Dashboard/ActiveLeads";
 import UnreadNotesSummary from "../../components/Dashboard/UnreadNotesSummary";
 import ChartBox from "../../components/Dashboard/ChartBox";
 import Cards from "../../components/Dashboard/Cards";
 import { prefetchLeadData } from "../../utils/prefetchData";
-import UpcomingReminders from "../../components/Dashboard/UpcomingReminders";
+import OverdueLeads from "../../components/Dashboard/OverdueLeads";
+import DueTodayLeads from "../../components/Dashboard/DueTodayLeads";
 import MonthlyRemindersCalendar from "../../components/Dashboard/MonthlyRemindersCalendar";
-import DotLoader from "../../components/global/DotLoader";
 import { getColors } from "../../design-system/tokens";
 import { useTheme } from "../../contexts/ThemeContext";
 import apiRequest from "../../components/services/api";
@@ -21,37 +21,16 @@ export default function AdminDashboard() {
   const mode = theme?.mode ?? theme?.palette?.mode ?? "light";
   const colors = getColors(mode);
 
-  const [loading, setLoading] = useState(true);
   const [dashboardData, setDashboardData] = useState(null);
-
-  const parseEmployeesResponse = (response) => {
-    if (!response) return [];
-    if (Array.isArray(response)) return response;
-    if (Array.isArray(response.employees)) return response.employees;
-    if (Array.isArray(response.data)) return response.data;
-    if (Array.isArray(response.data?.employees)) return response.data.employees;
-    return [];
-  };
 
   // Fetch all dashboard data from single API endpoint
   useEffect(() => {
     const fetchDashboardData = async () => {
       try {
-        setLoading(true);
-        
-        // Fetch dashboard data and employees in parallel
-        const employeesPromise = apiRequest("/ui/employees/").catch((err) => {
-          console.warn("Failed to fetch employees:", err);
-          return null;
-        });
-
-        const [dashboardResponse, employeesResponse] = await Promise.all([
-          apiRequest("/api/common/dashboard/"),
-          employeesPromise,
-        ]);
+        // Only call dashboard API
+        const dashboardResponse = await apiRequest("/api/common/dashboard/");
         
         console.log("Dashboard API Response:", dashboardResponse);
-        console.log("Employees API Response:", employeesResponse);
         
         if (dashboardResponse) {
           // Transform API response to expected format
@@ -72,11 +51,13 @@ export default function AdminDashboard() {
             count: s.count,
           }));
           
-          // Calculate total leads from status counts
-          const totalLeadsCount = (dashboardResponse.lead_statuses || []).reduce((sum, s) => sum + s.count, 0);
+          // Use total_leads_count from dashboard API response, or calculate from status counts as fallback
+          const totalLeadsCount = dashboardResponse.total_leads_count !== undefined 
+            ? dashboardResponse.total_leads_count 
+            : (dashboardResponse.lead_statuses || []).reduce((sum, s) => sum + s.count, 0);
           
-          // Parse employees response
-          const employeesList = parseEmployeesResponse(employeesResponse);
+          // Get employees from dashboard API if available, otherwise empty array
+          const employeesList = dashboardResponse.employees || [];
           
           const dashboardPayload = {
             leads: allLeads,
@@ -97,18 +78,11 @@ export default function AdminDashboard() {
       } catch (err) {
         console.error("Failed to fetch dashboard data:", err);
         setDashboardData({ leads: [], employees: [], statuses: [], lead_statuses: [], unread_notes: { notes: [], unread_count: 0 }, reminders: {}, always_active: { count: 0 }, total_leads_count: 0 });
-      } finally {
-        setLoading(false);
       }
     };
 
     fetchDashboardData();
   }, []);
-
-  const overlayBg =
-    mode === "dark" ? "rgba(5, 9, 20, 0.85)" : "rgba(255, 255, 255, 0.85)";
-  const overlayTextColor =
-    mode === "dark" ? colors.grey[100] : colors.grey[900];
 
   const warmUpLeadForm = useCallback(() => {
     prefetchLeadData({ includeLeads: false });
@@ -121,27 +95,6 @@ export default function AdminDashboard() {
 
   return (
     <Box>
-      {loading && (
-        <Box
-          sx={{
-            position: "fixed",
-            inset: 0,
-            zIndex: 1400,
-            bgcolor: overlayBg,
-            display: "flex",
-            alignItems: "center",
-            justifyContent: "center",
-            flexDirection: "column",
-            gap: 1,
-          }}
-        >
-          <DotLoader size={56} color={colors.blueAccent[500]} />
-          <Typography sx={{ color: overlayTextColor }}>
-            Loading dashboard…
-          </Typography>
-        </Box>
-      )}
-
       <Topbar>
         <Typography variant="h5" fontWeight="bold">
           Dashboard
@@ -189,8 +142,8 @@ export default function AdminDashboard() {
           marginTop: 2,
         }}
       >
-        <UpcomingReminders data={dashboardData} />
-        <ActiveLeads data={dashboardData} />
+        <OverdueLeads data={dashboardData} />
+        <DueTodayLeads data={dashboardData} />
         <UnreadNotesSummary data={dashboardData} />
       </Box>
     </Box>

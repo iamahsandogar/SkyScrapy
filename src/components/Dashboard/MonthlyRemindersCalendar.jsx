@@ -407,7 +407,7 @@ export default function MonthlyRemindersCalendar({ data }) {
         maxWidth: 500,
         borderRadius: 3,
         height: "390px",
-        overflowY: "auto",
+        overflowY: "none",
         backgroundColor: mode === "dark" ? colors.primary[600] : colors.bg[100],
         p: 3,
       }}

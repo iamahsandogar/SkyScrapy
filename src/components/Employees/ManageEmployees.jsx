@@ -11,6 +11,11 @@ import {
   Button,
   Chip,
   TableContainer,
+  Dialog,
+  DialogTitle,
+  DialogContent,
+  DialogContentText,
+  DialogActions,
 } from "@mui/material";
 import { useEffect, useState } from "react";
 import Topbar from "../global/Topbar";
@@ -95,6 +100,13 @@ const getActionButtonStyles = (action) => {
 export default function ManageEmployees() {
   const [employees, setEmployees] = useState([]);
   const [loading, setLoading] = useState(false);
+  const [countingLeads, setCountingLeads] = useState(false);
+  const [confirmDialog, setConfirmDialog] = useState({
+    open: false,
+    action: null, // 'deactivate' | 'delete' | 'activate'
+    employee: null,
+    leadCount: 0,
+  });
   const tableCellStyle = { whiteSpace: "nowrap" };
 
   /* ------------------------------------
@@ -161,6 +173,34 @@ export default function ManageEmployees() {
     }
   };
 
+  const countLeadsForEmployee = async (employee) => {
+    if (!employee) return 0;
+    
+    const employeeId = employee.id || employee.pk || employee.uuid;
+    if (!employeeId) {
+      console.warn("Employee has no identifier to match leads");
+      return 0;
+    }
+
+    const leadsList = await loadLeadsForLogging();
+    const assignedLeads = leadsList.filter((lead) => {
+      const assignedTo =
+        lead.assigned_to ??
+        lead.assignedTo ??
+        lead.assigned_to_id ??
+        lead.assignedToId ??
+        lead.owner ??
+        lead.employee ??
+        lead.assigned_user ??
+        lead.assignedUser;
+      const assignedId = extractLeadAssignedId(assignedTo);
+      if (assignedId === null || assignedId === undefined) return false;
+      return String(assignedId) === String(employeeId);
+    });
+
+    return assignedLeads.length;
+  };
+
   const logLeadsForEmail = async (email) => {
     if (!email) return;
     const employeesList = getEmployeesForLookup();
@@ -223,60 +263,99 @@ export default function ManageEmployees() {
   /* ------------------------------------
      TOGGLE ACTIVE STATUS
   -------------------------------------*/
-  const toggleStatus = async (employee) => {
+  const toggleStatus = (employee) => {
     const pk = employee.id;
-
-    if (!pk) {
-      alert("Cannot toggle status: Employee missing ID");
-      return;
+    if (!pk) return;
+    const isActive = employee.status === "Active" || employee.is_active;
+    
+    // Show dialog immediately
+    if (isActive) {
+      setConfirmDialog({
+        open: true,
+        action: "deactivate",
+        employee,
+        leadCount: 0, // Will be updated asynchronously
+        isLoadingCount: true,
+      });
+      
+      // Count leads in background and update dialog
+      setCountingLeads(true);
+      countLeadsForEmployee(employee)
+        .then((leadCount) => {
+          setConfirmDialog((prev) => ({
+            ...prev,
+            leadCount,
+            isLoadingCount: false,
+          }));
+          setCountingLeads(false);
+        })
+        .catch((error) => {
+          console.error("Failed to count leads:", error);
+          setConfirmDialog((prev) => ({
+            ...prev,
+            isLoadingCount: false,
+          }));
+          setCountingLeads(false);
+          // Keep dialog open with 0 count
+        });
+    } else {
+      setConfirmDialog({
+        open: true,
+        action: "activate",
+        employee,
+        leadCount: 0,
+        isLoadingCount: false,
+      });
     }
+  };
 
-    const action = employee.status === "Active" ? "deactivate" : "activate";
-
-    if (!window.confirm(`Are you sure you want to ${action} this employee?`))
-      return;
-
+  const performToggle = async (employee) => {
+    const pk = employee.id;
+    if (!pk) return;
     try {
       await apiRequest(`/ui/employees/${pk}/toggle-active/`, {
         method: "POST",
       });
-
-      // Refresh the list after successful toggle
+      setConfirmDialog({ open: false, action: null, employee: null, leadCount: 0, isLoadingCount: false });
       fetchEmployees();
     } catch (error) {
-      console.error("Toggle status failed", error);
-      alert(error.message || "Failed to toggle employee status");
+      setConfirmDialog({ open: false, action: null, employee: null, leadCount: 0, isLoadingCount: false });
     }
   };
 
   /* ------------------------------------
      DELETE EMPLOYEE
   -------------------------------------*/
-  const handleDelete = async (employee) => {
+  const handleDelete = (employee) => {
     const pk = employee.id;
-
-    if (!pk) {
-      alert("Cannot delete: Employee missing ID");
-      return;
-    }
-
-    if (!window.confirm("Are you sure you want to delete this employee?"))
-      return;
-
-    try {
-      await apiRequest(`/ui/employees/${pk}/delete/`, {
-        method: "POST",
-        body: JSON.stringify({
-          email: employee.email,
-        }),
+    if (!pk) return;
+    
+    // Show dialog immediately
+    setConfirmDialog({
+      open: true,
+      action: "delete",
+      employee,
+      leadCount: 0, // Will be updated asynchronously
+      isLoadingCount: true,
+    });
+    
+    // Count leads in background and update dialog
+    countLeadsForEmployee(employee)
+      .then((leadCount) => {
+        setConfirmDialog((prev) => ({
+          ...prev,
+          leadCount,
+          isLoadingCount: false,
+        }));
+      })
+      .catch((error) => {
+        console.error("Failed to count leads:", error);
+        setConfirmDialog((prev) => ({
+          ...prev,
+          isLoadingCount: false,
+        }));
+        // Keep dialog open with 0 count
       });
-
-      // Refresh the list after successful deletion
-      fetchEmployees();
-    } catch (error) {
-      console.error("Delete failed", error);
-      alert(error.message || "Failed to delete employee");
-    }
   };
 
   return (
@@ -377,7 +456,7 @@ export default function ManageEmployees() {
                             size="small"
                             variant="contained"
                             onClick={() => toggleStatus(emp)}
-                            disabled={loading}
+                            disabled={loading || countingLeads}
                             sx={{
                               ...getActionButtonStyles(
                                 emp.status === "Active" || emp.is_active
@@ -390,7 +469,9 @@ export default function ManageEmployees() {
                               boxShadow: "none",
                             }}
                           >
-                            {emp.status === "Active" || emp.is_active
+                            {countingLeads && (emp.status === "Active" || emp.is_active)
+                              ? "Checking..."
+                              : emp.status === "Active" || emp.is_active
                               ? "Deactivate"
                               : "Activate"}
                           </Button>
@@ -420,6 +501,149 @@ export default function ManageEmployees() {
           </Box>
         )}
       </Paper>
+
+      {/* Unified Confirmation Dialog */}
+      <Dialog
+        open={confirmDialog.open}
+        onClose={() => setConfirmDialog({ open: false, action: null, employee: null, leadCount: 0, isLoadingCount: false })}
+        aria-labelledby="confirm-dialog-title"
+        maxWidth="xs"
+        fullWidth
+        PaperProps={{ sx: { borderRadius: 3, p: 2, minWidth: 340 } }}
+      >
+        <DialogTitle id="confirm-dialog-title" sx={{ fontWeight: 'bold', color: confirmDialog.action === 'delete' ? colors.redAccent[700] : confirmDialog.action === 'deactivate' ? colors.yellowAccent[700] : colors.greenAccent[700] }}>
+          {confirmDialog.action === "delete"
+            ? "Delete Employee"
+            : confirmDialog.action === "deactivate"
+            ? "Deactivate Employee"
+            : "Activate Employee"}
+        </DialogTitle>
+        <DialogContent>
+          {confirmDialog.employee && (
+            <Box display="flex" flexDirection="column" alignItems="center" gap={2}>
+              <Avatar sx={{ bgcolor: colors.blueAccent[700], color: colors.bg[100], width: 56, height: 56, fontWeight: 'bold' }}>
+                {confirmDialog.employee.firstName?.[0] || confirmDialog.employee.first_name?.[0] || "?"}
+              </Avatar>
+              <Typography variant="h6" fontWeight="bold">
+                {confirmDialog.employee.firstName || confirmDialog.employee.first_name} {confirmDialog.employee.lastName || confirmDialog.employee.last_name}
+              </Typography>
+              <Typography color="text.secondary" fontSize={14}>
+                {confirmDialog.employee.email}
+              </Typography>
+              {confirmDialog.action === 'deactivate' && (
+                <Box 
+                  sx={{ 
+                    mt: 2, 
+                    p: 2, 
+                    borderRadius: 2, 
+                    bgcolor: colors.yellowAccent[50] || 'rgba(255, 193, 7, 0.1)',
+                    border: `1px solid ${colors.yellowAccent[400] || '#ffc107'}`,
+                    textAlign: 'center',
+                    width: '100%'
+                  }}
+                >
+                  <Typography 
+                    variant="body1" 
+                    fontWeight="bold" 
+                    color={colors.primary[200]}
+                    sx={{ mb: 1 }}
+                  >
+                    Are you sure to deactivate this employee as {confirmDialog.isLoadingCount ? '...' : confirmDialog.leadCount} lead{confirmDialog.leadCount !== 1 ? 's' : ''} assign to him?
+                  </Typography>
+                  <Typography 
+                    variant="body2" 
+                    color="text.secondary"
+                    sx={{ fontSize: '0.875rem' }}
+                  >
+                    Employee: {confirmDialog.employee.firstName || confirmDialog.employee.first_name} {confirmDialog.employee.lastName || confirmDialog.employee.last_name}
+                  </Typography>
+                  <Typography 
+                    variant="body2" 
+                    color="text.secondary"
+                    sx={{ fontSize: '0.875rem' }}
+                  >
+                    Email: {confirmDialog.employee.email}
+                  </Typography>
+                </Box>
+              )}
+              {confirmDialog.action === "delete" && (
+                <Box 
+                  sx={{ 
+                    mt: 2, 
+                    p: 2, 
+                    borderRadius: 2, 
+                    bgcolor: colors.redAccent[50] || 'rgba(219, 79, 74, 0.1)',
+                    border: `1px solid ${colors.redAccent[400] || '#db4f4a'}`,
+                    textAlign: 'center',
+                    width: '100%'
+                  }}
+                >
+                  <Typography 
+                    variant="body1" 
+                    fontWeight="bold" 
+                    color={colors.primary[200]}
+                    sx={{ mb: 1 }}
+                  >
+                    This employee has assigned {confirmDialog.isLoadingCount ? '...' : confirmDialog.leadCount} lead{confirmDialog.leadCount !== 1 ? 's' : ''}.
+                  </Typography>
+                  <Typography 
+                    variant="body2" 
+                    color="text.secondary"
+                    sx={{ fontSize: '0.875rem' }}
+                  >
+                    Employee: {confirmDialog.employee.firstName || confirmDialog.employee.first_name} {confirmDialog.employee.lastName || confirmDialog.employee.last_name}
+                  </Typography>
+                  <Typography 
+                    variant="body2" 
+                    color="text.secondary"
+                    sx={{ fontSize: '0.875rem' }}
+                  >
+                    Email: {confirmDialog.employee.email}
+                  </Typography>
+                  <Typography color={colors.redAccent[700]} fontWeight="bold" textAlign="center" sx={{ mt: 2 }}>
+                    Are you sure you want to delete this employee?
+                  </Typography>
+                </Box>
+              )}
+              {confirmDialog.action === "activate" && (
+                <Typography color={colors.greenAccent[700]} fontWeight="bold" textAlign="center" sx={{ mt: 2 }}>
+                  Do you want to activate this employee?
+                </Typography>
+              )}
+            </Box>
+          )}
+        </DialogContent>
+        <DialogActions sx={{ justifyContent: 'center', pb: 2 }}>
+          <Button onClick={() => setConfirmDialog({ open: false, action: null, employee: null, leadCount: 0, isLoadingCount: false })} color="primary" variant="outlined">
+            Cancel
+          </Button>
+          <Button
+            onClick={async () => {
+              if (confirmDialog.action === 'deactivate' || confirmDialog.action === 'activate') {
+                await performToggle(confirmDialog.employee);
+              } else if (confirmDialog.action === 'delete') {
+                const pk = confirmDialog.employee.id;
+                if (!pk) return;
+                await apiRequest(`/ui/employees/${pk}/delete/`, {
+                  method: "POST",
+                  body: JSON.stringify({ email: confirmDialog.employee.email }),
+                });
+                setConfirmDialog({ open: false, action: null, employee: null, leadCount: 0, isLoadingCount: false });
+                fetchEmployees();
+              }
+            }}
+            color={confirmDialog.action === "delete" ? "error" : confirmDialog.action === "deactivate" ? "warning" : "success"}
+            variant="contained"
+            sx={{ minWidth: 100 }}
+          >
+            {confirmDialog.action === "delete"
+              ? "Delete"
+              : confirmDialog.action === "deactivate"
+              ? "Deactivate"
+              : "Activate"}
+          </Button>
+        </DialogActions>
+      </Dialog>
     </>
   );
 }

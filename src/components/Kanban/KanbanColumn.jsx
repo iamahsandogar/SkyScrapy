@@ -6,6 +6,8 @@ import {
 import { useDroppable } from "@dnd-kit/core";
 import KanbanCard from "./KanbanCard";
 import KanbanCardSkeleton from "./KanbanCardSkeleton";
+import { useTheme } from "../../contexts/ThemeContext";
+import { tokens } from "../../design-system/tokens/colors.js";
 
 export default function KanbanColumn({
   title,
@@ -17,6 +19,10 @@ export default function KanbanColumn({
   loading = false,
   loadingCardId = null,
 }) {
+  const { mode } = useTheme();
+  const themeColors = tokens(mode);
+  const isDark = mode === "dark";
+
   const isDoneColumn = title === "Done";
   const { setNodeRef, isOver } = useDroppable({
     id: title,
@@ -25,6 +31,40 @@ export default function KanbanColumn({
     },
   });
   const highlightActive = isDoneColumn && isOver;
+
+  // Define heading color based on column title and theme
+  const getHeadingColor = () => {
+    if (isDark) {
+      switch (title) {
+        case "Overdue":
+          return themeColors.redAccent[400] || "#e2726e";
+        case "Due Today":
+          return themeColors.yellowAccent[400] || "#ffe066";
+        case "Upcoming":
+          return themeColors.blueAccent[400] || "#868dfb";
+        case "Done":
+          return themeColors.greenAccent[400] || "#70d8bd";
+        default:
+          return themeColors.grey[100] || "#e0e0e0";
+      }
+    } else {
+      // Light mode
+      switch (title) {
+        case "Overdue":
+          return themeColors.redAccent[600] || "#af3f3b";
+        case "Due Today":
+          return themeColors.yellowAccent[600] || "#e6bf00";
+        case "Upcoming":
+          return themeColors.blueAccent[600] || "#535ac8";
+        case "Done":
+          return themeColors.greenAccent[600] || "#3da58a";
+        default:
+          return themeColors.grey[900] || "#141414";
+      }
+    }
+  };
+
+  const headingColor = getHeadingColor();
 
   return (
     <Box
@@ -44,7 +84,19 @@ export default function KanbanColumn({
         transform: highlightActive ? "scale(1.02)" : "scale(1)",
       }}
     >
-      <Typography variant="h6" mb={2} fontWeight={600} sx={{position: 'sticky', top: 0, bgcolor: '#f5f6f8', zIndex: 10, pt: 1}}>
+      <Typography 
+        variant="h6" 
+        mb={2} 
+        fontWeight={600} 
+        sx={{
+          position: 'sticky', 
+          top: 0, 
+          bgcolor: '#f5f6f8', 
+          zIndex: 10, 
+          pt: 1,
+          color: headingColor
+        }}
+      >
         {title} ({leads.length})
       </Typography>
 
