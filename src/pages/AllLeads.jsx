@@ -51,6 +51,7 @@ import {
 import { useNotification } from "../contexts/NotificationContext.jsx";
 import MoreVertIcon from "@mui/icons-material/MoreVert";
 import EditLeadModal from "../components/Leads/EditLeadModal";
+import FollowUpCell from "../components/Leads/FollowUpCell";
 // const getChipStyles = (status) => {
 //   switch (status) {
 //     case "Completed":
@@ -506,7 +507,34 @@ export default function AllLeads() {
         console.log("Filtered leads count:", filteredLeads.length);
         console.log("Original leads count:", leadsList.length);
 
-        setLeads(filteredLeads);
+        // Merge with cached data to preserve reminder fields if missing from API
+        const cachedData = getCachedLeadData();
+        let finalLeads = filteredLeads;
+        
+        if (cachedData?.leads && cachedData.leads.length > 0) {
+            finalLeads = filteredLeads.map(apiLead => {
+                const cachedLead = cachedData.leads.find(c => 
+                    (c.id && apiLead.id && String(c.id) === String(apiLead.id)) ||
+                    (c.pk && apiLead.pk && String(c.pk) === String(apiLead.pk)) ||
+                    (c.uuid && apiLead.uuid && String(c.uuid) === String(apiLead.uuid))
+                );
+                
+                if (cachedLead) {
+                    // Preserve reminder fields if API doesn't have them
+                    return {
+                        ...apiLead,
+                        send_reminder_email: apiLead.send_reminder_email !== undefined ? apiLead.send_reminder_email : cachedLead.send_reminder_email,
+                        reminder_time_offset: apiLead.reminder_time_offset !== undefined ? apiLead.reminder_time_offset : cachedLead.reminder_time_offset,
+                        // Also prefer cached follow_up_at if API is older? 
+                        // No, API is truth. But if API is stale (e.g. index lag), cache might be newer.
+                        // For now, let's assume API is truth for data, but cache has extra fields.
+                    };
+                }
+                return apiLead;
+            });
+        }
+
+        setLeads(finalLeads);
         setIsPageLoading(false);
         apiCallMadeRef.current.inProgress = false;
 
@@ -705,40 +733,16 @@ export default function AllLeads() {
     const leadId = lead.id;
     setAssignedUpdatingLeadId(leadId);
     try {
-      // Get the current lead data to preserve all fields
-      const currentLead = leads.find((l) => l.id === leadId) || lead;
-
-      // Prepare payload with all required lead fields, updating only assigned_to
+      // Minimal payload per requirement: only call assign endpoint
       const payload = {
-        title: currentLead.title || "",
-        status: currentLead.status || null,
-        source: currentLead.source || "",
-        description: currentLead.description || "",
-        company_name: currentLead.company_name || "",
-        contact_first_name: currentLead.contact_first_name || "",
-        contact_last_name: currentLead.contact_last_name || "",
-        contact_email: currentLead.contact_email || "",
-        contact_phone: currentLead.contact_phone || "",
-        contact_position_title: currentLead.contact_position_title || "",
-        contact_linkedin_url: currentLead.contact_linkedin_url || "",
         assigned_to:
           newAssignedId === "" || newAssignedId === null || newAssignedId === undefined
             ? null
             : newAssignedId,
-        ...((currentLead.follow_up_at || currentLead.followUpAt) &&
-        (currentLead.follow_up_at || currentLead.followUpAt) !== null &&
-        (currentLead.follow_up_at || currentLead.followUpAt) !== ""
-          ? { follow_up_at: currentLead.follow_up_at || currentLead.followUpAt }
-          : {}),
-        ...((currentLead.follow_up_status || currentLead.followupStatus) &&
-        (currentLead.follow_up_status || currentLead.followupStatus) !== null &&
-        (currentLead.follow_up_status || currentLead.followupStatus) !== ""
-          ? { follow_up_status: currentLead.follow_up_status || currentLead.followupStatus }
-          : {}),
       };
 
-      const response = await apiRequest(`/api/leads/${leadId}/`, {
-        method: "PATCH",
+      const response = await apiRequest(`/api/leads/${leadId}/assign/`, {
+        method: "POST",
         body: JSON.stringify(payload),
       });
 
@@ -752,19 +756,19 @@ export default function AllLeads() {
         } else if (response.data) {
           updatedLead = response.data.lead || response.data;
         } else {
-          updatedLead = { ...currentLead, ...response };
+          updatedLead = { ...lead, ...response };
         }
       } else {
         // Fallback: construct from current lead (assigned_to will be just an ID)
         updatedLead = {
-        ...currentLead,
+        ...lead,
         assigned_to: payload.assigned_to,
         assignedTo: payload.assigned_to,
       };
       }
 
       // Ensure we have all fields from currentLead merged in
-      updatedLead = { ...currentLead, ...updatedLead };
+      updatedLead = { ...lead, ...updatedLead };
 
       setLeads((prevLeads) =>
         prevLeads.map((l) => (l.id === leadId ? { ...l, ...updatedLead } : l))
@@ -797,7 +801,19 @@ export default function AllLeads() {
     setFollowUpAtUpdatingLeadId(leadId);
     try {
       // Get the current lead data to preserve all fields
-      const currentLead = leads.find((l) => l.id === leadId) || lead;
+      let currentLead = leads.find((l) => l.id === leadId) || lead;
+
+      // Ensure we have reminder settings
+      if (currentLead.send_reminder_email === undefined) {
+        try {
+          const freshLead = await apiRequest(`/api/leads/${leadId}/`);
+          const leadData = freshLead.data || freshLead;
+          // Merge to ensure we have the reminder fields
+          currentLead = { ...currentLead, ...leadData };
+        } catch (e) {
+          console.warn("Failed to fetch fresh lead details for reminder check", e);
+        }
+      }
 
       const followUpValue =
         newDateTime === "" || newDateTime === null || newDateTime === undefined
@@ -833,6 +849,30 @@ export default function AllLeads() {
         method: "PATCH",
         body: JSON.stringify(payload),
       });
+
+      // Schedule follow-up
+      const followUpPayload = currentLead.send_reminder_email
+        ? {
+            follow_up_at: followUpValue,
+            send_reminder_email: true,
+            reminder_time_offset: currentLead.reminder_time_offset,
+          }
+        : {
+            send_reminder_email: false,
+            reminder_time_offset: null,
+            follow_up_at: followUpValue,
+          };
+
+      try {
+        await apiRequest(`/api/leads/${leadId}/schedule-follow-up/`, {
+          method: "POST",
+          body: JSON.stringify(followUpPayload),
+        });
+        console.log("Schedule follow-up called successfully");
+      } catch (error) {
+        console.error("Failed to schedule follow-up:", error);
+        notifyError("Lead saved, but failed to schedule follow-up.");
+      }
 
       const updatedLead = {
         ...currentLead,
@@ -1193,18 +1233,18 @@ export default function AllLeads() {
   const getEmployeeIdValue = (assignedTo) => {
     if (assignedTo === null || assignedTo === undefined || assignedTo === "") return "";
     if (typeof assignedTo === "object") {
-      // Check user_details.id first (this is typically the user ID we need)
+      // Prefer profile identifiers (id/pk/uuid) first
+      if (assignedTo.id) return assignedTo.id;
+      if (assignedTo.pk) return assignedTo.pk;
+      if (assignedTo.uuid) return assignedTo.uuid;
+      // Then check user_details/user ids
       if (assignedTo.user_details && assignedTo.user_details.id) {
         return assignedTo.user_details.id;
       }
-      // Check user.id for nested user object
       if (assignedTo.user && assignedTo.user.id) {
         return assignedTo.user.id;
       }
       return (
-        assignedTo.id ||
-        assignedTo.pk ||
-        assignedTo.uuid ||
         assignedTo.user_id ||
         assignedTo.userId ||
         assignedTo.profile_id ||
@@ -1966,33 +2006,17 @@ export default function AllLeads() {
 
                     {visibleColumns.includes("followUpAt") && (
                       <TableCell>
-                        <Box sx={{ position: "relative", display: "inline-flex", alignItems: "center" }}>
-                          <TextField
-                            type="datetime-local"
-                            value={formatDateTimeLocal(lead.follow_up_at || lead.followUpAt)}
-                            onChange={(e) => handleFollowUpAtChange(lead, e.target.value)}
-                            size="small"
-                            InputLabelProps={{ shrink: true }}
-                            inputProps={{
-                              style: { cursor: "pointer" },
+                        <FollowUpCell
+                            lead={lead}
+                            onUpdate={(updatedLead) => {
+                                setLeads((prevLeads) =>
+                                    prevLeads.map((l) => (l.id === lead.id ? { ...l, ...updatedLead } : l))
+                                );
+                                addLeadToCache(updatedLead);
                             }}
-                            sx={{
-                              minWidth: 200,
-                              "& input": {
-                                cursor: "pointer",
-                              },
-                              "& input::-webkit-calendar-picker-indicator": {
-                                cursor: "pointer",
-                                padding: "4px",
-                                marginRight: "-4px",
-                              },
-                            }}
-                            disabled={followUpAtUpdatingLeadId === lead.id}
-                          />
-                          {followUpAtUpdatingLeadId === lead.id && (
-                            <CircularProgress size={16} sx={{ ml: 1 }} />
-                          )}
-                        </Box>
+                            notifySuccess={notifySuccess}
+                            notifyError={notifyError}
+                        />
                       </TableCell>
                     )}
 

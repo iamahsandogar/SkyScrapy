@@ -37,6 +37,8 @@ const EMPTY_FORM = {
   follow_up_at: null,
   follow_up_time: null,
   follow_up_status: "",
+  send_reminder_email: false,
+  reminder_time_offset: "exact",
 };
 
 const getCurrentUserInfo = () => {
@@ -363,6 +365,11 @@ if (availableEmployees.length > 0 && finalAssignedTo) {
         follow_up_time: followUpTime,
         follow_up_status:
           leadPayload.follow_up_status || leadPayload.followupStatus || "",
+        send_reminder_email: leadPayload.send_reminder_email !== undefined ? Boolean(leadPayload.send_reminder_email) : false,
+        reminder_time_offset:
+          leadPayload.reminder_time_offset ||
+          leadPayload.reminder_offset ||
+          "exact",
       };
 
       setFormData(preparedForm);
@@ -516,6 +523,12 @@ if (availableEmployees.length > 0 && finalAssignedTo) {
       return;
     }
 
+    // Validation: If reminder is enabled, follow-up date must be selected
+    if (formData.send_reminder_email && !formData.follow_up_at) {
+      notifyError("Please select a follow-up date/time to set a reminder.");
+      return;
+    }
+
     const payload = buildPayload();
     setIsSubmitting(true);
 
@@ -526,6 +539,47 @@ if (availableEmployees.length > 0 && finalAssignedTo) {
       });
 
       notifySuccess("Lead updated successfully!");
+
+      // Calculate follow_up_at value for schedule call
+      const followUpValue = (() => {
+        if (formData.follow_up_at && formData.follow_up_time) {
+          const date = dayjs(formData.follow_up_at);
+          const time = dayjs(formData.follow_up_time);
+          return date
+            .hour(time.hour())
+            .minute(time.minute())
+            .second(0)
+            .millisecond(0)
+            .format();
+        } else if (formData.follow_up_at) {
+          return dayjs(formData.follow_up_at).startOf("day").format();
+        }
+        return null;
+      })();
+
+      // Schedule follow-up
+      const followUpPayload = formData.send_reminder_email
+        ? {
+            follow_up_at: followUpValue,
+            send_reminder_email: true,
+            reminder_time_offset: formData.reminder_time_offset || "exact",
+          }
+        : {
+            send_reminder_email: false,
+            reminder_time_offset: null,
+            follow_up_at: followUpValue,
+          };
+
+      try {
+        await apiRequest(`/api/leads/${leadId}/schedule-follow-up/`, {
+          method: "POST",
+          body: JSON.stringify(followUpPayload),
+        });
+        console.log("Schedule follow-up called successfully");
+      } catch (error) {
+        console.error("Failed to schedule follow-up:", error);
+        notifyError("Lead saved, but failed to schedule follow-up.");
+      }
 
       let updatedLead = null;
       if (response) {
@@ -586,6 +640,8 @@ if (availableEmployees.length > 0 && finalAssignedTo) {
             updatedLead.assigned_to ||
             updatedLead.assignedTo ||
             formData.assigned_to,
+          send_reminder_email: formData.send_reminder_email,
+          reminder_time_offset: formData.reminder_time_offset,
         };
 
         addLeadToCache(mergedLead);
@@ -637,10 +693,32 @@ if (availableEmployees.length > 0 && finalAssignedTo) {
               setFormData({ ...formData, assigned_to: value })
             }
             onDateChange={(value) =>
-              setFormData({ ...formData, follow_up_at: value })
+              setFormData({
+                ...formData,
+                follow_up_at: value,
+                ...(value ? {} : { send_reminder_email: false, reminder_time_offset: null }),
+              })
             }
             onTimeChange={(value) =>
-              setFormData({ ...formData, follow_up_time: value })
+              setFormData({
+                ...formData,
+                follow_up_time: value,
+                ...(value ? {} : { send_reminder_email: false, reminder_time_offset: null }),
+              })
+            }
+            onReminderToggle={(checked) =>
+              setFormData((prev) => ({
+                ...prev,
+                send_reminder_email:
+                  checked && prev.follow_up_at && prev.follow_up_time ? checked : false,
+                reminder_time_offset: checked ? (prev.reminder_time_offset || "exact") : null,
+              }))
+            }
+            onReminderOffsetChange={(value) =>
+              setFormData((prev) => ({
+                ...prev,
+                reminder_time_offset: value,
+              }))
             }
             onLinkedInBlur={() => {
               if (

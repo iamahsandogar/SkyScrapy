@@ -1,4 +1,4 @@
-import { Box, MenuItem, TextField, Typography } from "@mui/material";
+import { Box, MenuItem, TextField, Typography, Checkbox, FormControlLabel, FormControl, InputLabel, Select } from "@mui/material";
 import { LocalizationProvider, DatePicker, TimePicker } from "@mui/x-date-pickers";
 import { AdapterDayjs } from "@mui/x-date-pickers/AdapterDayjs";
 import {
@@ -20,6 +20,8 @@ const LeadFormFields = ({
   onAssignedToChange = () => {},
   onDateChange = () => {},
   onTimeChange = () => {},
+  onReminderToggle = () => {},
+  onReminderOffsetChange = () => {},
   onLinkedInBlur = () => {},
 }) => {
   const statuses = normalizeArray(meta.status);
@@ -321,6 +323,47 @@ const LeadFormFields = ({
           </LocalizationProvider>
         </Box>
         <Box flex={1} minWidth={200}>
+          <FormControlLabel
+            control={
+              <Checkbox
+                checked={Boolean(formData.send_reminder_email)}
+                onChange={(e) => onReminderToggle(e.target.checked)}
+                disabled={
+                  !formData.follow_up_at ||
+                  !formData.follow_up_time
+                }
+              />
+            }
+            label="Send reminder"
+            sx={{ mt: 2.5 }}
+          />
+          <FormControl
+            size="small"
+            fullWidth
+            sx={{ mt: 1 }}
+            disabled={
+              !formData.send_reminder_email ||
+              !formData.follow_up_at ||
+              !formData.follow_up_time
+            }
+          >
+            <InputLabel>When should the reminder be sent?</InputLabel>
+            <Select
+              label="When should the reminder be sent?"
+              value={formData.reminder_time_offset || "exact"}
+              onChange={(e) => onReminderOffsetChange(e.target.value)}
+            >
+              <MenuItem value="exact">Exact (at follow-up time)</MenuItem>
+              <MenuItem value="30min">30 minutes before</MenuItem>
+              <MenuItem value="1hour">1 hour before</MenuItem>
+              <MenuItem value="1day">1 day before</MenuItem>
+            </Select>
+          </FormControl>
+        </Box>
+      </Box>
+
+      <Box display="flex" gap={2} flexWrap="wrap">
+        <Box flex={1} minWidth={200}>
           <Typography fontWeight="bold" sx={{ mb: 0.5 }}>
             Follow Up Status
           </Typography>
@@ -340,9 +383,6 @@ const LeadFormFields = ({
             <MenuItem value="pending">pending</MenuItem>
           </TextField>
         </Box>
-      </Box>
-
-      <Box display="flex" gap={2} flexWrap="wrap">
         <Box flex={1} minWidth={200}>
           <Typography fontWeight="bold" sx={{ mb: 0.5 }}>
             Company Name

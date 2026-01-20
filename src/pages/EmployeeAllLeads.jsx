@@ -42,6 +42,8 @@ import LeadNotesChat from "../components/Leads/LeadNotesChat";
 import MoreHorizIcon from "@mui/icons-material/MoreHoriz";
 import apiRequest from "../components/services/api";
 import EditLeadModal from "../components/Leads/EditLeadModal";
+import FollowUpCell from "../components/Leads/FollowUpCell";
+import { useNotification } from "../contexts/NotificationContext";
 import {
   getCachedLeadData,
   addLeadToCache,
@@ -151,6 +153,7 @@ export default function EmployeeAllLeads() {
   const [statuses, setStatuses] = useState([]);
   const [leadsLoading, setLeadsLoading] = useState(true);
   const [statusesLoading, setStatusesLoading] = useState(true);
+  const [assignedUpdatingLeadId, setAssignedUpdatingLeadId] = useState(null);
   const [actionAnchorEl, setActionAnchorEl] = useState(null);
   const [menuLead, setMenuLead] = useState(null);
   const [mobileMenuAnchorEl, setMobileMenuAnchorEl] = useState(null);
@@ -159,6 +162,7 @@ export default function EmployeeAllLeads() {
   const [actionMessage, setActionMessage] = useState("");
   const [editDialog, setEditDialog] = useState({ open: false, leadId: null, lead: null });
   const [activeTogglingLeadId, setActiveTogglingLeadId] = useState(null);
+  const { notifySuccess, notifyError } = useNotification();
 
   const actionOpen = Boolean(actionAnchorEl);
   const rowRefs = useRef({});
@@ -1258,6 +1262,53 @@ export default function EmployeeAllLeads() {
     return "None";
   };
 
+  // Helper to extract an ID from assigned_to structures
+  const getEmployeeIdValue = (assignedTo) => {
+    if (assignedTo === null || assignedTo === undefined || assignedTo === "") return "";
+    if (typeof assignedTo === "object") {
+      if (assignedTo.id) return assignedTo.id;
+      if (assignedTo.pk) return assignedTo.pk;
+      if (assignedTo.uuid) return assignedTo.uuid;
+      if (assignedTo.user_details && assignedTo.user_details.id) {
+        return assignedTo.user_details.id;
+      }
+      if (assignedTo.user && assignedTo.user.id) {
+        return assignedTo.user.id;
+      }
+      return (
+        assignedTo.user_id ||
+        assignedTo.userId ||
+        assignedTo.profile_id ||
+        assignedTo.profileId ||
+        ""
+      );
+    }
+    return assignedTo;
+  };
+
+  const buildEmployeeLabel = (emp) => {
+    if (emp && typeof emp === "object") {
+      const userDetails = emp.user_details || emp.userDetails || emp.user || {};
+      const firstName =
+        userDetails.first_name ||
+        userDetails.firstName ||
+        emp.first_name ||
+        emp.firstName ||
+        emp.name ||
+        "";
+      const lastName =
+        userDetails.last_name ||
+        userDetails.lastName ||
+        emp.last_name ||
+        emp.lastName ||
+        "";
+      const name = `${firstName} ${lastName}`.trim();
+      if (name) return name;
+    }
+    const id = getEmployeeIdValue(emp);
+    return id ? `User ${id}` : "Unknown";
+  };
+
   const handleDeleteLead = async (id) => {
     if (!confirm("Delete this lead?")) return;
     try {
@@ -1399,7 +1450,47 @@ export default function EmployeeAllLeads() {
       }
     });
 
+    // Also add all employees/admins from cache to ensure admins are included
+    const cachedData = getCachedLeadData();
+    const employees = cachedData?.employees || [];
+    employees.forEach((emp) => {
+      const firstName = emp.firstName || emp.first_name || "";
+      const lastName = emp.lastName || emp.last_name || "";
+      const name = `${firstName} ${lastName}`.trim();
+      if (name) {
+        options.set(name, { value: name, label: name });
+      }
+    });
+
     return Array.from(options.values());
+  }, [leads]);
+
+  // Build select options for assignment dropdown (include admins)
+  const assignedSelectOptions = useMemo(() => {
+    const opts = [{ value: "", label: "None" }];
+    const seenIds = new Set();
+
+    const cachedData = getCachedLeadData();
+    const employeesFromCache = cachedData?.employees || [];
+
+    // Include employees/admins from cache
+    employeesFromCache.forEach((emp) => {
+      const id = getEmployeeIdValue(emp);
+      if (!id || seenIds.has(String(id))) return;
+      seenIds.add(String(id));
+      opts.push({ value: String(id), label: buildEmployeeLabel(emp) });
+    });
+
+    // Include assigned users from current leads (fallback if not in cache)
+    leads.forEach((lead) => {
+      const emp = lead.assigned_to || lead.assignedTo;
+      const id = getEmployeeIdValue(emp);
+      if (!id || seenIds.has(String(id))) return;
+      seenIds.add(String(id));
+      opts.push({ value: String(id), label: buildEmployeeLabel(emp) });
+    });
+
+    return opts;
   }, [leads]);
 
   const followUpFilterOptions = useMemo(() => {
@@ -1475,6 +1566,65 @@ export default function EmployeeAllLeads() {
       return true;
     });
   }, [leads, statusFilter, assignedFilter, followUpFilter, q]);
+
+  // Assign handler (employee can assign to self or admin)
+  const handleAssignedChange = async (lead, newAssignedId) => {
+    const leadId = resolveLeadId(lead);
+    if (!leadId) return;
+    setAssignedUpdatingLeadId(leadId);
+    try {
+      const payload = {
+        assigned_to:
+          newAssignedId === "" || newAssignedId === null || newAssignedId === undefined
+            ? null
+            : newAssignedId,
+      };
+
+      const response = await apiRequest(`/api/leads/${leadId}/assign/`, {
+        method: "POST",
+        body: JSON.stringify(payload),
+      });
+
+      let updatedLead = null;
+      if (response && typeof response === "object") {
+        if (response.lead) {
+          updatedLead = response.lead;
+        } else if (response.data) {
+          updatedLead = response.data.lead || response.data;
+        } else {
+          updatedLead = { ...lead, ...response };
+        }
+      } else {
+        updatedLead = {
+          ...lead,
+          assigned_to: payload.assigned_to,
+          assignedTo: payload.assigned_to,
+        };
+      }
+
+      updatedLead = { ...lead, ...updatedLead };
+
+      // If assigned to admin or not assigned to this employee, remove from list
+      const assignedToAdmin = isLeadAssignedToAdmin(updatedLead);
+      const stillAssignedToEmployee = isLeadAssignedToCurrentEmployee(updatedLead);
+
+      setLeads((prev) =>
+        assignedToAdmin || !stillAssignedToEmployee
+          ? prev.filter((l) => resolveLeadId(l) !== resolveLeadId(updatedLead))
+          : prev.map((l) =>
+              resolveLeadId(l) === resolveLeadId(updatedLead) ? { ...l, ...updatedLead } : l
+            )
+      );
+
+      // Update cache / notify
+      addLeadToCache(updatedLead);
+    } catch (err) {
+      console.error("Failed to assign lead:", err);
+      alert("Failed to assign lead. Please try a different user.");
+    } finally {
+      setAssignedUpdatingLeadId(null);
+    }
+  };
   
 
   return (
@@ -1897,13 +2047,52 @@ export default function EmployeeAllLeads() {
 
                     {visibleColumns.includes("assignedTo") && (
                       <TableCell>
-                        {getLeadFieldValue(lead, "assignedTo") || "None"}
+                        <Select
+                          value={(() => {
+                            const id = getEmployeeIdValue(lead.assigned_to || lead.assignedTo);
+                            return id === null || id === undefined ? "" : String(id);
+                          })()}
+                          onChange={(e) => handleAssignedChange(lead, e.target.value)}
+                          size="small"
+                          disabled={assignedUpdatingLeadId === resolveLeadId(lead)}
+                          sx={{
+                            minWidth: 160,
+                            height: 32,
+                            "& .MuiSelect-select": {
+                              padding: "4px 8px",
+                              fontSize: "0.875rem",
+                            },
+                          }}
+                          MenuProps={{
+                            PaperProps: {
+                              style: {
+                                maxHeight: 300,
+                              },
+                            },
+                          }}
+                        >
+                          {assignedSelectOptions.map((option) => (
+                            <MenuItem key={option.value || "none"} value={option.value}>
+                              {option.label}
+                            </MenuItem>
+                          ))}
+                        </Select>
                       </TableCell>
                     )}
 
                     {visibleColumns.includes("followUpAt") && (
                       <TableCell>
-                        {getLeadFieldValue(lead, "followUpAt") || "-"}
+                        <FollowUpCell
+                            lead={lead}
+                            onUpdate={(updatedLead) => {
+                                setLeads((prevLeads) =>
+                                    prevLeads.map((l) => (l.id === lead.id ? { ...l, ...updatedLead } : l))
+                                );
+                                addLeadToCache(updatedLead);
+                            }}
+                            notifySuccess={notifySuccess}
+                            notifyError={notifyError}
+                        />
                       </TableCell>
                     )}
 

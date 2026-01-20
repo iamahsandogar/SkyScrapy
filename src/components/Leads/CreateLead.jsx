@@ -81,6 +81,8 @@ export default function CreateLead() {
     follow_up_at: null,
     follow_up_time: null,
     follow_up_status: "",
+    send_reminder_email: false,
+    reminder_time_offset: "exact",
   });
 
   /* ------------------------------------
@@ -427,6 +429,8 @@ export default function CreateLead() {
       follow_up_at: followUpDate,
       follow_up_time: followUpTime,
       follow_up_status: leadData.follow_up_status || leadData.followupStatus || "",
+      send_reminder_email: Boolean(leadData.send_reminder_email),
+      reminder_time_offset: leadData.reminder_time_offset || leadData.reminder_offset || "exact",
     };
 
     console.log(`Setting form data from ${fromCache ? 'cache' : 'API'}:`, formDataToSet);
@@ -600,12 +604,41 @@ export default function CreateLead() {
     setFormData({ ...formData, [e.target.name]: e.target.value });
   };
 
+  const handleReminderToggle = (checked) => {
+    setFormData((prev) => ({
+      ...prev,
+      send_reminder_email: checked && prev.follow_up_at && prev.follow_up_time ? checked : false,
+      reminder_time_offset: checked ? (prev.reminder_time_offset || "exact") : null,
+    }));
+  };
+
+  const handleReminderOffsetChange = (value) => {
+    setFormData((prev) => ({
+      ...prev,
+      reminder_time_offset: value,
+    }));
+  };
+
   const handleDateChange = (date) => {
-    setFormData({ ...formData, follow_up_at: date });
+    const cleared = !date;
+    setFormData({
+      ...formData,
+      follow_up_at: date,
+      ...(cleared
+        ? { send_reminder_email: false, reminder_time_offset: null }
+        : {}),
+    });
   };
 
   const handleTimeChange = (time) => {
-    setFormData({ ...formData, follow_up_time: time });
+    const cleared = !time;
+    setFormData({
+      ...formData,
+      follow_up_time: time,
+      ...(cleared
+        ? { send_reminder_email: false, reminder_time_offset: null }
+        : {}),
+    });
   };
 
   const isValidLinkedInURL = (url) => {
@@ -652,6 +685,12 @@ export default function CreateLead() {
     }
 
     // Prepare payload according to API structure
+    // Validation: If reminder is enabled, follow-up date must be selected
+    if (formData.send_reminder_email && !formData.follow_up_at) {
+      notifyError("Please select a follow-up date/time to set a reminder.");
+      return;
+    }
+
     const payload = {
       title: formData.title.trim(),
       status: formData.status,
@@ -701,6 +740,44 @@ export default function CreateLead() {
       !!formData.assigned_to
     );
 
+    const callScheduleFollowUp = async (leadId) => {
+      const followUpPayload = formData.send_reminder_email
+        ? {
+            follow_up_at: (() => {
+              if (formData.follow_up_at && formData.follow_up_time) {
+                const date = dayjs(formData.follow_up_at);
+                const time = dayjs(formData.follow_up_time);
+                return date
+                  .hour(time.hour())
+                  .minute(time.minute())
+                  .second(0)
+                  .millisecond(0)
+                  .format();
+              } else if (formData.follow_up_at) {
+                return dayjs(formData.follow_up_at).startOf("day").format();
+              }
+              return null;
+            })(),
+            send_reminder_email: true,
+            reminder_time_offset: formData.reminder_time_offset,
+          }
+        : {
+            send_reminder_email: false,
+            reminder_time_offset: null,
+          };
+
+      try {
+        await apiRequest(`/api/leads/${leadId}/schedule-follow-up/`, {
+          method: "POST",
+          body: JSON.stringify(followUpPayload),
+        });
+        console.log("Schedule follow-up called successfully");
+      } catch (error) {
+        console.error("Failed to schedule follow-up:", error);
+        notifyError("Lead saved, but failed to schedule follow-up.");
+      }
+    };
+
     try {
       if (editId) {
         // 🔁 UPDATE LEAD
@@ -709,6 +786,9 @@ export default function CreateLead() {
           body: JSON.stringify(payload),
         });
         notifySuccess("Lead updated successfully!");
+
+        // Schedule follow-up
+        await callScheduleFollowUp(editId);
 
         // Parse the response to get the updated lead
         let updatedLead = null;
@@ -780,6 +860,9 @@ export default function CreateLead() {
               updatedLead.assigned_to ||
               updatedLead.assignedTo ||
               (currentUserId ? currentUserId : formData.assigned_to),
+            
+            send_reminder_email: formData.send_reminder_email,
+            reminder_time_offset: formData.reminder_time_offset,
           };
 
           // Update cache with the updated lead
@@ -813,6 +896,13 @@ export default function CreateLead() {
             createdLead = response[0];
           } else {
             createdLead = response;
+          }
+        }
+
+        if (createdLead) {
+          const newLeadId = createdLead.id || createdLead.pk || createdLead.uuid;
+          if (newLeadId) {
+             await callScheduleFollowUp(newLeadId);
           }
         }
 
@@ -875,6 +965,9 @@ export default function CreateLead() {
               createdLead.assigned_to ||
               createdLead.assignedTo ||
               (currentUserId ? currentUserId : formData.assigned_to),
+
+            send_reminder_email: formData.send_reminder_email,
+            reminder_time_offset: formData.reminder_time_offset,
           };
 
           addLeadToCache(mergedLead);
@@ -909,28 +1002,30 @@ export default function CreateLead() {
       <Box mt={2} sx={{ boxShadow: "none" }}>
         <Paper sx={{ p: 3, borderRadius: 3, boxShadow: "none" }} elevation={1}>
           <Box display="flex" flexDirection="column" gap={2}>
-              <LeadFormFields
-                formData={formData}
-                employees={employees}
-                meta={meta}
-                loadingMeta={loadingMeta}
-                onChange={handleChange}
-                onAssignedToChange={(value) =>
-                  setFormData({ ...formData, assigned_to: value })
+            <LeadFormFields
+              formData={formData}
+              employees={employees}
+              meta={meta}
+              loadingMeta={loadingMeta}
+              onChange={handleChange}
+              onAssignedToChange={(value) =>
+                setFormData({ ...formData, assigned_to: value })
+              }
+              onDateChange={handleDateChange}
+              onTimeChange={handleTimeChange}
+              onReminderToggle={handleReminderToggle}
+              onReminderOffsetChange={handleReminderOffsetChange}
+              onLinkedInBlur={() => {
+                if (
+                  formData.contact_linkedin_url &&
+                  !isValidLinkedInURL(formData.contact_linkedin_url)
+                ) {
+                  notifyError(
+                    "Please enter a valid LinkedIn URL (e.g., https://linkedin.com/in/username)"
+                  );
                 }
-                onDateChange={handleDateChange}
-                onTimeChange={handleTimeChange}
-                onLinkedInBlur={() => {
-                  if (
-                    formData.contact_linkedin_url &&
-                    !isValidLinkedInURL(formData.contact_linkedin_url)
-                  ) {
-                    notifyError(
-                      "Please enter a valid LinkedIn URL (e.g., https://linkedin.com/in/username)"
-                    );
-                  }
-                }}
-              />
+              }}
+            />
 
               <Box display="flex" gap={2} flexWrap="wrap">
                 <Button
