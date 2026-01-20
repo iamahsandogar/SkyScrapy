@@ -117,12 +117,16 @@ function OverdueLeads({ data }) {
   const themeColors = tokens(mode);
   const [dialogOpen, setDialogOpen] = useState(false);
 
+  // Check if data is still loading
+  const isLoading = data === null || data === undefined;
+
   // Extract data from props (from /api/common/dashboard/)
   const statuses = useMemo(() => data?.statuses || [], [data?.statuses]);
   const remindersData = useMemo(() => data?.reminders || {}, [data?.reminders]);
 
   // Get overdue leads
   const overdueLeads = useMemo(() => {
+    if (isLoading) return [];
     const leads = remindersData.overdue?.leads || [];
     return leads
       .map((lead) => ({
@@ -131,7 +135,7 @@ function OverdueLeads({ data }) {
       }))
       .filter(({ followUp }) => followUp)
       .sort((a, b) => (a.followUp?.getTime() || 0) - (b.followUp?.getTime() || 0));
-  }, [remindersData]);
+  }, [remindersData, isLoading]);
 
   const cardStyles = {
     flex: 1,
@@ -155,11 +159,15 @@ function OverdueLeads({ data }) {
 
   const handleCloseDialog = () => setDialogOpen(false);
 
-  const reminderLabel = overdueLeads.length
+  const reminderLabel = isLoading
+    ? "..."
+    : overdueLeads.length
     ? `${overdueLeads.length} overdue lead${overdueLeads.length > 1 ? "s" : ""}`
     : "No overdue leads";
 
-  const previewLabel = overdueLeads[0]
+  const previewLabel = isLoading
+    ? "..."
+    : overdueLeads[0]
     ? getLeadTitle(overdueLeads[0].lead)
     : "No overdue leads yet";
 
@@ -203,15 +211,26 @@ function OverdueLeads({ data }) {
           >
             {reminderLabel}
           </Typography>
-          {previewStatusBadge && (
+          {isLoading ? (
             <Typography
               variant="caption"
               color={accentColor}
               fontSize="12px"
               sx={{ whiteSpace: "nowrap" }}
             >
-              {previewStatusBadge}
+              ...
             </Typography>
+          ) : (
+            previewStatusBadge && (
+              <Typography
+                variant="caption"
+                color={accentColor}
+                fontSize="12px"
+                sx={{ whiteSpace: "nowrap" }}
+              >
+                {previewStatusBadge}
+              </Typography>
+            )
           )}
         </Box>
 
@@ -260,10 +279,16 @@ function OverdueLeads({ data }) {
             <WarningIcon fontSize="small" />
           </Box>
         </Box>
-        {previewFollowUp && (
+        {isLoading ? (
           <Typography variant="caption" color={mutedText} mt={1} display="block">
-            {previewFollowUp}
+            ...
           </Typography>
+        ) : (
+          previewFollowUp && (
+            <Typography variant="caption" color={mutedText} mt={1} display="block">
+              {previewFollowUp}
+            </Typography>
+          )
         )}
       </Box>
 

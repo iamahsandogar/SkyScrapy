@@ -31,6 +31,7 @@ export default function ManageLeadOptions() {
   const [data, setData] = useState({
     status: [],
     source: [],
+    lifecycle: [],
   });
 
   const [type, setType] = useState("status");
@@ -52,8 +53,12 @@ export default function ManageLeadOptions() {
 
   const { notifyError } = useNotification();
 
-  const getOptionFieldName = (optionType) =>
-    optionType === "status" ? "statuses" : "sources";
+  const getOptionFieldName = (optionType) => {
+    if (optionType === "status") return "statuses";
+    if (optionType === "source") return "sources";
+    if (optionType === "lifecycle") return "lifecycles";
+    return "sources";
+  };
 
   /* ------------------------------------
      FETCH STATUS & SOURCE FROM BACKEND
@@ -69,11 +74,12 @@ export default function ManageLeadOptions() {
     }
 
     const cachedData = getCachedLeadData();
-    if (cachedData && (cachedData.statuses || cachedData.sources)) {
-      console.log("Using cached statuses and sources for instant loading");
+    if (cachedData && (cachedData.statuses || cachedData.sources || cachedData.lifecycles)) {
+      console.log("Using cached statuses, sources, and lifecycles for instant loading");
       setData({
         status: cachedData.statuses || [],
         source: cachedData.sources || [],
+        lifecycle: cachedData.lifecycles || [],
       });
       const fetched = await refreshDataInBackground(false, () => {
         if (showGlobalLoader) {
@@ -116,9 +122,10 @@ export default function ManageLeadOptions() {
       const response = await apiRequest("/ui/options/");
       console.log("=== /ui/options/ API RESPONSE ===", response);
 
-      // Parse response - extract statuses and sources
+      // Parse response - extract statuses, sources, and lifecycles
       let statusesList = [];
       let sourcesList = [];
+      let lifecyclesList = [];
 
       if (response) {
         // Extract statuses
@@ -134,14 +141,23 @@ export default function ManageLeadOptions() {
         } else if (response?.data?.sources && Array.isArray(response.data.sources)) {
           sourcesList = response.data.sources;
         }
+
+        // Extract lifecycles
+        if (Array.isArray(response.lifecycles)) {
+          lifecyclesList = response.lifecycles;
+        } else if (response?.data?.lifecycles && Array.isArray(response.data.lifecycles)) {
+          lifecyclesList = response.data.lifecycles;
+        }
       }
 
       console.log("Extracted statuses:", statusesList.length);
       console.log("Extracted sources:", sourcesList.length);
+      console.log("Extracted lifecycles:", lifecyclesList.length);
 
       setData({
         status: statusesList,
         source: sourcesList,
+        lifecycle: lifecyclesList,
       });
 
       // Update cache with fresh data
@@ -149,6 +165,7 @@ export default function ManageLeadOptions() {
       if (currentCache) {
         currentCache.statuses = statusesList;
         currentCache.sources = sourcesList;
+        currentCache.lifecycles = lifecyclesList;
         currentCache.timestamp = Date.now();
         localStorage.setItem("leadDataCache", JSON.stringify(currentCache));
       } else {
@@ -156,6 +173,7 @@ export default function ManageLeadOptions() {
         const newCache = {
           statuses: statusesList,
           sources: sourcesList,
+          lifecycles: lifecyclesList,
           employees: [],
           leads: [],
           timestamp: Date.now(),
@@ -203,10 +221,12 @@ export default function ManageLeadOptions() {
     if (!trimmedValue) return;
 
     try {
-      const endpoint =
-        type === "status"
-          ? "/ui/options/statuses/create/"
-          : "/ui/options/sources/create/";
+      let endpoint = "/ui/options/sources/create/";
+      if (type === "status") {
+        endpoint = "/ui/options/statuses/create/";
+      } else if (type === "lifecycle") {
+        endpoint = "/ui/options/lifecycles/create/";
+      }
 
       const response = await apiRequest(endpoint, {
         method: "POST",
@@ -217,9 +237,8 @@ export default function ManageLeadOptions() {
 
       setNewValue("");
       await reloadOptionsWithOverlay();
-      showToast(
-        `${type === "status" ? "Status" : "Source"} added successfully`
-      );
+      const typeLabel = type === "status" ? "Status" : type === "lifecycle" ? "Lifecycle" : "Source";
+      showToast(`${typeLabel} added successfully`);
     } catch (error) {
       console.error("Add failed", error);
       notifyError(error.message || "Failed to add");
@@ -239,19 +258,20 @@ export default function ManageLeadOptions() {
     }
 
     try {
-      const endpoint =
-        type === "status"
-          ? `/ui/options/statuses/${pk}/delete/`
-          : `/ui/options/sources/${pk}/delete/`;
+      let endpoint = `/ui/options/sources/${pk}/delete/`;
+      if (type === "status") {
+        endpoint = `/ui/options/statuses/${pk}/delete/`;
+      } else if (type === "lifecycle") {
+        endpoint = `/ui/options/lifecycles/${pk}/delete/`;
+      }
 
       await apiRequest(endpoint, {
         method: "DELETE",
       });
       await reloadOptionsWithOverlay();
       await reloadOptionsWithOverlay();
-      showToast(
-        `${type === "status" ? "Status" : "Source"} deleted successfully`
-      );
+      const typeLabel = type === "status" ? "Status" : type === "lifecycle" ? "Lifecycle" : "Source";
+      showToast(`${typeLabel} deleted successfully`);
     } catch (error) {
       console.error("Delete failed", error);
       notifyError(error.message || "Failed to delete");
@@ -301,11 +321,11 @@ export default function ManageLeadOptions() {
         }}
       >
         <DotLoader size={48} color="#0A66C2" />
-        <Typography variant="body2">Loading statuses & sources...</Typography>
+        <Typography variant="body2">Loading statuses, sources & lifecycles...</Typography>
       </Backdrop>
       <Paper sx={{ p: 3, borderRadius: 3, boxShadow: "none" }}>
         <Typography variant="h6" fontWeight="bold" mb={2}>
-          Lead Status & Source Settings
+          Lead Status, Source & Lifecycle Settings
         </Typography>
 
         {/* SWITCH */}
@@ -327,6 +347,15 @@ export default function ManageLeadOptions() {
             }}
           >
             Source
+          </Button>
+          <Button
+            variant={type === "lifecycle" ? "contained" : "outlined"}
+            onClick={() => {
+              setType("lifecycle");
+              cancelEdit();
+            }}
+          >
+            Lifecycle
           </Button>
         </Box>
 

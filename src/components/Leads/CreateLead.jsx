@@ -58,7 +58,7 @@ export default function CreateLead() {
   const location = useLocation();
   const { notifyError, notifySuccess } = useNotification();
   const [employees, setEmployees] = useState([]);
-  const [meta, setMeta] = useState({ status: [], source: [] });
+  const [meta, setMeta] = useState({ status: [], source: [], lifecycle: [] });
   const [loadingMeta, setLoadingMeta] = useState(false);
   const [loadingLead, setLoadingLead] = useState(false);
   const [isAdmin, setIsAdmin] = useState(false);
@@ -68,6 +68,7 @@ export default function CreateLead() {
     title: "",
     status: null,
     source: "",
+    lifecycle: "",
     description: "",
     company_name: "",
     contact_first_name: "",
@@ -115,9 +116,10 @@ export default function CreateLead() {
 
       const [optionsResponse, employeesResponse] = await Promise.all(requests);
 
-      // Parse statuses and sources
+      // Parse statuses, sources, and lifecycles
       let statusesList = [];
       let sourcesList = [];
+      let lifecyclesList = [];
 
       if (optionsResponse) {
         if (Array.isArray(optionsResponse.statuses)) {
@@ -136,6 +138,15 @@ export default function CreateLead() {
           Array.isArray(optionsResponse.data.sources)
         ) {
           sourcesList = optionsResponse.data.sources;
+        }
+
+        if (Array.isArray(optionsResponse.lifecycles)) {
+          lifecyclesList = optionsResponse.lifecycles;
+        } else if (
+          optionsResponse?.data?.lifecycles &&
+          Array.isArray(optionsResponse.data.lifecycles)
+        ) {
+          lifecyclesList = optionsResponse.data.lifecycles;
         }
       }
 
@@ -161,7 +172,7 @@ export default function CreateLead() {
         }
       }
 
-      setMeta({ status: statusesList, source: sourcesList });
+      setMeta({ status: statusesList, source: sourcesList, lifecycle: lifecyclesList });
       setEmployees(employeesList);
 
       // For employees (non-admin) on create, default Assigned To to self if not set
@@ -185,7 +196,7 @@ export default function CreateLead() {
       }
     } catch (error) {
       console.error("Failed to fetch meta data:", error);
-      setMeta({ status: [], source: [] });
+      setMeta({ status: [], source: [], lifecycle: [] });
       setEmployees([]);
     } finally {
       setLoadingMeta(false);
@@ -403,6 +414,7 @@ export default function CreateLead() {
       title: leadData.title || leadData.leadTitle || "",
       status: statusId,
       source: leadData.source || "",
+      lifecycle: leadData.lifecycle || "",
       description: leadData.description || "",
       company_name: leadData.company_name || leadData.company || "",
       contact_first_name: leadData.contact_first_name || leadData.firstName || "",
@@ -644,6 +656,7 @@ export default function CreateLead() {
       title: formData.title.trim(),
       status: formData.status,
       source: formData.source?.trim() || "",
+      lifecycle: formData.lifecycle?.trim() || "",
       description: formData.description?.trim() || "",
       company_name: formData.company_name?.trim() || "",
       contact_first_name: formData.contact_first_name.trim(),
@@ -731,6 +744,7 @@ export default function CreateLead() {
             title: updatedLead.title || formData.title,
             status: updatedLead.status || formData.status,
             source: updatedLead.source || formData.source,
+            lifecycle: updatedLead.lifecycle || formData.lifecycle,
             description: updatedLead.description || formData.description,
             company_name: updatedLead.company_name || formData.company_name,
             contact_first_name:
@@ -821,6 +835,7 @@ export default function CreateLead() {
             title: createdLead.title || formData.title,
             status: createdLead.status || formData.status,
             source: createdLead.source || formData.source,
+            lifecycle: createdLead.lifecycle || formData.lifecycle,
             description: createdLead.description || formData.description,
             company_name: createdLead.company_name || formData.company_name,
             contact_first_name:

@@ -101,12 +101,16 @@ function DueTodayLeads({ data }) {
   const themeColors = tokens(mode);
   const [dialogOpen, setDialogOpen] = useState(false);
 
+  // Check if data is still loading
+  const isLoading = data === null || data === undefined;
+
   // Extract data from props (from /api/common/dashboard/)
   const remindersData = data?.reminders || {};
   const statuses = data?.statuses || [];
 
   // Get due today leads
   const dueTodayLeads = useMemo(() => {
+    if (isLoading) return [];
     const leads = remindersData.due_today?.leads || [];
     return leads
       .map((lead) => ({
@@ -124,7 +128,7 @@ function DueTodayLeads({ data }) {
         return timeA - timeB;
       })
       .map(({ lead }) => lead);
-  }, [remindersData]);
+  }, [remindersData, isLoading]);
 
   const cardStyles = {
     flex: 1,
@@ -149,7 +153,7 @@ function DueTodayLeads({ data }) {
   const handleCloseDialog = () => setDialogOpen(false);
 
   const previewLead = dueTodayLeads[0];
-  const followUpLabel = formatFollowUpLabel(getFollowUpTimestamp(previewLead));
+  const followUpLabel = previewLead ? formatFollowUpLabel(getFollowUpTimestamp(previewLead)) : "";
 
   return (
     <>
@@ -169,7 +173,7 @@ function DueTodayLeads({ data }) {
             fontSize="12px"
             sx={{ whiteSpace: "nowrap" }}
           >
-            {dueTodayLeads.length} due today
+            {isLoading ? "..." : `${dueTodayLeads.length} due today`}
           </Typography>
         </Box>
 
@@ -179,7 +183,9 @@ function DueTodayLeads({ data }) {
           color={titleColor}
           sx={{ whiteSpace: "nowrap" }}
         >
-          {previewLead
+          {isLoading
+            ? "..."
+            : previewLead
             ? getLeadTitle(previewLead)
             : "No leads due today"}
         </Typography>
@@ -218,7 +224,9 @@ function DueTodayLeads({ data }) {
           </Box>
         </Box>
         <Typography variant="caption" color={mutedText} mt={1} display="block">
-          {previewLead
+          {isLoading
+            ? "..."
+            : previewLead
             ? followUpLabel
             : "Leads with follow-ups due today will appear here."}
         </Typography>

@@ -110,6 +110,9 @@ function LeadDetailsModal({
             <strong>Source:</strong> {getField("source", "source")}
           </Typography>
           <Typography>
+            <strong>Lifecycle:</strong> {getField("lifecycle", "lifecycle")}
+          </Typography>
+          <Typography>
             <strong>Company:</strong> {getField("company", "company_name")}
           </Typography>
           <Typography>

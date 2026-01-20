@@ -24,6 +24,7 @@ const EMPTY_FORM = {
   title: "",
   status: null,
   source: "",
+  lifecycle: "",
   description: "",
   company_name: "",
   contact_first_name: "",
@@ -100,7 +101,7 @@ const filterAssignableEmployees = (allEmployees = [], currentUserId = null, allo
 
 export default function EditLeadModal({ open, leadId, lead: initialLead, onClose, onSuccess }) {
   const [formData, setFormData] = useState(EMPTY_FORM);
-  const [meta, setMeta] = useState({ status: [], source: [] });
+  const [meta, setMeta] = useState({ status: [], source: [], lifecycle: [] });
   const [employees, setEmployees] = useState([]);
   const [loadingLead, setLoadingLead] = useState(false);
   const [isDataLoaded, setIsDataLoaded] = useState(false);
@@ -111,7 +112,7 @@ export default function EditLeadModal({ open, leadId, lead: initialLead, onClose
   useEffect(() => {
     if (!open) {
       setFormData(EMPTY_FORM);
-      setMeta({ status: [], source: [] });
+      setMeta({ status: [], source: [], lifecycle: [] });
       setEmployees([]);
       setIsDataLoaded(false);
       setLoadingLead(false);
@@ -129,6 +130,7 @@ export default function EditLeadModal({ open, leadId, lead: initialLead, onClose
       setMeta({
         status: cachedData?.statuses || [],
         source: cachedData?.sources || [],
+        lifecycle: cachedData?.lifecycles || [],
       });
 
       const employeePayload = parseEmployeesPayload(cachedData?.employees);
@@ -340,6 +342,7 @@ if (availableEmployees.length > 0 && finalAssignedTo) {
         title: leadPayload.title || leadPayload.leadTitle || "",
         status: statusId,
         source: leadPayload.source || "",
+        lifecycle: leadPayload.lifecycle || "",
         description: leadPayload.description || "",
         company_name: leadPayload.company_name || leadPayload.company || "",
         contact_first_name:
@@ -397,6 +400,9 @@ if (availableEmployees.length > 0 && finalAssignedTo) {
         const apiSources =
           (Array.isArray(apiLead?.sources) && apiLead.sources) ||
           (Array.isArray(apiLead?.data?.sources) && apiLead.data.sources);
+        const apiLifecycles =
+          (Array.isArray(apiLead?.lifecycles) && apiLead.lifecycles) ||
+          (Array.isArray(apiLead?.data?.lifecycles) && apiLead.data.lifecycles);
         const apiEmployeesRaw =
           (Array.isArray(apiLead?.employees) && apiLead.employees) ||
           (Array.isArray(apiLead?.users) && apiLead.users) ||
@@ -408,6 +414,9 @@ if (availableEmployees.length > 0 && finalAssignedTo) {
         }
         if (apiSources) {
           setMeta((prev) => ({ ...prev, source: apiSources }));
+        }
+        if (apiLifecycles) {
+          setMeta((prev) => ({ ...prev, lifecycle: apiLifecycles }));
         }
         if (apiEmployeesRaw) {
           const parsedEmployees = parseEmployeesPayload(apiEmployeesRaw);
@@ -467,6 +476,7 @@ if (availableEmployees.length > 0 && finalAssignedTo) {
       title: formData.title.trim(),
       status: formData.status,
       source: formData.source?.trim() || "",
+      lifecycle: formData.lifecycle?.trim() || "",
       description: formData.description?.trim() || "",
       company_name: formData.company_name?.trim() || "",
       contact_first_name: formData.contact_first_name.trim(),
@@ -543,6 +553,7 @@ if (availableEmployees.length > 0 && finalAssignedTo) {
           title: updatedLead.title || formData.title,
           status: updatedLead.status || formData.status,
           source: updatedLead.source || formData.source,
+          lifecycle: updatedLead.lifecycle || formData.lifecycle,
           description: updatedLead.description || formData.description,
           company_name:
             updatedLead.company_name || formData.company_name,

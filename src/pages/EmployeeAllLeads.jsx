@@ -95,6 +95,7 @@ const ALL_COLUMNS = [
   { key: "followupStatus", label: "Follow-up Status" },
   { key: "isActive", label: "Active" },
   { key: "source", label: "Source" },
+  { key: "lifecycle", label: "Lifecycle" },
   { key: "description", label: "Description" },
   { key: "company", label: "Company" },
   { key: "firstName", label: "First Name" },
@@ -136,6 +137,8 @@ export default function EmployeeAllLeads() {
   const [leads, setLeads] = useState([]);
   const [q, setQ] = useState("");
   const [statusFilter, setStatusFilter] = useState("ALL");
+  const [assignedFilter, setAssignedFilter] = useState("All");
+  const [followUpFilter, setFollowUpFilter] = useState("All");
   const [anchorEl, setAnchorEl] = useState(null);
   const [visibleColumns, setVisibleColumns] = useState(() => {
     const stored = JSON.parse(localStorage.getItem("leadColumns")) || DEFAULT_COLUMNS;
@@ -1152,6 +1155,8 @@ export default function EmployeeAllLeads() {
         return lead.follow_up_status || lead.followupStatus || "";
       case "source":
         return lead.source || "";
+      case "lifecycle":
+        return lead.lifecycle || "";
       case "description":
         return lead.description || "";
       case "company":
@@ -1172,15 +1177,85 @@ export default function EmployeeAllLeads() {
   };
 
   const getEmployeeName = (assignedTo) => {
-    // For employees, assigned_to should always be themselves
-    const storedUser = localStorage.getItem("user");
-    if (storedUser) {
-      const userData = JSON.parse(storedUser);
-      const firstName = userData.first_name || userData.firstName || "";
-      const lastName = userData.last_name || userData.lastName || "";
-      return `${firstName} ${lastName}`.trim() || "Me";
+    // Handle null, undefined, empty string, or "None"
+    if (!assignedTo && assignedTo !== 0) {
+      return "None";
     }
-    return "Me";
+
+    // If assigned_to is an object with user_details, extract name directly from it
+    if (typeof assignedTo === "object" && assignedTo !== null) {
+      // Check if user_details exists with first_name and last_name
+      if (assignedTo.user_details) {
+        const firstName =
+          assignedTo.user_details.first_name ||
+          assignedTo.user_details.firstName ||
+          "";
+        const lastName =
+          assignedTo.user_details.last_name ||
+          assignedTo.user_details.lastName ||
+          "";
+        const name = `${firstName} ${lastName}`.trim();
+        if (name) {
+          return name;
+        }
+      }
+
+      // Fallback: try to extract ID for lookup
+      const assignedToId =
+        assignedTo.id || assignedTo.pk || assignedTo.uuid || null;
+      if (!assignedToId) {
+        return "None";
+      }
+
+      // Try to find in employees array from cache
+      const cachedData = getCachedLeadData();
+      const employees = cachedData?.employees || [];
+      if (employees && employees.length > 0) {
+        const assignedToIdStr = String(assignedToId);
+        const emp = employees.find((e) => {
+          const empId = e.id || e.pk || e.uuid;
+          if (!empId) return false;
+          const empIdStr = String(empId);
+          return empIdStr === assignedToIdStr;
+        });
+
+        if (emp) {
+          const firstName = emp.firstName || emp.first_name || "";
+          const lastName = emp.lastName || emp.last_name || "";
+          const name = `${firstName} ${lastName}`.trim();
+          if (name) {
+            return name;
+          }
+        }
+      }
+
+      // If no user_details and not found in employees, return "None"
+      return "None";
+    }
+
+    // If assignedTo is just an ID (string or number), try to find in employees array from cache
+    const assignedToId = assignedTo;
+    const cachedData = getCachedLeadData();
+    const employees = cachedData?.employees || [];
+    if (employees && employees.length > 0) {
+      const assignedToIdStr = String(assignedToId);
+      const emp = employees.find((e) => {
+        const empId = e.id || e.pk || e.uuid;
+        if (!empId) return false;
+        const empIdStr = String(empId);
+        return empIdStr === assignedToIdStr;
+      });
+
+      if (emp) {
+        const firstName = emp.firstName || emp.first_name || "";
+        const lastName = emp.lastName || emp.last_name || "";
+        const name = `${firstName} ${lastName}`.trim();
+        return name || "None";
+      }
+    }
+
+    // If not found, return "None"
+    return "None";
   };
 
   const handleDeleteLead = async (id) => {
@@ -1305,6 +1380,49 @@ export default function EmployeeAllLeads() {
     localStorage.setItem("leadColumns", JSON.stringify([]));
   };
 
+  const normalizeFollowUpDate = (value) => {
+    if (!value) return "None";
+    const parsed = new Date(value);
+    if (Number.isNaN(parsed.getTime())) return "None";
+    return parsed.toISOString().split("T")[0];
+  };
+
+  const assignedFilterOptions = useMemo(() => {
+    const options = new Map();
+    options.set("All", { value: "All", label: "All" });
+    options.set("None", { value: "None", label: "None" });
+
+    leads.forEach((lead) => {
+      const name = getEmployeeName(lead.assigned_to || lead.assignedTo);
+      if (name && name !== "None") {
+        options.set(name, { value: name, label: name });
+      }
+    });
+
+    return Array.from(options.values());
+  }, [leads]);
+
+  const followUpFilterOptions = useMemo(() => {
+    const options = new Map();
+    options.set("All", { value: "All", label: "All" });
+    options.set("None", { value: "None", label: "None" });
+
+    leads.forEach((lead) => {
+      const rawFollowUp = lead.follow_up_at || lead.followUpAt;
+      const normalized = normalizeFollowUpDate(rawFollowUp);
+      if (normalized !== "None") {
+        const label = new Date(rawFollowUp).toLocaleDateString("en-US", {
+          year: "numeric",
+          month: "short",
+          day: "numeric",
+        });
+        options.set(normalized, { value: normalized, label });
+      }
+    });
+
+    return Array.from(options.values());
+  }, [leads]);
+
   // Filter logic
   const filteredLeads = useMemo(() => {
     return leads.filter((lead) => {
@@ -1319,6 +1437,35 @@ export default function EmployeeAllLeads() {
           return false;
         }
       }
+
+      // ASSIGNED TO FILTER
+      if (assignedFilter !== "All") {
+        const assignedName = getEmployeeName(lead.assigned_to || lead.assignedTo);
+        if (assignedFilter === "None") {
+          if (assignedName !== "None") {
+            return false;
+          }
+        } else {
+          if (assignedName !== assignedFilter) {
+            return false;
+          }
+        }
+      }
+
+      // FOLLOW-UP AT FILTER
+      if (followUpFilter !== "All") {
+        const rawFollowUp = lead.follow_up_at || lead.followUpAt;
+        const normalized = normalizeFollowUpDate(rawFollowUp);
+        if (followUpFilter === "None") {
+          if (normalized !== "None") {
+            return false;
+          }
+        } else {
+          if (normalized !== followUpFilter) {
+            return false;
+          }
+        }
+      }
   
       // SEARCH FILTER (optional)
       if (q && !lead.title?.toLowerCase().includes(q.toLowerCase())) {
@@ -1327,7 +1474,7 @@ export default function EmployeeAllLeads() {
   
       return true;
     });
-  }, [leads, statusFilter, q]);
+  }, [leads, statusFilter, assignedFilter, followUpFilter, q]);
   
 
   return (
@@ -1461,7 +1608,7 @@ export default function EmployeeAllLeads() {
       {/* Search & Filter */}
       <Box display="flex" gap={2} mt={2} mb={2}>
         <TextField
-          placeholder="Search by title, name, email, company, source, description, or date..."
+          placeholder="Search by title, name, email, company, source, lifecycle, description, or date..."
           value={q}
           onChange={(e) => setQ(e.target.value)}
           size="small"
@@ -1486,6 +1633,34 @@ export default function EmployeeAllLeads() {
   </Select>
 </FormControl>
 
+        <FormControl size="small" sx={{ minWidth: 180 }}>
+          <InputLabel>Assigned To</InputLabel>
+          <Select
+            label="Assigned To"
+            value={assignedFilter}
+            onChange={(e) => setAssignedFilter(e.target.value)}
+          >
+            {assignedFilterOptions.map((option) => (
+              <MenuItem key={option.value} value={option.value}>
+                {option.label}
+              </MenuItem>
+            ))}
+          </Select>
+        </FormControl>
+        <FormControl size="small" sx={{ minWidth: 180 }}>
+          <InputLabel>Follow-up At</InputLabel>
+          <Select
+            label="Follow-up At"
+            value={followUpFilter}
+            onChange={(e) => setFollowUpFilter(e.target.value)}
+          >
+            {followUpFilterOptions.map((option) => (
+              <MenuItem key={option.value} value={option.value}>
+                {option.label}
+              </MenuItem>
+            ))}
+          </Select>
+        </FormControl>
       </Box>
 
       {/* Leads Table */}
@@ -1514,7 +1689,7 @@ export default function EmployeeAllLeads() {
                 <TableCell sx={tableHeaderCellStyles}>LinkedIn</TableCell>
               )}
               {visibleColumns.includes("status") && (
-                <TableCell sx={tableHeaderCellStyles}>Status</TableCell>
+                <TableCell sx={tableHeaderCellStyles}>Lead Status</TableCell>
               )}
               {visibleColumns.includes("assignedTo") && (
                 <TableCell sx={tableHeaderCellStyles}>Assigned To</TableCell>
@@ -1532,6 +1707,9 @@ export default function EmployeeAllLeads() {
               )}
               {visibleColumns.includes("source") && (
                 <TableCell sx={tableHeaderCellStyles}>Source</TableCell>
+              )}
+              {visibleColumns.includes("lifecycle") && (
+                <TableCell sx={tableHeaderCellStyles}>Lifecycle</TableCell>
               )}
               {visibleColumns.includes("description") && (
                 <TableCell sx={tableHeaderCellStyles}>Description</TableCell>
@@ -1804,6 +1982,11 @@ export default function EmployeeAllLeads() {
                     {visibleColumns.includes("source") && (
                       <TableCell>
                         {getLeadFieldValue(lead, "source") || "-"}
+                      </TableCell>
+                    )}
+                    {visibleColumns.includes("lifecycle") && (
+                      <TableCell>
+                        {getLeadFieldValue(lead, "lifecycle") || "-"}
                       </TableCell>
                     )}
 

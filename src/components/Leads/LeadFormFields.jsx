@@ -24,6 +24,7 @@ const LeadFormFields = ({
 }) => {
   const statuses = normalizeArray(meta.status);
   const sources = normalizeArray(meta.source);
+  const lifecycles = normalizeArray(meta.lifecycle);
   const employeeList = normalizeArray(employees);
 
   const getEmployeeIdentifier = (emp) => {
@@ -92,7 +93,7 @@ const LeadFormFields = ({
           />
         </Box>
         <Box flex={1} minWidth={200}>
-          <RequiredLabel text="Status" />
+          <RequiredLabel text="Lead Status" />
           <TextField
             sx={MuiSelectPadding}
             select
@@ -173,6 +174,45 @@ const LeadFormFields = ({
                 return (
                   <MenuItem key={String(key)} value={value}>
                     {value || "Unnamed Source"}
+                  </MenuItem>
+                );
+              })
+            )}
+          </TextField>
+        </Box>
+        <Box flex={1} minWidth={200}>
+          <Typography fontWeight="bold" sx={{ mb: 0.5 }}>
+            Lifecycle
+          </Typography>
+          <TextField
+            sx={MuiSelectPadding}
+            select
+            fullWidth
+            name="lifecycle"
+            value={formData.lifecycle === undefined ? "" : formData.lifecycle}
+            onChange={onChange}
+            disabled={loadingMeta}
+            SelectProps={{
+              displayEmpty: true,
+              renderValue: (val) => (val === "" || val === null ? "None" : val),
+            }}
+          >
+            <MenuItem value="">None</MenuItem>
+            {lifecycles.length === 0 && !loadingMeta ? (
+              <MenuItem value="" disabled>
+                No lifecycles available
+              </MenuItem>
+            ) : (
+              lifecycles.map((item, index) => {
+                const value =
+                  typeof item === "string" ? item : item.name || item.lifecycle || "";
+                const key =
+                  (typeof item === "object" &&
+                    (item.id || item.pk || item.uuid || item.name)) ||
+                  index;
+                return (
+                  <MenuItem key={String(key)} value={value}>
+                    {value || "Unnamed Lifecycle"}
                   </MenuItem>
                 );
               })

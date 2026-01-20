@@ -95,6 +95,7 @@ const ALL_COLUMNS = [
   { key: "followupStatus", label: "Follow-up Status" },
   { key: "isActive", label: "Active" },
   { key: "source", label: "Source" },
+  { key: "lifecycle", label: "Lifecycle" },
   { key: "description", label: "Description" },
   { key: "company", label: "Company" },
   { key: "firstName", label: "First Name" },
@@ -109,6 +110,7 @@ const DEFAULT_COLUMNS = [
   "linkedIn",
   "status",
   "source",
+  "lifecycle",
   "assignedTo",
   "followUpAt",
   "followupStatus",
@@ -143,7 +145,47 @@ export default function AllLeads() {
   const location = useLocation();
   // Try to get cached leads immediately for instant display
   const cachedData = getCachedLeadData();
-  const initialLeads = cachedData?.leads ? cachedData.leads : [];
+  // Filter cached leads by user role for initial display
+  let initialLeads = [];
+  if (cachedData?.leads && cachedData.leads.length > 0) {
+    // Get current user to filter leads
+    const storedUser = localStorage.getItem("user");
+    if (storedUser) {
+      try {
+        const userData = JSON.parse(storedUser);
+        const currentUserId = userData.id || userData.pk || userData.uuid;
+        const isCurrentUserAdmin =
+          userData.is_staff ||
+          userData.is_admin ||
+          userData.is_superuser ||
+          userData.role === 0 ||
+          userData.role === "0";
+        
+        if (isCurrentUserAdmin) {
+          // Admin sees all leads
+          initialLeads = cachedData.leads;
+        } else if (currentUserId) {
+          // Employee sees only their own leads
+          initialLeads = cachedData.leads.filter((lead) => {
+            let assignedTo = lead.assigned_to || lead.assignedTo || lead.assigned_to_id || lead.assignedToId;
+            if (assignedTo && typeof assignedTo === "object" && assignedTo !== null) {
+              assignedTo = assignedTo.id || assignedTo.pk || assignedTo.uuid || assignedTo;
+            }
+            if (!assignedTo && assignedTo !== 0) return false;
+            const assignedToStr = String(assignedTo).trim();
+            const currentUserIdStr = String(currentUserId).trim();
+            return assignedToStr === currentUserIdStr || 
+                   (Number(assignedTo) === Number(currentUserId) && !isNaN(Number(assignedTo)) && !isNaN(Number(currentUserId)));
+          });
+        }
+      } catch (e) {
+        console.error("Error parsing user data for initial leads:", e);
+        initialLeads = cachedData.leads;
+      }
+    } else {
+      initialLeads = cachedData.leads;
+    }
+  }
   const [leads, setLeads] = useState(initialLeads);
   const [q, setQ] = useState("");
   const [statusFilter, setStatusFilter] = useState("ALL");
@@ -163,7 +205,9 @@ export default function AllLeads() {
   const [actionLoading, setActionLoading] = useState(false);
   const [actionMessage, setActionMessage] = useState("");
   // Only show loading spinner if there is no cache
-  const [isPageLoading, setIsPageLoading] = useState(initialLeads.length === 0);
+  const [isPageLoading, setIsPageLoading] = useState(false);
+  // Track API call to prevent duplicates
+  const apiCallMadeRef = useRef({ pathname: null, called: false, inProgress: false });
   // Lead actions menu
   const [actionAnchorEl, setActionAnchorEl] = useState(null);
   const [menuLead, setMenuLead] = useState(null);
@@ -211,25 +255,21 @@ export default function AllLeads() {
     };
   }, [focusLeadId, leads]);
 
-  // Fetch statuses and employees from the single /api/leads response - use cache first for instant loading
+  // Fetch statuses and employees from cache first for instant loading
   useEffect(() => {
-    const fetchStatusesAndEmployees = async () => {
-      // Try cached data first
-      const cachedData = getCachedLeadData();
+    const cachedData = getCachedLeadData();
 
-      if (cachedData?.statuses) {
-        console.log("Using cached statuses for instant loading");
-        setStatuses(cachedData.statuses);
-      }
+    if (cachedData?.statuses && cachedData.statuses.length > 0) {
+      console.log("Using cached statuses for instant loading");
+      setStatuses(cachedData.statuses);
+    }
 
-      if (cachedData?.employees) {
-        console.log("Using cached employees for instant loading");
-        setEmployees(cachedData.employees);
-      }
+    if (cachedData?.employees && cachedData.employees.length > 0) {
+      console.log("Using cached employees for instant loading");
+      setEmployees(cachedData.employees);
+    }
 
-      // If no cache, they will be loaded from the /api/leads response in fetchLeads
-    };
-    fetchStatusesAndEmployees();
+    // If no cache, they will be loaded from the /api/leads response in fetchLeads
   }, []);
 
   useEffect(() => {
@@ -363,17 +403,17 @@ export default function AllLeads() {
         }
       };
 
-      // Try cached data first for instant display, but always fetch fresh data from API
+      // Try cached data first for instant display
       const cachedData = getCachedLeadData();
-      if (cachedData?.leads) {
+      if (cachedData?.leads && cachedData.leads.length > 0) {
         console.log("=== USING CACHED LEADS FOR INSTANT DISPLAY ===");
         console.log("Cached leads count:", cachedData.leads.length);
 
         // Also set statuses and employees from cache if available
-        if (cachedData.statuses) {
+        if (cachedData.statuses && cachedData.statuses.length > 0) {
           setStatuses(cachedData.statuses);
         }
-        if (cachedData.employees) {
+        if (cachedData.employees && cachedData.employees.length > 0) {
           setEmployees(cachedData.employees);
         }
 
@@ -383,10 +423,13 @@ export default function AllLeads() {
           filteredLeads.length
         );
 
+        // Show cached data immediately
         setLeads(filteredLeads);
-        // Only hide loading if there was no cache
-        if (initialLeads.length === 0) setIsPageLoading(false);
+        setIsPageLoading(false);
         // Continue to fetch fresh data from API (don't return early)
+      } else {
+        // No cache available, show loading
+        setIsPageLoading(true);
       }
 
       // Always fetch fresh data from /api/leads API
@@ -465,6 +508,7 @@ export default function AllLeads() {
 
         setLeads(filteredLeads);
         setIsPageLoading(false);
+        apiCallMadeRef.current.inProgress = false;
 
         // Update cache with fresh leads data, statuses, and employees (store all leads, filter on display)
         // Use user-specific cache key
@@ -501,8 +545,15 @@ export default function AllLeads() {
       } catch (err) {
         console.error("Failed to fetch leads:", err);
         notifyError("Failed to load leads");
-        setLeads([]);
+        // Only clear leads if there's no cache
+        const cachedData = getCachedLeadData();
+        if (!cachedData?.leads || cachedData.leads.length === 0) {
+          setLeads([]);
+        }
         setIsPageLoading(false);
+        apiCallMadeRef.current.inProgress = false;
+        // Reset called flag on error to allow retry
+        apiCallMadeRef.current.called = false;
       }
     };
 
@@ -1034,6 +1085,8 @@ export default function AllLeads() {
         return lead.follow_up_status || lead.followupStatus || "";
       case "source":
         return lead.source || "";
+      case "lifecycle":
+        return lead.lifecycle || "";
       case "description":
         return lead.description || "";
       case "company":
@@ -1564,7 +1617,7 @@ export default function AllLeads() {
       {/* Search & Filter */}
       <Box display="flex" gap={2} mt={2} mb={2}>
         <TextField
-          placeholder="Search by title, name, email, company, assigned to, source, description, or date..."
+          placeholder="Search by title, name, email, company, assigned to, source, lifecycle, description, or date..."
           value={q}
           onChange={(e) => setQ(e.target.value)}
           size="small"
@@ -1642,7 +1695,7 @@ export default function AllLeads() {
                 <TableCell sx={tableHeaderCellStyles}>LinkedIn</TableCell>
               )}
               {visibleColumns.includes("status") && (
-                <TableCell sx={tableHeaderCellStyles}>Status</TableCell>
+                <TableCell sx={tableHeaderCellStyles}>Lead Status</TableCell>
               )}
               {visibleColumns.includes("assignedTo") && (
                 <TableCell sx={tableHeaderCellStyles}>Assigned To</TableCell>
@@ -1657,6 +1710,9 @@ export default function AllLeads() {
               )}
               {visibleColumns.includes("source") && (
                 <TableCell sx={tableHeaderCellStyles}>Source</TableCell>
+              )}
+              {visibleColumns.includes("lifecycle") && (
+                <TableCell sx={tableHeaderCellStyles}>Lifecycle</TableCell>
               )}
               {visibleColumns.includes("description") && (
                 <TableCell sx={tableHeaderCellStyles}>Description</TableCell>
@@ -2012,6 +2068,11 @@ export default function AllLeads() {
                     {visibleColumns.includes("source") && (
                       <TableCell>
                         {getLeadFieldValue(lead, "source") || "-"}
+                      </TableCell>
+                    )}
+                    {visibleColumns.includes("lifecycle") && (
+                      <TableCell>
+                        {getLeadFieldValue(lead, "lifecycle") || "-"}
                       </TableCell>
                     )}
 
