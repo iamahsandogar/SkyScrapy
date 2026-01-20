@@ -21,25 +21,31 @@ export default function ChartBoxContent({ data }) {
   const totalLeadsCount = data?.total_leads_count || 0;
 
   // Prepare table data with status name, count, and percentage
-  const tableData = useMemo(() => {
-    if (!leadStatuses || leadStatuses.length === 0) return [];
-    
-    const safeTotal = totalLeadsCount > 0 ? totalLeadsCount : 1;
-    
-    return leadStatuses
-      .map((status) => {
-        const statusName = status.status_name || status.name || "Unknown";
-        const count = status.count || 0;
-        const percentage = Math.round((count / safeTotal) * 100);
-        
-        return {
-          name: statusName,
-          count: count,
-          percentage: percentage,
-        };
-      })
-      .sort((a, b) => b.count - a.count); // Sort by count descending
-  }, [leadStatuses, totalLeadsCount]);
+const tableData = useMemo(() => {
+  if (!leadStatuses || leadStatuses.length === 0) return [];
+
+  const safeTotal = totalLeadsCount > 0 ? totalLeadsCount : 1;
+
+  return leadStatuses
+    .map((status) => {
+      const statusName =
+        status.status__name ||
+        status.status_name ||
+        status.name ||
+        "Unknown";
+
+      const count = Number(status.count) || 0;
+      const percentage = Math.round((count / safeTotal) * 100);
+
+      return {
+        name: statusName,
+        count,
+        percentage,
+      };
+    })
+    .sort((a, b) => b.count - a.count);
+}, [leadStatuses, totalLeadsCount]);
+
 
   // Check if data is still loading
   const isLoading = data === null || data === undefined;

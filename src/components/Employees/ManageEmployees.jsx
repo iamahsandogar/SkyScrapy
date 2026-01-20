@@ -380,17 +380,9 @@ export default function ManageEmployees() {
     if (!pk) return;
     const count = leadCounts[pk] || 0;
     
-    if (count === 0) {
-      // Instant delete
-      if (!window.confirm("Are you sure you want to delete this employee?")) return; // Minimal safety for delete
-      
-      setLoadingAction({ id: pk, type: 'delete' });
-      await performDelete(employee);
-      setLoadingAction({ id: null, type: null });
-      return;
-    }
-    
-    // Show dialog with lead count - if leads > 0, we block delete
+    // Always show beautiful confirmation dialog instead of window.confirm
+    // If leads > 0, the dialog will show "Deletion Blocked" state
+    // If leads == 0, the dialog will show "Confirm Delete" state
     setConfirmDialog({
       open: true,
       action: "delete",
