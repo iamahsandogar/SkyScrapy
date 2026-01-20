@@ -142,6 +142,8 @@ const resolveLeadId = (lead) => {
   return lead.id ?? lead.pk ?? lead.uuid ?? lead.lead_id ?? lead.leadId ?? null;
 };
 
+import ConfirmationDialog from "../components/global/ConfirmationDialog";
+
 export default function AllLeads() {
   const location = useLocation();
   // Try to get cached leads immediately for instant display
@@ -214,6 +216,7 @@ export default function AllLeads() {
   const [menuLead, setMenuLead] = useState(null);
   const [mobileMenuAnchorEl, setMobileMenuAnchorEl] = useState(null);
   const [deleteDialog, setDeleteDialog] = useState({ open: false, lead: null });
+  const [confirmConvertDialog, setConfirmConvertDialog] = useState({ open: false, lead: null });
   const [editDialog, setEditDialog] = useState({ open: false, leadId: null, lead: null });
   // Track individual dropdown loading states
   const [statusUpdatingLeadId, setStatusUpdatingLeadId] = useState(null);
@@ -1026,6 +1029,51 @@ export default function AllLeads() {
       })
     );
     console.log("📤 Directly dispatched leadCacheUpdated event from handleLeadUpdated");
+  };
+
+  const handleConvertToProject = (lead) => {
+    setConfirmConvertDialog({ open: true, lead });
+  };
+
+  const executeConvertToProject = async () => {
+    const lead = confirmConvertDialog.lead;
+    if (!lead) return;
+
+    const leadId = resolveLeadId(lead);
+    if (!leadId) {
+        notifyError("Invalid lead ID");
+        setConfirmConvertDialog({ open: false, lead: null });
+        return;
+    }
+
+    try {
+      await apiRequest(`/api/leads/${leadId}/convert-to-project/`, {
+        method: "POST",
+        body: JSON.stringify({ is_project: true }),
+      });
+      notifySuccess("Lead converted to project successfully");
+      
+      // Remove from list
+      setLeads((prev) => prev.filter((l) => resolveLeadId(l) !== leadId));
+      
+      // Update cache
+      removeLeadFromCache(lead);
+      
+      // Redirect to Projects page
+      navigate("/management/projects");
+
+    } catch (err) {
+      console.error("Failed to convert lead:", err);
+       if (err.status === 400) {
+        notifyError("Lead already converted or invalid request");
+      } else if (err.status === 403) {
+        notifyError("You are not authorized to perform this action");
+      } else {
+        notifyError("Failed to convert lead");
+      }
+    } finally {
+        setConfirmConvertDialog({ open: false, lead: null });
+    }
   };
 
   const handleOpenCreateLead = () => {
@@ -2218,7 +2266,7 @@ export default function AllLeads() {
           Edit
         </MenuItem>
 
-        {/* <MenuItem
+        <MenuItem
           onClick={() => {
             handleConvertToProject(menuLead);
             handleActionMenuClose();
@@ -2226,7 +2274,7 @@ export default function AllLeads() {
         >
           <AssignmentTurnedInIcon fontSize="small" sx={{ mr: 1 }} />
           Convert to Project
-        </MenuItem> */}
+        </MenuItem>
 
         <MenuItem
           onClick={() => {
@@ -2293,6 +2341,14 @@ export default function AllLeads() {
         lead={selectedLead}
         getEmployeeName={getEmployeeName}
         getStatusName={getStatusName}
+      />
+      <ConfirmationDialog
+        open={confirmConvertDialog.open}
+        title="Convert to Project"
+        content={`Are you sure you want to convert "${confirmConvertDialog.lead?.title}" to a project?`}
+        onConfirm={executeConvertToProject}
+        onCancel={() => setConfirmConvertDialog({ open: false, lead: null })}
+        confirmText="Convert"
       />
     </Box>
   );

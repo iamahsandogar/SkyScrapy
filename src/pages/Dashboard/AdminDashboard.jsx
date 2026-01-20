@@ -7,7 +7,7 @@ import Topbar from "../../components/global/Topbar";
 import UnreadNotesSummary from "../../components/Dashboard/UnreadNotesSummary";
 import ChartBox from "../../components/Dashboard/ChartBox";
 import Cards from "../../components/Dashboard/Cards";
-import { prefetchLeadData } from "../../utils/prefetchData";
+import { prefetchLeadData, getCachedLeadData } from "../../utils/prefetchData";
 import OverdueLeads from "../../components/Dashboard/OverdueLeads";
 import DueTodayLeads from "../../components/Dashboard/DueTodayLeads";
 import MonthlyRemindersCalendar from "../../components/Dashboard/MonthlyRemindersCalendar";
@@ -33,6 +33,24 @@ export default function AdminDashboard() {
         
         console.log("Dashboard API Response:", dashboardResponse);
         setEmployeeCount(dashboardResponse.employee_count);
+
+        // Fetch accurate employee count from /ui/employees/ to match Manage Employees
+        try {
+            // Try cache first
+            const cachedData = getCachedLeadData();
+            if (cachedData?.employees) {
+                setEmployeeCount(cachedData.employees.length);
+            }
+
+            // Always fetch fresh to ensure accuracy
+            const employeesData = await apiRequest("/ui/employees/");
+            const employeesList = employeesData?.employees || employeesData || [];
+            if (Array.isArray(employeesList)) {
+                setEmployeeCount(employeesList.length);
+            }
+        } catch (empErr) {
+            console.warn("Failed to fetch employees list separately:", empErr);
+        }
         
         if (dashboardResponse) {
           // Transform API response to expected format

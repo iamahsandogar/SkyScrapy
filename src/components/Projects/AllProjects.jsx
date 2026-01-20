@@ -7,77 +7,75 @@ import {
   TableContainer,
   TableHead,
   TableRow,
-  Button,
   Paper,
   TextField,
   IconButton,
-  Chip,
   MenuItem,
   Select,
   FormControl,
   InputLabel,
+  CircularProgress,
+  Menu
 } from "@mui/material";
-import CloudDownloadIcon from "@mui/icons-material/CloudDownload";
-import AddIcon from "@mui/icons-material/Add";
-import DeleteIcon from "@mui/icons-material/Delete";
-import EditIcon from "@mui/icons-material/Edit";
-import AssignmentTurnedInIcon from "@mui/icons-material/AssignmentTurnedIn";
 import { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import Topbar from "../global/Topbar";
-import { colors } from "../../design-system/tokens";
 import VisibilityIcon from "@mui/icons-material/Visibility";
-import ProjectDetailsModal from "./ProjectDetailsModal";
 import MoreHorizonIcon from "@mui/icons-material/MoreHoriz";
-import Menu from "@mui/material/Menu";
-
-const getChipStyles = (status) => {
-  switch (status) {
-    case "Completed":
-      return {
-        backgroundColor: colors.greenAccent[700],
-        color: colors.greenAccent[300],
-        border: `1px solid ${colors.greenAccent[400]}`,
-      };
-    case "Pending":
-      return {
-        backgroundColor: colors.yellowAccent[700],
-        color: colors.yellowAccent[300],
-        border: `1px solid ${colors.yellowAccent[400]}`,
-      };
-    case "Rejected":
-      return {
-        backgroundColor: colors.redAccent[700],
-        color: colors.redAccent[300],
-        border: `1px solid ${colors.redAccent[400]}`,
-      };
-    case "In Progress":
-      return {
-        backgroundColor: colors.blueAccent[700],
-        color: colors.blueAccent[300],
-        border: `1px solid ${colors.blueAccent[400]}`,
-      };
-    default:
-      return {
-        backgroundColor: colors.grey[700],
-        color: colors.grey[300],
-        border: `1px solid ${colors.grey[400]}`,
-      };
-  }
-};
+import UndoIcon from "@mui/icons-material/Undo";
+import ProjectDetailsModal from "./ProjectDetailsModal";
+import apiRequest from "../services/api";
+import { useNotification } from "../../contexts/NotificationContext";
+import ConfirmationDialog from "../global/ConfirmationDialog";
 
 export default function AllProjects() {
-  const [leads, setLeads] = useState([]);
   const [projects, setProjects] = useState([]);
+  const [loading, setLoading] = useState(true);
   const [q, setQ] = useState("");
   const [statusFilter, setStatusFilter] = useState("All");
-  const navigate = useNavigate();
   const [selectedProject, setSelectedProject] = useState(null);
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [anchorEl, setAnchorEl] = useState(null);
   const [menuProject, setMenuProject] = useState(null);
+  const [confirmRevertDialog, setConfirmRevertDialog] = useState({ open: false, project: null });
+  const { notifySuccess, notifyError } = useNotification();
+  const navigate = useNavigate();
 
   const open = Boolean(anchorEl);
+
+  const fetchProjects = async () => {
+    setLoading(true);
+    try {
+      console.log("Fetching projects from /api/leads/projects/...");
+      const data = await apiRequest("/api/leads/projects/");
+      console.log("Projects API Response:", data);
+
+      let projectsList = [];
+      if (Array.isArray(data)) {
+        projectsList = data;
+      } else if (data && Array.isArray(data.results)) {
+        projectsList = data.results;
+      } else if (data && Array.isArray(data.data)) {
+        projectsList = data.data;
+      } else if (data && Array.isArray(data.projects)) {
+        projectsList = data.projects;
+      } else if (data && Array.isArray(data.leads)) {
+        projectsList = data.leads;
+      }
+      
+      console.log("Parsed projects list:", projectsList);
+      setProjects(projectsList);
+    } catch (err) {
+      console.error("Failed to fetch projects:", err);
+      notifyError("Failed to fetch projects");
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    fetchProjects();
+  }, []);
 
   const handleMenuOpen = (event, project) => {
     setAnchorEl(event.currentTarget);
@@ -99,124 +97,68 @@ export default function AllProjects() {
     setIsModalOpen(false);
   };
 
-  // Load leads and projects from localStorage
-  useEffect(() => {
-    setLeads(JSON.parse(localStorage.getItem("leads")) || []);
-    setProjects(JSON.parse(localStorage.getItem("projects")) || []);
-  }, []);
-
-  const getEmployeeName = (assignedTo) => {
-    if (!assignedTo || assignedTo === "None") return "None";
-
-    const employees = JSON.parse(localStorage.getItem("employees")) || [];
-
-    const emp = employees.find((e) => String(e.id) === String(assignedTo));
-
-    return emp ? `${emp.firstName} ${emp.lastName}` : "None";
+  const handleRevertToLead = (project) => {
+    setConfirmRevertDialog({ open: true, project });
+    handleMenuClose();
   };
 
-  // Delete project
-  const handleDeleteProject = (id) => {
-    if (!confirm("Delete this project?")) return;
-    const next = projects.filter((p) => String(p.id) !== String(id));
-    localStorage.setItem("projects", JSON.stringify(next));
-    setProjects(next);
-  };
-
-  // Export leads CSV
-  const handleExportLeadsCSV = () => {
-    if (!leads.length) {
-      alert("No leads to export");
-      return;
+  const executeRevertToLead = async () => {
+    const project = confirmRevertDialog.project;
+    if (!project) return;
+    
+    try {
+      await apiRequest(`/api/leads/${project.id}/convert-to-project/`, {
+        method: "POST",
+        body: JSON.stringify({ is_project: false }),
+      });
+      notifySuccess("Project reverted to lead successfully");
+      // Remove from list immediately
+      setProjects((prev) => prev.filter((p) => p.id !== project.id));
+      // No need to call fetchProjects() as we just removed it
+      
+      // Redirect to All Leads page
+      navigate("/all-leads");
+    } catch (err) {
+      console.error("Failed to revert project:", err);
+      if (err.status === 400) {
+        notifyError("Project already reverted or invalid request");
+      } else if (err.status === 403) {
+        notifyError("You are not authorized to perform this action");
+      } else {
+        notifyError("Failed to revert project");
+      }
+    } finally {
+        setConfirmRevertDialog({ open: false, project: null });
     }
-    const keys = [
-      "id",
-      "title",
-      "status",
-      "source",
-      "description",
-      "followUpAt",
-      "followupStatus",
-      "assignedTo",
-      "company",
-      "firstName",
-      "lastName",
-      "email",
-      "phone",
-      "positionTitle",
-      "linkedIn",
-    ];
-    const rows = [keys.join(",")].concat(
-      leads.map((l) =>
-        keys
-          .map((k) => `"${(l[k] || "").toString().replace(/"/g, '""')}"`)
-          .join(",")
-      )
-    );
-    const blob = new Blob([rows.join("\n")], { type: "text/csv" });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement("a");
-    a.href = url;
-    a.download = "leads.csv";
-    a.click();
-    URL.revokeObjectURL(url);
   };
 
-  // Convert lead to project
-  const handleConvertToProject = (lead) => {
-    const newProject = {
-      id: Date.now(),
-      title: lead.title || `${lead.firstName} ${lead.lastName}`,
-      status: "Pending",
-      description: lead.description || "",
-      assignedTo: lead.assignedTo || "",
-      startDate: new Date().toISOString(),
-      endDate: "",
-    };
-
-    const updatedProjects = [...projects, newProject];
-    localStorage.setItem("projects", JSON.stringify(updatedProjects));
-    setProjects(updatedProjects);
-
-    const remainingLeads = leads.filter((l) => l.id !== lead.id);
-    localStorage.setItem("leads", JSON.stringify(remainingLeads));
-    setLeads(remainingLeads);
-
-    alert(
-      `Lead "${
-        lead.title || lead.firstName
-      }" converted to project successfully!`
-    );
-    navigate(`/edit-project/${newProject.id}`);
-  };
-
-  const filteredLeads = leads.filter((l) => {
-    const qLower = q.trim().toLowerCase();
-    if (statusFilter !== "All") {
-      if (statusFilter === "None" && l.status && l.status !== "None")
-        return false;
-      if (statusFilter !== "None" && l.status !== statusFilter) return false;
+  // Helper to safely get assigned user name
+  const getAssignedName = (project) => {
+    if (!project.assigned_to) return "None";
+    // Check if assigned_to is an object with user details
+    if (typeof project.assigned_to === 'object') {
+        if (project.assigned_to.user_details) {
+            const { first_name, last_name, email } = project.assigned_to.user_details;
+            return `${first_name} ${last_name}`.trim() || email || "Unknown";
+        }
+        if (project.assigned_to.first_name || project.assigned_to.last_name) {
+             return `${project.assigned_to.first_name} ${project.assigned_to.last_name}`.trim();
+        }
+        return project.assigned_to.email || "Unknown";
     }
-    if (!qLower) return true;
-    return (
-      (l.title || "").toLowerCase().includes(qLower) ||
-      (l.firstName || "").toLowerCase().includes(qLower) ||
-      (l.lastName || "").toLowerCase().includes(qLower) ||
-      (l.email || "").toLowerCase().includes(qLower) ||
-      (l.company || "").toLowerCase().includes(qLower) ||
-      (l.followUpAt
-        ? new Date(l.followUpAt).toLocaleDateString().includes(qLower)
-        : false)
-    );
-  });
+    return project.assigned_to; // If it's just an ID or string
+  };
 
   const filteredProjects = projects.filter((p) => {
     const qLower = q.trim().toLowerCase();
-    if (statusFilter !== "All" && p.status !== statusFilter) return false;
+    const pStatus = (typeof p.status === 'object' && p.status) ? p.status.name : p.status;
+    if (statusFilter !== "All" && pStatus !== statusFilter) return false;
     if (!qLower) return true;
+    const title = p.title || "";
+    const assigned = getAssignedName(p);
     return (
-      (p.title || "").toLowerCase().includes(qLower) ||
-      (p.assignedTo || "").toLowerCase().includes(qLower)
+      title.toLowerCase().includes(qLower) ||
+      assigned.toLowerCase().includes(qLower)
     );
   });
 
@@ -226,33 +168,17 @@ export default function AllProjects() {
         <Typography variant="h5" fontWeight="bold">
           All Projects
         </Typography>
-        {/* <Box display="flex" gap={2}>
-          <Button
-            variant="outlined"
-            startIcon={<CloudDownloadIcon />}
-            onClick={handleExportLeadsCSV}
-          >
-            Export Leads CSV
-          </Button>
-          <Button
-            variant="contained"
-            startIcon={<AddIcon />}
-            onClick={() => navigate("/create-lead")}
-          >
-            Add New Lead
-          </Button>
-        </Box> */}
       </Topbar>
 
       {/* Search & Filter */}
       <Box display="flex" gap={2} mt={2} mb={2}>
         <TextField
-          placeholder="Search by title, name, or assigned..."
+          placeholder="Search by title or assigned..."
           value={q}
           onChange={(e) => setQ(e.target.value)}
           size="small"
         />
-        <FormControl size="small">
+        <FormControl size="small" sx={{ minWidth: 120 }}>
           <InputLabel>Status</InputLabel>
           <Select
             label="Status"
@@ -260,19 +186,16 @@ export default function AllProjects() {
             onChange={(e) => setStatusFilter(e.target.value)}
           >
             <MenuItem value="All">All</MenuItem>
-            <MenuItem value="None">None</MenuItem>
+            {/* We might need to fetch statuses or just hardcode common ones */}
+            <MenuItem value="New">New</MenuItem>
             <MenuItem value="In Progress">In Progress</MenuItem>
-            <MenuItem value="Pending">Pending</MenuItem>
             <MenuItem value="Completed">Completed</MenuItem>
-            <MenuItem value="Rejected">Rejected</MenuItem>
+             <MenuItem value="Pending">Pending</MenuItem>
           </Select>
         </FormControl>
       </Box>
 
       {/* Projects Table */}
-      <Typography variant="h6" mt={2} mb={1}>
-        Projects
-      </Typography>
       <TableContainer
         component={Paper}
         sx={{ borderRadius: "12px", boxShadow: "none" }}
@@ -287,9 +210,15 @@ export default function AllProjects() {
             </TableRow>
           </TableHead>
           <TableBody>
-            {filteredProjects.length === 0 ? (
+            {loading ? (
+                <TableRow>
+                    <TableCell colSpan={4} align="center">
+                        <CircularProgress />
+                    </TableCell>
+                </TableRow>
+            ) : filteredProjects.length === 0 ? (
               <TableRow>
-                <TableCell colSpan={6} align="center">
+                <TableCell colSpan={4} align="center">
                   No projects found.
                 </TableCell>
               </TableRow>
@@ -300,11 +229,11 @@ export default function AllProjects() {
                     <Typography fontWeight={700}>{proj.title}</Typography>
                   </TableCell>
                   <TableCell>
-                    {proj.description.length > 50
+                    {proj.description && proj.description.length > 50
                       ? proj.description.slice(0, 50) + "..."
-                      : proj.description}
+                      : proj.description || "-"}
                   </TableCell>
-                  <TableCell>{getEmployeeName(proj.assignedTo)}</TableCell>
+                  <TableCell>{getAssignedName(proj)}</TableCell>
 
                   <TableCell>
                     <IconButton
@@ -342,25 +271,14 @@ export default function AllProjects() {
             View
           </MenuItem>
 
-          {/* <MenuItem
-            onClick={() => {
-              navigate(`/edit-project/${menuProject.id}`);
-              handleMenuClose();
-            }}
-          >
-            <EditIcon fontSize="small" sx={{ mr: 1 }} />
-            Edit
-          </MenuItem> */}
-
           <MenuItem
             onClick={() => {
-              handleDeleteProject(menuProject.id);
-              handleMenuClose();
+              handleRevertToLead(menuProject);
             }}
-            sx={{ color: "error.main" }}
+            sx={{ color: "warning.main" }}
           >
-            <DeleteIcon fontSize="small" sx={{ mr: 1 }} />
-            Delete
+            <UndoIcon fontSize="small" sx={{ mr: 1 }} />
+            Revert to Lead
           </MenuItem>
         </Menu>
       </TableContainer>
@@ -368,7 +286,16 @@ export default function AllProjects() {
         open={isModalOpen}
         onClose={handleCloseModal}
         project={selectedProject}
-        getEmployeeName={getEmployeeName}
+        getEmployeeName={getAssignedName}
+      />
+      <ConfirmationDialog
+        open={confirmRevertDialog.open}
+        title="Revert to Lead"
+        content={`Are you sure you want to revert "${confirmRevertDialog.project?.title}" to a lead?`}
+        onConfirm={executeRevertToLead}
+        onCancel={() => setConfirmRevertDialog({ open: false, project: null })}
+        confirmText="Revert"
+        confirmColor="warning"
       />
     </Box>
   );
