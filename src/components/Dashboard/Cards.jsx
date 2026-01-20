@@ -15,7 +15,9 @@ const normalizeText = (value) => {
 const normalizeStatusKey = (value) =>
   normalizeText(value).replace(/[-_]+/g, " ");
 
-export default function Cards({ data, mode = "admin" }) {
+export default function Cards({ data, mode = "admin", employeeCount }) {
+
+
   const dashboardMode = mode;
   const themeContext = useTheme();
   const colorMode =
@@ -63,12 +65,13 @@ export default function Cards({ data, mode = "admin" }) {
     {
       key: "employees",
       label: "Total Employees",
-      value: employees.length,
+      value: employeeCount,
       loading: loading,
       accentGroup: "blueAccent",
       caption: "Active team members",
       icon: PeopleIcon,
     },
+    
     {
       key: "leads",
       label: "Total Leads",
@@ -112,6 +115,8 @@ export default function Cards({ data, mode = "admin" }) {
     dashboardMode === "employee"
       ? [...metricCardsBase.slice(1), rejectedCard]  // Total Leads first, Rejected last (skip employees card)
       : metricCardsBase;
+
+  
 
   return (
     <Box>

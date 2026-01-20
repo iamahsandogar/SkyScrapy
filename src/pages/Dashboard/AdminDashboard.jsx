@@ -22,6 +22,7 @@ export default function AdminDashboard() {
   const colors = getColors(mode);
 
   const [dashboardData, setDashboardData] = useState(null);
+  const [employeeCount, setEmployeeCount] = useState(0);
 
   // Fetch all dashboard data from single API endpoint
   useEffect(() => {
@@ -31,6 +32,7 @@ export default function AdminDashboard() {
         const dashboardResponse = await apiRequest("/api/common/dashboard/");
         
         console.log("Dashboard API Response:", dashboardResponse);
+        setEmployeeCount(dashboardResponse.employee_count);
         
         if (dashboardResponse) {
           // Transform API response to expected format
@@ -70,7 +72,7 @@ export default function AdminDashboard() {
             total_leads_count: totalLeadsCount,
           };
           
-          setDashboardData(dashboardPayload);
+          setDashboardData(prev => ({ ...prev, ...dashboardPayload }));
         } else {
           console.warn("Dashboard API returned empty response");
           setDashboardData({ leads: [], employees: [], statuses: [], lead_statuses: [], unread_notes: { notes: [], unread_count: 0 }, reminders: {}, always_active: { count: 0 }, total_leads_count: 0 });
@@ -116,7 +118,7 @@ export default function AdminDashboard() {
         </Box>
       </Topbar>
 
-      <Cards data={dashboardData} />
+      <Cards data={dashboardData} mode="admin" employeeCount={employeeCount} />
 
       <Box
         display="grid"
