@@ -52,14 +52,14 @@ export default function Cards({ data, mode = "admin", employeeCount }) {
 
   const total = totalLeadsCount || 1; // avoid divide-by-zero
 
-  // Get counts directly from lead_statuses API response
-  const completedCount = getStatusCount("completed");
-  const pendingCount = getStatusCount("pending");
-  const rejectedCount = getStatusCount("rejected");
+  // // Get counts directly from lead_statuses API response
+  // const completedCount = getStatusCount("completed");
+  // const pendingCount = getStatusCount("pending");
+  // const rejectedCount = getStatusCount("rejected");
 
-  const completedPercent = Math.round((completedCount / total) * 100);
-  const pendingPercent = Math.round((pendingCount / total) * 100);
-  const rejectedPercent = Math.round((rejectedCount / total) * 100);
+  // const completedPercent = Math.round((completedCount / total) * 100);
+  // const pendingPercent = Math.round((pendingCount / total) * 100);
+  // const rejectedPercent = Math.round((rejectedCount / total) * 100);
 
   const metricCardsBase = [
     {
@@ -81,39 +81,12 @@ export default function Cards({ data, mode = "admin", employeeCount }) {
       caption: "Leads in the pipeline",
       icon: AssignmentIcon,
     },
-    {
-      key: "completed",
-      label: "Completed Leads",
-      value: completedCount,
-      loading: loading,
-      accentGroup: "greenAccent",
-      caption: `${completedPercent}% of total leads`,
-      icon: CheckCircleIcon,
-    },
-    {
-      key: "pending",
-      label: "Pending Leads",
-      value: pendingCount,
-      loading: loading,
-      accentGroup: "yellowAccent",
-      caption: `${pendingPercent}% awaiting action`,
-      icon: PendingIcon,
-    },
   ];
 
-  const rejectedCard = {
-    key: "rejected",
-    label: "Rejected Leads",
-    value: rejectedCount,
-    loading: loading,
-    accentGroup: "redAccent",
-    caption: `${rejectedPercent}% of total leads`,
-    icon: CancelIcon,
-  };
 
   const metricCards =
     dashboardMode === "employee"
-      ? [...metricCardsBase.slice(1), rejectedCard]  // Total Leads first, Rejected last (skip employees card)
+      ? [...metricCardsBase.slice(1)]  // Total Leads first, Rejected last (skip employees card)
       : metricCardsBase;
 
   
