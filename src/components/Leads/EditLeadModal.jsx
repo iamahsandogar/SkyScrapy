@@ -508,6 +508,8 @@ if (availableEmployees.length > 0 && finalAssignedTo) {
         return null;
       })(),
       follow_up_status: formData.follow_up_status?.trim() || "",
+      send_reminder_email: formData.send_reminder_email,
+      reminder_time_offset: formData.reminder_time_offset || null,
     };
 
     if (formData.assigned_to) {
@@ -557,28 +559,24 @@ if (availableEmployees.length > 0 && finalAssignedTo) {
         return null;
       })();
 
-      // Schedule follow-up
-      const followUpPayload = formData.send_reminder_email
-        ? {
+      // Schedule follow-up - Only if reminder is enabled
+      if (formData.send_reminder_email) {
+          const followUpPayload = {
             follow_up_at: followUpValue,
             send_reminder_email: true,
             reminder_time_offset: formData.reminder_time_offset || "exact",
-          }
-        : {
-            send_reminder_email: false,
-            reminder_time_offset: null,
-            follow_up_at: followUpValue,
           };
 
-      try {
-        await apiRequest(`/api/leads/${leadId}/schedule-follow-up/`, {
-          method: "POST",
-          body: JSON.stringify(followUpPayload),
-        });
-        console.log("Schedule follow-up called successfully");
-      } catch (error) {
-        console.error("Failed to schedule follow-up:", error);
-        notifyError("Lead saved, but failed to schedule follow-up.");
+          try {
+            await apiRequest(`/api/leads/${leadId}/schedule-follow-up/`, {
+              method: "POST",
+              body: JSON.stringify(followUpPayload),
+            });
+            console.log("Schedule follow-up called successfully");
+          } catch (error) {
+             console.error("Failed to schedule follow-up:", error);
+             notifyError("Lead updated, but failed to schedule reminder.");
+          }
       }
 
       let updatedLead = null;
@@ -747,4 +745,5 @@ if (availableEmployees.length > 0 && finalAssignedTo) {
       </DialogActions>
     </Dialog>
   );
+
 }

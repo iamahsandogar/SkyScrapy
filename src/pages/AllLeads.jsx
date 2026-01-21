@@ -142,54 +142,9 @@ const resolveLeadId = (lead) => {
   return lead.id ?? lead.pk ?? lead.uuid ?? lead.lead_id ?? lead.leadId ?? null;
 };
 
-import ConfirmationDialog from "../components/global/ConfirmationDialog";
-
 export default function AllLeads() {
   const location = useLocation();
-  // Try to get cached leads immediately for instant display
-  const cachedData = getCachedLeadData();
-  // Filter cached leads by user role for initial display
-  let initialLeads = [];
-  if (cachedData?.leads && cachedData.leads.length > 0) {
-    // Get current user to filter leads
-    const storedUser = localStorage.getItem("user");
-    if (storedUser) {
-      try {
-        const userData = JSON.parse(storedUser);
-        const currentUserId = userData.id || userData.pk || userData.uuid;
-        const isCurrentUserAdmin =
-          userData.is_staff ||
-          userData.is_admin ||
-          userData.is_superuser ||
-          userData.role === 0 ||
-          userData.role === "0";
-        
-        if (isCurrentUserAdmin) {
-          // Admin sees all leads
-          initialLeads = cachedData.leads;
-        } else if (currentUserId) {
-          // Employee sees only their own leads
-          initialLeads = cachedData.leads.filter((lead) => {
-            let assignedTo = lead.assigned_to || lead.assignedTo || lead.assigned_to_id || lead.assignedToId;
-            if (assignedTo && typeof assignedTo === "object" && assignedTo !== null) {
-              assignedTo = assignedTo.id || assignedTo.pk || assignedTo.uuid || assignedTo;
-            }
-            if (!assignedTo && assignedTo !== 0) return false;
-            const assignedToStr = String(assignedTo).trim();
-            const currentUserIdStr = String(currentUserId).trim();
-            return assignedToStr === currentUserIdStr || 
-                   (Number(assignedTo) === Number(currentUserId) && !isNaN(Number(assignedTo)) && !isNaN(Number(currentUserId)));
-          });
-        }
-      } catch (e) {
-        console.error("Error parsing user data for initial leads:", e);
-        initialLeads = cachedData.leads;
-      }
-    } else {
-      initialLeads = cachedData.leads;
-    }
-  }
-  const [leads, setLeads] = useState(initialLeads);
+  const [leads, setLeads] = useState([]);
   const [q, setQ] = useState("");
   const [statusFilter, setStatusFilter] = useState("ALL");
   const [assignedFilter, setAssignedFilter] = useState("All");
@@ -207,6 +162,7 @@ export default function AllLeads() {
   const [employees, setEmployees] = useState([]); // Store employees for mapping
   const [actionLoading, setActionLoading] = useState(false);
   const [actionMessage, setActionMessage] = useState("");
+  const [isDeleting, setIsDeleting] = useState(false);
   // Only show loading spinner if there is no cache
   const [isPageLoading, setIsPageLoading] = useState(false);
   // Track API call to prevent duplicates
@@ -216,7 +172,6 @@ export default function AllLeads() {
   const [menuLead, setMenuLead] = useState(null);
   const [mobileMenuAnchorEl, setMobileMenuAnchorEl] = useState(null);
   const [deleteDialog, setDeleteDialog] = useState({ open: false, lead: null });
-  const [confirmConvertDialog, setConfirmConvertDialog] = useState({ open: false, lead: null });
   const [editDialog, setEditDialog] = useState({ open: false, leadId: null, lead: null });
   // Track individual dropdown loading states
   const [statusUpdatingLeadId, setStatusUpdatingLeadId] = useState(null);
@@ -259,23 +214,7 @@ export default function AllLeads() {
     };
   }, [focusLeadId, leads]);
 
-  // Fetch statuses and employees from cache first for instant loading
-  useEffect(() => {
-    const cachedData = getCachedLeadData();
-
-    if (cachedData?.statuses && cachedData.statuses.length > 0) {
-      console.log("Using cached statuses for instant loading");
-      setStatuses(cachedData.statuses);
-    }
-
-    if (cachedData?.employees && cachedData.employees.length > 0) {
-      console.log("Using cached employees for instant loading");
-      setEmployees(cachedData.employees);
-    }
-
-    // If no cache, they will be loaded from the /api/leads response in fetchLeads
-  }, []);
-
+  // Fetch leads on mount and location change
   useEffect(() => {
     const fetchLeads = async () => {
       setIsPageLoading(true);
@@ -407,68 +346,24 @@ export default function AllLeads() {
         }
       };
 
-      // Try cached data first for instant display
-      const cachedData = getCachedLeadData();
-      if (cachedData?.leads && cachedData.leads.length > 0) {
-        console.log("=== USING CACHED LEADS FOR INSTANT DISPLAY ===");
-        console.log("Cached leads count:", cachedData.leads.length);
-
-        // Also set statuses and employees from cache if available
-        if (cachedData.statuses && cachedData.statuses.length > 0) {
-          setStatuses(cachedData.statuses);
-        }
-        if (cachedData.employees && cachedData.employees.length > 0) {
-          setEmployees(cachedData.employees);
-        }
-
-        const filteredLeads = filterLeadsByUser(cachedData.leads);
-        console.log(
-          "Filtered leads count after filtering:",
-          filteredLeads.length
-        );
-
-        // Show cached data immediately
-        setLeads(filteredLeads);
-        setIsPageLoading(false);
-        // Continue to fetch fresh data from API (don't return early)
-      } else {
-        // No cache available, show loading
-        setIsPageLoading(true);
-      }
-
       // Always fetch fresh data from /api/leads API
       try {
         console.log("Fetching fresh leads from /api/leads/ API...");
         const data = await apiRequest("/api/leads/");
         console.log("=== API RESPONSE RAW ===", data);
-        console.log("API response type:", typeof data);
-        console.log("Is array?", Array.isArray(data));
-        console.log("Has leads property?", data?.leads);
-        console.log("Has data property?", data?.data);
-
+        
         // Handle different response formats
         let leadsList = [];
         if (data && Array.isArray(data.leads)) {
           leadsList = data.leads;
-          console.log("Using data.leads array");
         } else if (data && Array.isArray(data)) {
           leadsList = data;
-          console.log("Using direct array");
         } else if (data?.data) {
           if (Array.isArray(data.data)) {
             leadsList = data.data;
-            console.log("Using data.data array");
           } else if (data.data?.leads && Array.isArray(data.data.leads)) {
             leadsList = data.data.leads;
-            console.log("Using data.data.leads array");
-          } else {
-            console.log("data.data is not an array:", data.data);
           }
-        } else {
-          console.warn(
-            "Could not parse leads from API response. Full response:",
-            data
-          );
         }
 
         // Extract statuses and users (employees) from the API response
@@ -477,110 +372,25 @@ export default function AllLeads() {
 
         if (data?.statuses && Array.isArray(data.statuses)) {
           statusesList = data.statuses;
-          console.log(
-            "Extracted statuses from API response:",
-            statusesList.length
-          );
           setStatuses(statusesList);
         }
 
         if (data?.users && Array.isArray(data.users)) {
           usersList = data.users;
-          console.log(
-            "Extracted users (employees) from API response:",
-            usersList.length
-          );
-          // Map users to employees format for consistency
-          // The users array contains employee profile data
           setEmployees(usersList);
-        }
-
-        console.log("=== PARSED LEADS LIST ===");
-        console.log("Total leads count:", leadsList.length);
-        if (leadsList.length > 0) {
-          console.log("First lead:", leadsList[0]);
-          console.log("First lead keys:", Object.keys(leadsList[0]));
-          console.log("First lead assigned_to:", leadsList[0].assigned_to);
-          console.log("First lead assignedTo:", leadsList[0].assignedTo);
         }
 
         // Filter leads based on user role
         const filteredLeads = filterLeadsByUser(leadsList);
-        console.log("=== AFTER FILTERING ===");
-        console.log("Filtered leads count:", filteredLeads.length);
-        console.log("Original leads count:", leadsList.length);
-
-        // Merge with cached data to preserve reminder fields if missing from API
-        const cachedData = getCachedLeadData();
-        let finalLeads = filteredLeads;
         
-        if (cachedData?.leads && cachedData.leads.length > 0) {
-            finalLeads = filteredLeads.map(apiLead => {
-                const cachedLead = cachedData.leads.find(c => 
-                    (c.id && apiLead.id && String(c.id) === String(apiLead.id)) ||
-                    (c.pk && apiLead.pk && String(c.pk) === String(apiLead.pk)) ||
-                    (c.uuid && apiLead.uuid && String(c.uuid) === String(apiLead.uuid))
-                );
-                
-                if (cachedLead) {
-                    // Preserve reminder fields if API doesn't have them
-                    return {
-                        ...apiLead,
-                        send_reminder_email: apiLead.send_reminder_email !== undefined ? apiLead.send_reminder_email : cachedLead.send_reminder_email,
-                        reminder_time_offset: apiLead.reminder_time_offset !== undefined ? apiLead.reminder_time_offset : cachedLead.reminder_time_offset,
-                        // Also prefer cached follow_up_at if API is older? 
-                        // No, API is truth. But if API is stale (e.g. index lag), cache might be newer.
-                        // For now, let's assume API is truth for data, but cache has extra fields.
-                    };
-                }
-                return apiLead;
-            });
-        }
-
-        setLeads(finalLeads);
+        setLeads(filteredLeads);
         setIsPageLoading(false);
         apiCallMadeRef.current.inProgress = false;
 
-        // Update cache with fresh leads data, statuses, and employees (store all leads, filter on display)
-        // Use user-specific cache key
-        const storedUserForCache = localStorage.getItem("user");
-        let cacheKey = "leadDataCache";
-        if (storedUserForCache) {
-          try {
-            const userDataForCache = JSON.parse(storedUserForCache);
-            const userIdForCache = userDataForCache.id || userDataForCache.pk || userDataForCache.uuid;
-            if (userIdForCache) cacheKey = `leadDataCache_${userIdForCache}`;
-          } catch (e) {
-            // Use default key
-          }
-        }
-        
-        const currentCache = getCachedLeadData();
-        if (currentCache) {
-          currentCache.leads = leadsList;
-          currentCache.statuses = statusesList;
-          currentCache.employees = usersList;
-          currentCache.timestamp = Date.now();
-          localStorage.setItem(cacheKey, JSON.stringify(currentCache));
-        } else {
-          // Create new cache entry if none exists
-          const newCache = {
-            statuses: statusesList,
-            sources: data?.sources || [],
-            employees: usersList,
-            leads: leadsList,
-            timestamp: Date.now(),
-          };
-          localStorage.setItem(cacheKey, JSON.stringify(newCache));
-        }
       } catch (err) {
         console.error("Failed to fetch leads:", err);
         notifyError("Failed to load leads");
-        // Only clear leads if there's no cache
-        const cachedData = getCachedLeadData();
-        if (!cachedData?.leads || cachedData.leads.length === 0) {
-          setLeads([]);
-        }
+        setLeads([]);
         setIsPageLoading(false);
         apiCallMadeRef.current.inProgress = false;
         // Reset called flag on error to allow retry
@@ -710,8 +520,6 @@ export default function AllLeads() {
         return prevLeads;
       });
 
-      // Update cache so Kanban board reflects changes
-      addLeadToCache(updatedLead);
       notifySuccess("Follow-up status updated successfully");
     } catch (error) {
       console.error("Failed to update follow-up status:", error);
@@ -777,18 +585,6 @@ export default function AllLeads() {
         prevLeads.map((l) => (l.id === leadId ? { ...l, ...updatedLead } : l))
       );
 
-      // Dispatch event with the updated lead (this will notify EmployeeAllLeads)
-      // IMPORTANT: Always dispatch the event, even if cache update fails
-      console.log("📤 Admin assigned lead, dispatching event with lead:", updatedLead);
-      addLeadToCache(updatedLead);
-      
-      // Also dispatch event directly to ensure it's received (backup)
-      window.dispatchEvent(
-        new CustomEvent("leadCacheUpdated", {
-          detail: { lead: updatedLead, action: "updated" },
-        })
-      );
-      console.log("📤 Directly dispatched leadCacheUpdated event for lead:", updatedLead.id || updatedLead.pk || updatedLead.uuid);
       notifySuccess("Lead assignment updated");
     } catch (error) {
       console.error("Failed to update assignment:", error);
@@ -1017,63 +813,6 @@ export default function AllLeads() {
         resolveLeadId(lead) === updatedId ? { ...lead, ...updatedLead } : lead
       )
     );
-    
-    // Ensure cache is updated and event is dispatched (backup in case EditLeadModal didn't dispatch)
-    console.log("📤 handleLeadUpdated called, updating cache and dispatching event:", updatedLead);
-    addLeadToCache(updatedLead);
-    
-    // Also dispatch event directly to ensure it's received
-    window.dispatchEvent(
-      new CustomEvent("leadCacheUpdated", {
-        detail: { lead: updatedLead, action: "updated" },
-      })
-    );
-    console.log("📤 Directly dispatched leadCacheUpdated event from handleLeadUpdated");
-  };
-
-  const handleConvertToProject = (lead) => {
-    setConfirmConvertDialog({ open: true, lead });
-  };
-
-  const executeConvertToProject = async () => {
-    const lead = confirmConvertDialog.lead;
-    if (!lead) return;
-
-    const leadId = resolveLeadId(lead);
-    if (!leadId) {
-        notifyError("Invalid lead ID");
-        setConfirmConvertDialog({ open: false, lead: null });
-        return;
-    }
-
-    try {
-      await apiRequest(`/api/leads/${leadId}/convert-to-project/`, {
-        method: "POST",
-        body: JSON.stringify({ is_project: true }),
-      });
-      notifySuccess("Lead converted to project successfully");
-      
-      // Remove from list
-      setLeads((prev) => prev.filter((l) => resolveLeadId(l) !== leadId));
-      
-      // Update cache
-      removeLeadFromCache(lead);
-      
-      // Redirect to Projects page
-      navigate("/management/projects");
-
-    } catch (err) {
-      console.error("Failed to convert lead:", err);
-       if (err.status === 400) {
-        notifyError("Lead already converted or invalid request");
-      } else if (err.status === 403) {
-        notifyError("You are not authorized to perform this action");
-      } else {
-        notifyError("Failed to convert lead");
-      }
-    } finally {
-        setConfirmConvertDialog({ open: false, lead: null });
-    }
   };
 
   const handleOpenCreateLead = () => {
@@ -1360,14 +1099,18 @@ export default function AllLeads() {
   }, [employees, leads]);
 
   const handleDeleteLead = async (id) => {
+    setIsDeleting(true);
     try {
       await apiRequest(`/api/leads/${id}`, { method: "DELETE" });
       setLeads(leads.filter((l) => String(l.id) !== String(id)));
       removeLeadFromCache(id);
       setDeleteDialog({ open: false, lead: null });
+      notifySuccess("Lead deleted successfully");
     } catch (err) {
       console.error("Failed to delete lead:", err);
       notifyError("Failed to delete lead. Please try again.");
+    } finally {
+      setIsDeleting(false);
     }
   };
 
@@ -2266,7 +2009,7 @@ export default function AllLeads() {
           Edit
         </MenuItem>
 
-        <MenuItem
+        {/* <MenuItem
           onClick={() => {
             handleConvertToProject(menuLead);
             handleActionMenuClose();
@@ -2274,7 +2017,7 @@ export default function AllLeads() {
         >
           <AssignmentTurnedInIcon fontSize="small" sx={{ mr: 1 }} />
           Convert to Project
-        </MenuItem>
+        </MenuItem> */}
 
         <MenuItem
           onClick={() => {
@@ -2300,13 +2043,14 @@ export default function AllLeads() {
           </DialogContentText>
         </DialogContent>
         <DialogActions>
-          <Button onClick={closeDeleteDialog}>Cancel</Button>
+          <Button onClick={closeDeleteDialog} disabled={isDeleting}>Cancel</Button>
           <Button
             onClick={confirmDeleteLead}
             color="error"
             variant="contained"
+            disabled={isDeleting}
           >
-            Delete
+            {isDeleting ? <CircularProgress size={24} color="inherit" /> : "Delete"}
           </Button>
         </DialogActions>
       </Dialog>
@@ -2341,14 +2085,6 @@ export default function AllLeads() {
         lead={selectedLead}
         getEmployeeName={getEmployeeName}
         getStatusName={getStatusName}
-      />
-      <ConfirmationDialog
-        open={confirmConvertDialog.open}
-        title="Convert to Project"
-        content={`Are you sure you want to convert "${confirmConvertDialog.lead?.title}" to a project?`}
-        onConfirm={executeConvertToProject}
-        onCancel={() => setConfirmConvertDialog({ open: false, lead: null })}
-        confirmText="Convert"
       />
     </Box>
   );
