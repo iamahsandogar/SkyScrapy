@@ -111,7 +111,16 @@ function DueTodayLeads({ data }) {
   // Get due today leads
   const dueTodayLeads = useMemo(() => {
     if (isLoading) return [];
-    const leads = remindersData.due_today?.leads || [];
+    
+    let leads = remindersData.due_today?.leads || [];
+    
+    // If we have a filtered list of leads (data.leads), we should intersect with it
+    // to ensure we don't show deleted leads.
+    if (data?.leads && Array.isArray(data.leads) && data.leads.length > 0) {
+       const validIds = new Set(data.leads.map(l => String(l.id || l.pk || l.uuid)));
+       leads = leads.filter(l => validIds.has(String(l.id || l.pk || l.uuid)));
+    }
+
     return leads
       .map((lead) => ({
         lead,
@@ -128,7 +137,7 @@ function DueTodayLeads({ data }) {
         return timeA - timeB;
       })
       .map(({ lead }) => lead);
-  }, [remindersData, isLoading]);
+  }, [remindersData, isLoading, data?.leads]);
 
   const cardStyles = {
     flex: 1,

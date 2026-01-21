@@ -271,12 +271,19 @@ export default function MonthlyRemindersCalendarContent({ data }) {
   // Combine all leads from reminders sections
   const leads = useMemo(() => {
     if (isLoading) return [];
+    
+    // Use data.leads if available (which is the filtered list from dashboard component)
+    if (data?.leads && Array.isArray(data.leads) && data.leads.length > 0) {
+      return data.leads;
+    }
+    
+    // Fallback to extracting from reminders object
     const overdueLeads = remindersData.overdue?.leads || [];
     const dueTodayLeads = remindersData.due_today?.leads || [];
     const upcomingLeads = remindersData.upcoming?.leads || [];
     const doneLeads = remindersData.done?.leads || [];
     return [...overdueLeads, ...dueTodayLeads, ...upcomingLeads, ...doneLeads];
-  }, [remindersData, isLoading]);
+  }, [remindersData, isLoading, data?.leads]);
   
   const reminders = useMemo(() => normalizeLeads(leads), [leads]);
 

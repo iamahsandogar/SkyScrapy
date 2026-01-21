@@ -127,7 +127,16 @@ function OverdueLeads({ data }) {
   // Get overdue leads
   const overdueLeads = useMemo(() => {
     if (isLoading) return [];
-    const leads = remindersData.overdue?.leads || [];
+    
+    let leads = remindersData.overdue?.leads || [];
+    
+    // If we have a filtered list of leads (data.leads), we should intersect with it
+    // to ensure we don't show deleted leads.
+    if (data?.leads && Array.isArray(data.leads) && data.leads.length > 0) {
+       const validIds = new Set(data.leads.map(l => String(l.id || l.pk || l.uuid)));
+       leads = leads.filter(l => validIds.has(String(l.id || l.pk || l.uuid)));
+    }
+
     return leads
       .map((lead) => ({
         lead,
@@ -135,7 +144,7 @@ function OverdueLeads({ data }) {
       }))
       .filter(({ followUp }) => followUp)
       .sort((a, b) => (a.followUp?.getTime() || 0) - (b.followUp?.getTime() || 0));
-  }, [remindersData, isLoading]);
+  }, [remindersData, isLoading, data?.leads]);
 
   const cardStyles = {
     flex: 1,

@@ -11,7 +11,7 @@ import OverdueLeads from "../../components/Dashboard/OverdueLeads";
 import DueTodayLeads from "../../components/Dashboard/DueTodayLeads";
 import { getColors } from "../../design-system/tokens";
 import { useTheme } from "../../contexts/ThemeContext";
-import { prefetchLeadData } from "../../utils/prefetchData";
+import { prefetchLeadData, getCachedLeadData } from "../../utils/prefetchData";
 import apiRequest from "../../components/services/api";
 
 export default function EmployeeDashboard() {
@@ -35,13 +35,20 @@ export default function EmployeeDashboard() {
           // Transform API response to expected format
           const reminders = dashboardResponse.reminders || {};
           
-          // Collect all leads from reminders sections
-          const allLeads = [
+          // Collect all leads from reminders sections (fallback)
+          const dashboardRemindersLeads = [
             ...(reminders.overdue?.leads || []),
             ...(reminders.due_today?.leads || []),
             ...(reminders.upcoming?.leads || []),
             ...(reminders.done?.leads || []),
           ];
+          
+          // Use leads from cache if available (to ensure deleted leads are excluded), 
+          // otherwise fallback to dashboard reminders leads.
+          const cachedData = getCachedLeadData();
+          const finalLeads = cachedData?.leads && cachedData.leads.length > 0 
+              ? cachedData.leads 
+              : dashboardRemindersLeads;
           
           // Transform lead_statuses to statuses format
           const statuses = (dashboardResponse.lead_statuses || []).map(s => ({
@@ -59,7 +66,7 @@ export default function EmployeeDashboard() {
           const employeesList = dashboardResponse.employees || [];
           
           const dashboardPayload = {
-            leads: allLeads,
+            leads: finalLeads,
             statuses: statuses,
             lead_statuses: dashboardResponse.lead_statuses || [],
             employees: Array.isArray(employeesList) ? employeesList : [],

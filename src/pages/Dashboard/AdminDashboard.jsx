@@ -7,7 +7,7 @@ import Topbar from "../../components/global/Topbar";
 import UnreadNotesSummary from "../../components/Dashboard/UnreadNotesSummary";
 import ChartBox from "../../components/Dashboard/ChartBox";
 import Cards from "../../components/Dashboard/Cards";
-import { prefetchLeadData } from "../../utils/prefetchData";
+import { prefetchLeadData, getCachedLeadData } from "../../utils/prefetchData";
 import OverdueLeads from "../../components/Dashboard/OverdueLeads";
 import DueTodayLeads from "../../components/Dashboard/DueTodayLeads";
 import MonthlyRemindersCalendar from "../../components/Dashboard/MonthlyRemindersCalendar";
@@ -32,19 +32,27 @@ export default function AdminDashboard() {
         const dashboardResponse = await apiRequest("/api/common/dashboard/");
         
         console.log("Dashboard API Response:", dashboardResponse);
-        setEmployeeCount(dashboardResponse.employee_count);
+        setEmployeeCount(dashboardResponse?.employee_count || 0);
         
         if (dashboardResponse) {
           // Transform API response to expected format
           const reminders = dashboardResponse.reminders || {};
           
-          // Collect all leads from reminders sections
-          const allLeads = [
+          // Collect all leads from reminders sections (fallback)
+          const dashboardRemindersLeads = [
             ...(reminders.overdue?.leads || []),
             ...(reminders.due_today?.leads || []),
             ...(reminders.upcoming?.leads || []),
             ...(reminders.done?.leads || []),
           ];
+          
+          // Use leads from cache if available (to ensure deleted leads are excluded), 
+          // otherwise fallback to dashboard reminders leads.
+          // We prioritize cache because it reflects immediate local deletions from AllLeads.
+          const cachedData = getCachedLeadData();
+          const finalLeads = cachedData?.leads && cachedData.leads.length > 0 
+              ? cachedData.leads 
+              : dashboardRemindersLeads;
           
           // Transform lead_statuses to statuses format
           const statuses = (dashboardResponse.lead_statuses || []).map(s => ({
@@ -62,7 +70,7 @@ export default function AdminDashboard() {
           const employeesList = dashboardResponse.employees || [];
           
           const dashboardPayload = {
-            leads: allLeads,
+            leads: finalLeads,
             statuses: statuses,
             lead_statuses: dashboardResponse.lead_statuses || [],
             employees: Array.isArray(employeesList) ? employeesList : [],
