@@ -25,7 +25,7 @@ import BlockIcon from '@mui/icons-material/Block';
 import { useEffect, useState } from "react";
 import { useTheme } from "@mui/material/styles";
 import Topbar from "../global/Topbar";
-import { colors } from "../../design-system/tokens";
+import { colors, getColors } from "../../design-system/tokens";
 import apiRequest from "../services/api";
 import { getCachedLeadData } from "../../utils/prefetchData";
 import DotLoader from "../global/DotLoader";
@@ -567,7 +567,7 @@ export default function ManageEmployees() {
           sx: { 
             borderRadius: 4, 
             p: 1,
-            bgcolor: isDarkMode ? colors.primary[400] : '#fff',
+            bgcolor: isDarkMode ? colors.primary[400] : colors.bg[100],
             backgroundImage: 'none'
           } 
         }}
@@ -583,7 +583,7 @@ export default function ManageEmployees() {
                 <CheckCircleOutlineRoundedIcon sx={{ fontSize: 60, color: colors.greenAccent[500], mb: 2 }} />
             )}
             
-            <Typography variant="h5" fontWeight="bold" align="center" gutterBottom color={isDarkMode ? 'white' : 'inherit'}>
+            <Typography variant="h5" fontWeight="bold" align="center" gutterBottom color={isDarkMode ? colors.primary[200] : colors.primary[200]}>
               {confirmDialog.action === "delete" && confirmDialog.leadCount > 0
                 ? "Deletion Blocked"
                 : confirmDialog.action === "delete"
@@ -596,31 +596,30 @@ export default function ManageEmployees() {
 
         <DialogContent sx={{ pt: 1 }}>
           {confirmDialog.employee && (
-            <Box display="flex" flexDirection="column" alignItems="center" gap={1}>
+            <Box display="flex" flexDirection="column" alignItems="center" gap={1} fontSize="0.8rem">
               {confirmDialog.action === 'delete' && confirmDialog.leadCount > 0 ? (
                 // BLOCKED DELETE MESSAGE
                 <>
-                  <Typography color="text.secondary" align="center" mb={2} sx={{ fontSize: '1rem' }}>
+                  <Typography color="text.secondary" align="center" mb={2} sx={{ fontSize: '0.8rem' }}>
                     You cannot delete <b>{confirmDialog.employee.firstName || confirmDialog.employee.first_name} {confirmDialog.employee.lastName || confirmDialog.employee.last_name}</b> because they have active assignments.
                   </Typography>
                   
                   <Paper 
                     elevation={0}
                     sx={{ 
-                      p: 2.5, 
+                      p: 1, 
                       borderRadius: 2, 
-                      bgcolor: colors.redAccent[100],
-                      color: colors.redAccent[800],
+                      bgcolor: colors.redAccent[500],
+                      color: colors.primary[100],
                       textAlign: 'center',
-                      width: '100%',
+                      width: '85%',
                       mb: 1,
-                      border: `1px solid ${colors.redAccent[200]}`
                     }}
                   >
-                    <Typography variant="subtitle1" fontWeight="800" fontSize="1.1rem">
+                    <Typography variant="subtitle1" fontWeight="800" fontSize="0.9rem">
                       {confirmDialog.leadCount} Assigned Lead{confirmDialog.leadCount !== 1 ? 's' : ''} Found
                     </Typography>
-                    <Typography variant="body2" sx={{ mt: 1, fontWeight: 500 }}>
+                    <Typography variant="body2" sx={{ mt: 1, fontWeight: 500, color: colors.primary[100] }}>
                       An employee with assigned leads cannot be deleted.
                     </Typography>
                   </Paper>
@@ -642,20 +641,19 @@ export default function ManageEmployees() {
                       sx={{ 
                         p: 2, 
                         borderRadius: 2, 
-                        bgcolor: colors.yellowAccent[100],
-                        color: colors.yellowAccent[800],
+                        bgcolor: colors.yellowAccent[500],
+                        color: colors.primary[200],
                         textAlign: 'center',
-                        width: '100%',
+                        width: '85%',
                         mb: 2,
-                        border: `1px solid ${colors.yellowAccent[200]}`
                       }}
                     >
-                      <Typography variant="subtitle1" fontWeight="bold">
-                        Warning: {confirmDialog.leadCount} Assigned Lead{confirmDialog.leadCount !== 1 ? 's' : ''}
+                      <Typography variant="subtitle1" fontWeight="bold" sx={{ fontSize: '0.8rem' }}>
+                        Warning: {confirmDialog.leadCount} Lead{confirmDialog.leadCount !== 1 ? 's' : ''} assigned to this employee.
                       </Typography>
-                      <Typography variant="body2" sx={{ mt: 0.5, opacity: 0.9 }}>
-                        These leads will remain assigned to this user. You may want to reassign them before proceeding.
-                      </Typography>
+                      {/* <Typography variant="body2" sx={{ mt: 0.5, color: colors.primary[200] }}>
+                        These leads will remain assigned to this user. You may reassign those leads to someone else before proceeding.
+                      </Typography> */}
                     </Paper>
                   )}
                 </>
@@ -724,7 +722,8 @@ export default function ManageEmployees() {
                     fontWeight: 'bold',
                     px: 3,
                     boxShadow: 'none',
-                    bgcolor: confirmDialog.action === "delete" ? colors.redAccent[600] : confirmDialog.action === "deactivate" ? colors.yellowAccent[700] : colors.greenAccent[600],
+                    bgcolor: confirmDialog.action === "delete" ? colors.redAccent[600] : confirmDialog.action === "deactivate" ? colors.yellowAccent[500] : colors.greenAccent[600],
+                    color: confirmDialog.action === "deactivate" ? colors.primary[200] : colors.grey[100],
                     '&:hover': {
                         bgcolor: confirmDialog.action === "delete" ? colors.redAccent[700] : confirmDialog.action === "deactivate" ? colors.yellowAccent[800] : colors.greenAccent[700],
                         boxShadow: 'none'
