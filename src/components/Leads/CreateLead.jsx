@@ -429,12 +429,8 @@ export default function CreateLead() {
       follow_up_at: followUpDate,
       follow_up_time: followUpTime,
       follow_up_status: leadData.follow_up_status || leadData.followupStatus || "",
-      send_reminder_email:
-        leadData.send_reminder_email === true ||
-        leadData.send_reminder_email === "true" ||
-        leadData.send_reminder_email === 1,
-      reminder_time_offset:
-        leadData.reminder_time_offset || leadData.reminder_offset || "exact",
+      send_reminder_email: Boolean(leadData.send_reminder_email),
+      reminder_time_offset: leadData.reminder_time_offset || leadData.reminder_offset || "exact",
     };
 
     console.log(`Setting form data from ${fromCache ? 'cache' : 'API'}:`, formDataToSet);

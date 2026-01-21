@@ -24,8 +24,6 @@ import {
   DialogContent,
   DialogActions,
   Switch,
-  DialogContentText,
-  CircularProgress,
 } from "@mui/material";
 
 import CloudDownloadIcon from "@mui/icons-material/CloudDownload";
@@ -152,8 +150,6 @@ export default function EmployeeAllLeads() {
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [notesDialogOpen, setNotesDialogOpen] = useState(false);
   const [notesDialogLead, setNotesDialogLead] = useState(null);
-  const [deleteDialog, setDeleteDialog] = useState({ open: false, lead: null });
-  const [isDeleting, setIsDeleting] = useState(false);
   const [statuses, setStatuses] = useState([]);
   const [leadsLoading, setLeadsLoading] = useState(true);
   const [statusesLoading, setStatusesLoading] = useState(true);
@@ -356,66 +352,163 @@ export default function EmployeeAllLeads() {
         return filtered;
       };
 
+      // Try cached data first for instant display
+      const cachedData = getCachedLeadData();
+      const CACHE_MAX_AGE = 5 * 60 * 1000; // 5 minutes
+      const cacheAge = cachedData?.timestamp ? Date.now() - cachedData.timestamp : Infinity;
+      const isCacheFresh = cacheAge < CACHE_MAX_AGE;
+
+      if (cachedData?.leads && isCacheFresh) {
+        console.log("=== USING CACHED DATA (FRESH) - SKIPPING API CALL ===");
+        console.log("Cached leads count:", cachedData.leads.length);
+        console.log("Cache age:", Math.round(cacheAge / 1000), "seconds");
+        
+        // Set statuses from cache
+        if (cachedData.statuses) {
+          setStatuses(cachedData.statuses);
+        }
+        setStatusesLoading(false);
+        
+        const filteredLeads = filterLeadsByEmployee(cachedData.leads);
+        console.log(
+          "Filtered leads count after filtering:",
+          filteredLeads.length
+        );
+        setLeads(filteredLeads);
+        setLeadsLoading(false);
+        apiCallMadeRef.current.called = true; // Mark as done, using cache
+        return; // Use cache, don't make API call
+      }
+
+      // Cache is stale or missing, fetch fresh data from API (ONLY API CALL - gets leads, statuses, employees, sources)
+      if (cachedData?.leads && !isCacheFresh) {
+        console.log("=== CACHE IS STALE, USING FOR INSTANT DISPLAY THEN FETCHING FRESH ===");
+        console.log("Cache age:", Math.round(cacheAge / 1000), "seconds");
+        
+        // Set statuses from stale cache for instant display
+        if (cachedData.statuses) {
+          setStatuses(cachedData.statuses);
+        }
+        setStatusesLoading(false);
+        
+        const filteredLeads = filterLeadsByEmployee(cachedData.leads);
+        setLeads(filteredLeads);
+        setLeadsLoading(false);
+        // Continue to fetch fresh data below
+      }
+
       // Mark that we're making the API call
       apiCallMadeRef.current.called = true;
       console.log("Fetching fresh data from /api/leads/ API (SINGLE API CALL for all data)...");
-      
       const data = await apiRequest("/api/leads/");
-        console.log("=== API RESPONSE RAW ===", data);
+      console.log("=== API RESPONSE RAW ===", data);
 
-        // Handle different response formats for leads
-        let leadsList = [];
-        if (data && Array.isArray(data.leads)) {
-          leadsList = data.leads;
-        } else if (data && Array.isArray(data)) {
-          leadsList = data;
-        } else if (data?.data) {
-          if (Array.isArray(data.data)) {
-            leadsList = data.data;
-          } else if (data.data?.leads && Array.isArray(data.data.leads)) {
-            leadsList = data.data.leads;
-          }
+      // Handle different response formats for leads
+      let leadsList = [];
+      if (data && Array.isArray(data.leads)) {
+        leadsList = data.leads;
+        console.log("Using data.leads array");
+      } else if (data && Array.isArray(data)) {
+        leadsList = data;
+        console.log("Using direct array");
+      } else if (data?.data) {
+        if (Array.isArray(data.data)) {
+          leadsList = data.data;
+          console.log("Using data.data array");
+        } else if (data.data?.leads && Array.isArray(data.data.leads)) {
+          leadsList = data.data.leads;
+          console.log("Using data.data.leads array");
         }
+      } else {
+        console.warn(
+          "Could not parse leads from API response. Full response:",
+          data
+        );
+      }
 
-        // Extract statuses from the leads API response
-        let statusesList = [];
-        if (data?.statuses && Array.isArray(data.statuses)) {
-          statusesList = data.statuses;
-        } else if (data?.data?.statuses && Array.isArray(data.data.statuses)) {
-          statusesList = data.data.statuses;
-        }
+      // Extract statuses from the leads API response
+      let statusesList = [];
+      if (data?.statuses && Array.isArray(data.statuses)) {
+        statusesList = data.statuses;
+        console.log("Extracted statuses from leads API response:", statusesList.length);
+      } else if (data?.data?.statuses && Array.isArray(data.data.statuses)) {
+        statusesList = data.data.statuses;
+        console.log("Extracted statuses from data.statuses:", statusesList.length);
+      } else if (cachedData?.statuses) {
+        // Fallback to cached statuses if not in API response
+        statusesList = cachedData.statuses;
+        console.log("Using cached statuses as fallback");
+      }
 
-        // Extract employees/users from the leads API response
-        let employeesList = [];
-        if (data?.users && Array.isArray(data.users)) {
-          employeesList = data.users;
-        } else if (data?.employees && Array.isArray(data.employees)) {
-          employeesList = data.employees;
-        } else if (data?.data?.users && Array.isArray(data.data.users)) {
-          employeesList = data.data.users;
-        } else if (data?.data?.employees && Array.isArray(data.data.employees)) {
-          employeesList = data.data.employees;
-        }
+      // Extract employees/users from the leads API response
+      let employeesList = [];
+      if (data?.users && Array.isArray(data.users)) {
+        employeesList = data.users;
+        console.log("Extracted users from leads API response:", employeesList.length);
+      } else if (data?.employees && Array.isArray(data.employees)) {
+        employeesList = data.employees;
+        console.log("Extracted employees from leads API response:", employeesList.length);
+      } else if (data?.data?.users && Array.isArray(data.data.users)) {
+        employeesList = data.data.users;
+        console.log("Extracted users from data.users:", employeesList.length);
+      } else if (data?.data?.employees && Array.isArray(data.data.employees)) {
+        employeesList = data.data.employees;
+        console.log("Extracted employees from data.employees:", employeesList.length);
+      }
 
-        // Extract sources from the leads API response
-        let sourcesList = [];
-        if (data?.sources && Array.isArray(data.sources)) {
-          sourcesList = data.sources;
-        } else if (data?.data?.sources && Array.isArray(data.data.sources)) {
-          sourcesList = data.data.sources;
-        }
+      // Extract sources from the leads API response
+      let sourcesList = [];
+      if (data?.sources && Array.isArray(data.sources)) {
+        sourcesList = data.sources;
+        console.log("Extracted sources from leads API response:", sourcesList.length);
+      } else if (data?.data?.sources && Array.isArray(data.data.sources)) {
+        sourcesList = data.data.sources;
+        console.log("Extracted sources from data.sources:", sourcesList.length);
+      }
 
-        // Set statuses from API response
+      // Set statuses from API response
+      if (statusesList.length > 0) {
+        setStatuses(statusesList);
+      }
+      setStatusesLoading(false);
+
+      console.log("=== PARSED LEADS LIST ===");
+      console.log("Total leads count:", leadsList.length);
+
+      // Filter leads to show only those assigned to this employee
+      const filteredLeads = filterLeadsByEmployee(leadsList);
+      console.log("=== AFTER FILTERING ===");
+      console.log("Filtered leads count:", filteredLeads.length);
+      console.log("Original leads count:", leadsList.length);
+
+      setLeads(filteredLeads);
+
+      // Update cache with fresh data from leads API (leads, statuses, employees, sources)
+      const currentCache = getCachedLeadData();
+      if (currentCache) {
+        currentCache.leads = leadsList;
         if (statusesList.length > 0) {
-          setStatuses(statusesList);
+          currentCache.statuses = statusesList;
         }
-        setStatusesLoading(false);
-
-        // Filter leads to show only those assigned to this employee
-        const filteredLeads = filterLeadsByEmployee(leadsList);
-        
-        setLeads(filteredLeads);
-
+        if (employeesList.length > 0) {
+          currentCache.employees = employeesList;
+        }
+        if (sourcesList.length > 0) {
+          currentCache.sources = sourcesList;
+        }
+        currentCache.timestamp = Date.now();
+        localStorage.setItem("leadDataCache", JSON.stringify(currentCache));
+      } else {
+        // Create new cache entry if none exists
+        const newCache = {
+          statuses: statusesList,
+          sources: sourcesList,
+          employees: employeesList,
+          leads: leadsList,
+          timestamp: Date.now(),
+        };
+        localStorage.setItem("leadDataCache", JSON.stringify(newCache));
+      }
       } catch (err) {
         console.error("Failed to fetch leads:", err);
         alert("Failed to load leads");
@@ -432,7 +525,7 @@ export default function EmployeeAllLeads() {
       // Only reset if we're actually changing pages or user
       // This prevents unnecessary resets during re-renders
     };
-  }, [location.pathname]);
+  }, [location.pathname, currentUserId]);
 
   // Use ref to store currentUserId so event listener always has latest value
   const currentUserIdRef = useRef(currentUserId);
@@ -1216,37 +1309,15 @@ export default function EmployeeAllLeads() {
     return id ? `User ${id}` : "Unknown";
   };
 
-  const openDeleteDialog = (lead) => {
-    setDeleteDialog({ open: true, lead });
-  };
-
-  const closeDeleteDialog = () => {
-    setDeleteDialog({ open: false, lead: null });
-  };
-
-  const confirmDeleteLead = async () => {
-    if (!deleteDialog.lead) return;
-    const id = deleteDialog.lead.id;
-    
-    setIsDeleting(true);
+  const handleDeleteLead = async (id) => {
+    if (!confirm("Delete this lead?")) return;
     try {
       await apiRequest(`/api/leads/${id}`, { method: "DELETE" });
       setLeads(leads.filter((l) => String(l.id) !== String(id)));
       removeLeadFromCache(id);
-      notifySuccess("Lead deleted successfully");
-      closeDeleteDialog();
     } catch (err) {
       console.error("Failed to delete lead:", err);
-      notifyError("Failed to delete lead. Please try again.");
-    } finally {
-      setIsDeleting(false);
-    }
-  };
-
-  const handleDeleteLead = (id) => {
-    const lead = leads.find((l) => l.id === id);
-    if (lead) {
-      openDeleteDialog(lead);
+      alert("Failed to delete lead. Please try again.");
     }
   };
 
@@ -2233,30 +2304,6 @@ export default function EmployeeAllLeads() {
           Delete
         </MenuItem>
       </Menu>
-
-      <Dialog open={deleteDialog.open} onClose={closeDeleteDialog}>
-        <DialogTitle>Confirm Deletion</DialogTitle>
-        <DialogContent>
-          <DialogContentText>
-            {deleteDialog.lead
-              ? `Are you sure you want to delete "${
-                  deleteDialog.lead.title || "this lead"
-                }"?`
-              : "Are you sure you want to delete this lead?"}
-          </DialogContentText>
-        </DialogContent>
-        <DialogActions>
-          <Button onClick={closeDeleteDialog} disabled={isDeleting}>Cancel</Button>
-          <Button
-            onClick={confirmDeleteLead}
-            color="error"
-            variant="contained"
-            disabled={isDeleting}
-          >
-            {isDeleting ? <CircularProgress size={24} color="inherit" /> : "Delete"}
-          </Button>
-        </DialogActions>
-      </Dialog>
 
       <Dialog
         open={notesDialogOpen}

@@ -1,14 +1,4 @@
-import React from "react";
-import {
-  Dialog,
-  DialogTitle,
-  DialogContent,
-  DialogActions,
-  Button,
-  Typography,
-  Box,
-  Chip,
-} from "@mui/material";
+import { Box, Typography, Modal, Chip, Button } from "@mui/material";
 import { colors } from "../../design-system/tokens";
 
 export default function ProjectDetailsModal({
@@ -19,17 +9,8 @@ export default function ProjectDetailsModal({
 }) {
   if (!project) return null;
 
-  const getStatusLabel = (status) => {
-    if (!status) return "Unknown";
-    if (typeof status === "object" && status.name) {
-      return status.name;
-    }
-    return status;
-  };
-
   const getChipStyles = (status) => {
-    const statusName = getStatusLabel(status);
-    switch (statusName) {
+    switch (status) {
       case "Completed":
         return {
           backgroundColor: colors.greenAccent[700],
@@ -56,39 +37,36 @@ export default function ProjectDetailsModal({
   };
 
   return (
-    <Dialog open={open} onClose={onClose} maxWidth="sm" fullWidth>
-      <DialogTitle>Project Details</DialogTitle>
-      <DialogContent dividers>
-        <Box display="flex" flexDirection="column" gap={2}>
-          <Typography>
-            <strong>Project Title:</strong> {project.title || "-"}
-          </Typography>
-          
-          <Box display="flex" alignItems="center" gap={1}>
-            <Typography>
-              <strong>Status:</strong>
-            </Typography>
-            <Chip 
-              label={getStatusLabel(project.status)} 
-              size="small"
-              sx={getChipStyles(project.status)} 
-            />
-          </Box>
-
-          <Typography>
-            <strong>Assigned To:</strong> {getEmployeeName(project)}
-          </Typography>
-
-          <Typography>
-            <strong>Description:</strong> {project.description || "-"}
-          </Typography>
+    <Modal open={open} onClose={onClose}>
+      <Box
+        sx={{
+          position: "absolute",
+          top: "50%",
+          left: "50%",
+          transform: "translate(-50%, -50%)",
+          bgcolor: "background.paper",
+          borderRadius: 2,
+          boxShadow: 24,
+          p: 4,
+          width: 400,
+        }}
+      >
+        <Typography variant="h6" fontWeight="bold" mb={2}>
+          {project.title}
+        </Typography>
+        <Typography mb={1}>
+          Description: {project.description || "-"}
+        </Typography>
+        <Typography mb={1}>
+          Assigned To: {getEmployeeName(project.assignedTo)}
+        </Typography>
+        <Chip label={project.status} sx={getChipStyles(project.status)} />
+        <Box mt={3} display="flex" justifyContent="flex-end">
+          <Button onClick={onClose} variant="contained">
+            Close
+          </Button>
         </Box>
-      </DialogContent>
-      <DialogActions>
-        <Button onClick={onClose} variant="contained">
-          Close
-        </Button>
-      </DialogActions>
-    </Dialog>
+      </Box>
+    </Modal>
   );
 }

@@ -11,9 +11,6 @@ import {
   FormControl,
   InputLabel,
   Button,
-  CircularProgress,
-  Divider,
-  Stack,
 } from "@mui/material";
 import NotificationsActiveIcon from "@mui/icons-material/NotificationsActive";
 import apiRequest from "../services/api";
@@ -34,17 +31,23 @@ const FollowUpCell = ({ lead, onUpdate, notifySuccess, notifyError }) => {
     event.stopPropagation();
     const target = event.currentTarget;
     
-    // Initialize form data from lead
+    // Initialize form data from lead, but check if we need to fetch fresh data
+    // because the list view might not have all fields (send_reminder_email, reminder_time_offset)
     let currentLead = lead;
     
+    if (currentLead.send_reminder_email === undefined) {
+        // Show loading state if needed, or just fetch
+        // We'll use a local loading state for the popover initialization if strictly needed,
+        // but for now let's just fetch and then open.
+        // Or better: open immediately with defaults, then fetch and update form.
+        // Opening immediately feels snappier.
+    }
+
     setFormData({
       follow_up_at: (currentLead.follow_up_at || currentLead.followUpAt) 
         ? dayjs(currentLead.follow_up_at || currentLead.followUpAt).format("YYYY-MM-DDTHH:mm") 
         : "",
-      send_reminder_email:
-        currentLead.send_reminder_email === true ||
-        currentLead.send_reminder_email === "true" ||
-        currentLead.send_reminder_email === 1,
+      send_reminder_email: currentLead.send_reminder_email || false,
       reminder_time_offset: currentLead.reminder_time_offset || "exact",
     });
     
@@ -62,6 +65,8 @@ const FollowUpCell = ({ lead, onUpdate, notifySuccess, notifyError }) => {
                  ...prev,
                  send_reminder_email: leadData.send_reminder_email || false,
                  reminder_time_offset: leadData.reminder_time_offset || "exact",
+                 // Preserve local edit of date if user was super fast? Unlikely.
+                 // But let's sync date too if it wasn't edited yet.
                  follow_up_at: (leadData.follow_up_at) 
                     ? dayjs(leadData.follow_up_at).format("YYYY-MM-DDTHH:mm") 
                     : prev.follow_up_at
@@ -91,8 +96,13 @@ const FollowUpCell = ({ lead, onUpdate, notifySuccess, notifyError }) => {
     const leadId = lead.id || lead.pk || lead.uuid;
     
     try {
+        // Use dayjs format to match CreateLead.jsx and potentially backend expectations (local time with offset)
+        // new Date().toISOString() returns UTC, which might be rejected or misinterpreted if backend expects offset
         const followUpValue = formData.follow_up_at ? dayjs(formData.follow_up_at).format() : null;
 
+        // 1. Update Lead (PATCH) to ensure follow_up_at is saved on the lead model
+        // We also include follow_up_status to be safe, as backend might validate it
+        // We MUST include title as the backend requires it even for PATCH updates
         const patchPayload = {
             title: lead.title || "",
             follow_up_at: followUpValue,
@@ -100,6 +110,8 @@ const FollowUpCell = ({ lead, onUpdate, notifySuccess, notifyError }) => {
             send_reminder_email: formData.send_reminder_email,
             reminder_time_offset: formData.reminder_time_offset || null
         };
+        
+        console.log("FollowUpCell: Sending PATCH payload:", patchPayload);
         
         try {
             await apiRequest(`/api/leads/${leadId}/`, {
@@ -113,6 +125,7 @@ const FollowUpCell = ({ lead, onUpdate, notifySuccess, notifyError }) => {
             return;
         }
 
+        // 2. Schedule Follow-up (POST) - Only if reminder is enabled
         if (formData.send_reminder_email) {
             const schedulePayload = {
                 follow_up_at: followUpValue,
@@ -120,12 +133,15 @@ const FollowUpCell = ({ lead, onUpdate, notifySuccess, notifyError }) => {
                 reminder_time_offset: formData.reminder_time_offset || "exact",
             };
 
+            console.log("FollowUpCell: Sending schedule-follow-up payload:", schedulePayload);
+
             await apiRequest(`/api/leads/${leadId}/schedule-follow-up/`, {
                 method: "POST",
                 body: JSON.stringify(schedulePayload),
             });
         }
 
+        // Update parent state
         if (onUpdate) {
             onUpdate({
                 ...lead,
@@ -150,6 +166,7 @@ const FollowUpCell = ({ lead, onUpdate, notifySuccess, notifyError }) => {
   const open = Boolean(anchorEl);
   const id = open ? "follow-up-popover" : undefined;
   
+  // Format for display
   const displayDate = (lead.follow_up_at || lead.followUpAt) 
     ? dayjs(lead.follow_up_at || lead.followUpAt).format("MMM D, YYYY h:mm A")
     : "Set Follow-up";
@@ -172,7 +189,7 @@ const FollowUpCell = ({ lead, onUpdate, notifySuccess, notifyError }) => {
             }
         }}
       >
-        <Typography variant="body2" sx={{ fontSize: "0.875rem" }}>{displayDate}</Typography>
+        <Typography variant="body2">{displayDate}</Typography>
         {lead.send_reminder_email && (
             <NotificationsActiveIcon color="primary" sx={{ fontSize: 16 }} />
         )}
@@ -192,20 +209,9 @@ const FollowUpCell = ({ lead, onUpdate, notifySuccess, notifyError }) => {
           vertical: "top",
           horizontal: "left",
         }}
-        PaperProps={{
-            elevation: 3,
-            sx: { borderRadius: 2, overflow: "hidden" }
-        }}
       >
-        <Box sx={{ p: 2.5, width: 320, display: "flex", flexDirection: "column", gap: 2 }}>
-            <Stack direction="row" alignItems="center" justifyContent="space-between">
-                <Typography variant="subtitle1" fontWeight={600} color="primary.main">
-                    Schedule Follow-up
-                </Typography>
-                {/* Optional close icon or badge could go here */}
-            </Stack>
-            <Divider />
-            
+        <Box sx={{ p: 2, width: 300, display: "flex", flexDirection: "column", gap: 2 }}>
+            <Typography variant="subtitle2" fontWeight="bold">Schedule Follow-up</Typography>
             <TextField
                 label="Follow-up Date & Time"
                 type="datetime-local"
@@ -214,47 +220,42 @@ const FollowUpCell = ({ lead, onUpdate, notifySuccess, notifyError }) => {
                 fullWidth
                 InputLabelProps={{ shrink: true }}
                 size="small"
-                variant="outlined"
             />
             
-            <Box sx={{ bgcolor: "background.default", p: 1.5, borderRadius: 1, border: "1px solid", borderColor: "divider" }}>
-                <FormControlLabel
-                    control={
-                        <Checkbox
-                            checked={formData.send_reminder_email}
-                            onChange={(e) => setFormData({ ...formData, send_reminder_email: e.target.checked })}
-                            color="primary"
-                        />
-                    }
-                    label={<Typography variant="body2" fontWeight={500}>Send Reminder Email</Typography>}
-                />
-                
-                {formData.send_reminder_email && (
-                    <FormControl fullWidth size="small" sx={{ mt: 1 }}>
-                        <InputLabel>Reminder Offset</InputLabel>
-                        <Select
-                            value={formData.reminder_time_offset || "exact"}
-                            label="Reminder Offset"
-                            onChange={(e) => setFormData({ ...formData, reminder_time_offset: e.target.value })}
-                        >
-                            <MenuItem value="exact">Exact (at follow-up time)</MenuItem>
-                            <MenuItem value="30min">30 minutes before</MenuItem>
-                            <MenuItem value="1hour">1 hour before</MenuItem>
-                            <MenuItem value="1day">1 day before</MenuItem>
-                        </Select>
-                    </FormControl>
-                )}
-            </Box>
+            <FormControlLabel
+                control={
+                    <Checkbox
+                        checked={formData.send_reminder_email}
+                        onChange={(e) => setFormData({ ...formData, send_reminder_email: e.target.checked })}
+                    />
+                }
+                label="Send Reminder Email"
+            />
+            
+            {formData.send_reminder_email && (
+                <FormControl fullWidth size="small">
+                    <InputLabel>Reminder Offset</InputLabel>
+                    <Select
+                        value={formData.reminder_time_offset || "exact"}
+                        label="Reminder Offset"
+                        onChange={(e) => setFormData({ ...formData, reminder_time_offset: e.target.value })}
+                    >
+                        <MenuItem value="exact">Exact (at follow-up time)</MenuItem>
+                        <MenuItem value="30min">30 minutes before</MenuItem>
+                        <MenuItem value="1hour">1 hour before</MenuItem>
+                        <MenuItem value="1day">1 day before</MenuItem>
+                    </Select>
+                </FormControl>
+            )}
             
             <Button 
                 variant="contained" 
                 onClick={handleSave} 
                 disabled={loading}
                 fullWidth
-                disableElevation
-                sx={{ mt: 1, py: 1 }}
+                size="small"
             >
-                {loading ? <CircularProgress size={24} color="inherit" /> : "Save Schedule"}
+                {loading ? "Saving..." : "Save"}
             </Button>
         </Box>
       </Popover>
