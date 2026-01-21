@@ -1,72 +1,127 @@
-import { Box, Typography, Modal, Chip, Button } from "@mui/material";
-import { colors } from "../../design-system/tokens";
+import React from "react";
+import {
+  Dialog,
+  DialogTitle,
+  DialogContent,
+  DialogActions,
+  Button,
+  Typography,
+  Box,
+} from "@mui/material";
+import { FaLinkedin } from "react-icons/fa";
+import LeadNotesChat from "../Leads/LeadNotesChat";
 
-export default function ProjectDetailsModal({
-  open,
-  onClose,
-  project,
-  getEmployeeName,
-}) {
+export default function ProjectDetailsModal({ open, onClose, project, getEmployeeName }) {
   if (!project) return null;
 
-  const getChipStyles = (status) => {
-    switch (status) {
-      case "Completed":
-        return {
-          backgroundColor: colors.greenAccent[700],
-          color: colors.greenAccent[300],
-        };
-      case "Pending":
-        return {
-          backgroundColor: colors.yellowAccent[700],
-          color: colors.yellowAccent[300],
-        };
-      case "In Progress":
-        return {
-          backgroundColor: colors.blueAccent[700],
-          color: colors.blueAccent[300],
-        };
-      case "Rejected":
-        return {
-          backgroundColor: colors.redAccent[700],
-          color: colors.redAccent[300],
-        };
-      default:
-        return { backgroundColor: colors.grey[700], color: colors.grey[300] };
+  const formatDate = (date) => {
+    if (!date) return "-";
+    try {
+      return new Date(date).toLocaleDateString("en-US", {
+        year: "numeric",
+        month: "numeric",
+        day: "numeric",
+      });
+    } catch (error) {
+      return "-";
     }
   };
 
+  const formatTime = (dateTime) => {
+    if (!dateTime) return "-";
+    try {
+      const date = new Date(dateTime);
+      return date.toLocaleTimeString("en-US", {
+        hour: "2-digit",
+        minute: "2-digit",
+        hour12: true,
+      });
+    } catch (error) {
+      return "-";
+    }
+  };
+
+  const getField = (camelCase, snakeCase) => {
+    const value = project[snakeCase] || project[camelCase];
+    if (value === null || value === undefined || value === "") return "-";
+    return value;
+  };
+
+  const linkedInUrl = project.contact_linkedin_url || project.linkedIn || "";
+
   return (
-    <Modal open={open} onClose={onClose}>
-      <Box
-        sx={{
-          position: "absolute",
-          top: "50%",
-          left: "50%",
-          transform: "translate(-50%, -50%)",
-          bgcolor: "background.paper",
-          borderRadius: 2,
-          boxShadow: 24,
-          p: 4,
-          width: 400,
-        }}
-      >
-        <Typography variant="h6" fontWeight="bold" mb={2}>
-          {project.title}
-        </Typography>
-        <Typography mb={1}>
-          Description: {project.description || "-"}
-        </Typography>
-        <Typography mb={1}>
-          Assigned To: {getEmployeeName(project.assignedTo)}
-        </Typography>
-        <Chip label={project.status} sx={getChipStyles(project.status)} />
-        <Box mt={3} display="flex" justifyContent="flex-end">
-          <Button onClick={onClose} variant="contained">
-            Close
-          </Button>
+    <Dialog open={open} onClose={onClose} maxWidth="sm" fullWidth>
+      <DialogTitle>Project Details</DialogTitle>
+      <DialogContent dividers>
+        <Box display="flex" flexDirection="column" gap={1}>
+          <Typography>
+            <strong>Lead Title:</strong> {getField("title", "title")}
+          </Typography>
+          <Typography>
+            <strong>First Name:</strong> {getField("firstName", "contact_first_name")}
+          </Typography>
+          <Typography>
+            <strong>Last Name:</strong> {getField("lastName", "contact_last_name")}
+          </Typography>
+          <Typography>
+            <strong>Email:</strong> {getField("email", "contact_email")}
+          </Typography>
+          <Typography>
+            <strong>Phone:</strong> {getField("phone", "contact_phone")}
+          </Typography>
+          <Typography>
+            <strong>LinkedIn:</strong>{" "}
+            {linkedInUrl ? (
+              <a href={linkedInUrl} target="_blank" rel="noreferrer" style={{ textDecoration: "none", color: "#0A66C2" }}>
+                <FaLinkedin size={18} />
+              </a>
+            ) : (
+              "-"
+            )}
+          </Typography>
+          <Typography>
+            <strong>Status:</strong> {project.status?.name || project.status || "-"}
+          </Typography>
+
+          <Typography>
+            <strong>Assigned To:</strong>{" "}
+            {getEmployeeName ? getEmployeeName(project.assigned_to || project.assignedTo) : "-"}
+          </Typography>
+          <Typography>
+            <strong>Follow-up Date:</strong> {formatDate(project.follow_up_at || project.followUpAt)}
+          </Typography>
+          <Typography>
+            <strong>Follow-up Time:</strong> {formatTime(project.follow_up_at || project.followUpAt)}
+          </Typography>
+          <Typography>
+            <strong>Follow-up Status:</strong> {getField("followupStatus", "follow_up_status")}
+          </Typography>
+          <Typography>
+            <strong>Source:</strong> {getField("source", "source")}
+          </Typography>
+          <Typography>
+            <strong>Lifecycle:</strong> {getField("lifecycle", "lifecycle")}
+          </Typography>
+          <Typography>
+            <strong>Company:</strong> {getField("company", "company_name")}
+          </Typography>
+          <Typography>
+            <strong>Position Title:</strong> {getField("positionTitle", "contact_position_title")}
+          </Typography>
+          <Typography>
+            <strong>Description:</strong> {getField("description", "description")}
+          </Typography>
         </Box>
-      </Box>
-    </Modal>
+        {/* keep notes chat available if needed */}
+        {/* <Box mt={4}>
+          <LeadNotesChat leadId={project.id || project.pk || project.uuid} />
+        </Box> */}
+      </DialogContent>
+      <DialogActions>
+        <Button onClick={onClose} variant="contained">
+          Close
+        </Button>
+      </DialogActions>
+    </Dialog>
   );
 }

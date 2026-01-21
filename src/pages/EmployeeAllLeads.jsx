@@ -123,7 +123,8 @@ const resolveLeadId = (lead) => {
 };
 
 const tableHeaderCellStyles = {
-  whiteSpace: "nowrap",
+  whiteSpace: "normal",
+  overflowWrap: "anywhere",
   fontWeight: 700,
 };
 
@@ -146,6 +147,7 @@ export default function EmployeeAllLeads() {
     const stored = JSON.parse(localStorage.getItem("leadColumns")) || DEFAULT_COLUMNS;
     return stored.includes("isActive") ? stored : [...stored, "isActive"]; // ensure toggle column shows
   });
+  const tableMinWidth = Math.max(visibleColumns.length * 200, 1000);
   const [selectedLead, setSelectedLead] = useState(null);
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [notesDialogOpen, setNotesDialogOpen] = useState(false);
@@ -475,8 +477,28 @@ export default function EmployeeAllLeads() {
       console.log("=== PARSED LEADS LIST ===");
       console.log("Total leads count:", leadsList.length);
 
+      // Normalize lifecycle field (in case API returns object vs string)
+      const normalizeLifecycleField = (item) => {
+        try {
+          const v = item.lifecycle ?? item.lifecycle_obj ?? item.lifecycleObj ?? item.lifecycle_id ?? item.lifecycleId;
+          if (!v && v !== 0) {
+            return { ...item, lifecycle: item.lifecycle ?? "" };
+          }
+          if (typeof v === "string") return { ...item, lifecycle: v };
+          if (typeof v === "object" && v !== null) {
+            const name = v.name || v.label || v.title || v.lifecycle || String(v.id || v.pk || v.uuid || "");
+            return { ...item, lifecycle: name };
+          }
+          return { ...item, lifecycle: String(v) };
+        } catch (e) {
+          return { ...item, lifecycle: item.lifecycle ?? "" };
+        }
+      };
+
+      const normalizedLeadsList = leadsList.map(normalizeLifecycleField);
+
       // Filter leads to show only those assigned to this employee
-      const filteredLeads = filterLeadsByEmployee(leadsList);
+      const filteredLeads = filterLeadsByEmployee(normalizedLeadsList);
       console.log("=== AFTER FILTERING ===");
       console.log("Filtered leads count:", filteredLeads.length);
       console.log("Original leads count:", leadsList.length);
@@ -1160,7 +1182,15 @@ export default function EmployeeAllLeads() {
       case "source":
         return lead.source || "";
       case "lifecycle":
-        return lead.lifecycle || "";
+        {
+          const v = lead.lifecycle ?? lead.lifecycle_obj ?? lead.lifecycleObj ?? lead.lifecycle_id ?? lead.lifecycleId;
+          if (!v && v !== 0) return "";
+          if (typeof v === "string") return v;
+          if (typeof v === "object" && v !== null) {
+            return v.name || v.label || v.title || v.lifecycle || String(v.id || v.pk || v.uuid || "");
+          }
+          return String(v);
+        }
       case "description":
         return lead.description || "";
       case "company":
@@ -1441,7 +1471,6 @@ export default function EmployeeAllLeads() {
   const assignedFilterOptions = useMemo(() => {
     const options = new Map();
     options.set("All", { value: "All", label: "All" });
-    options.set("None", { value: "None", label: "None" });
 
     leads.forEach((lead) => {
       const name = getEmployeeName(lead.assigned_to || lead.assignedTo);
@@ -1467,7 +1496,7 @@ export default function EmployeeAllLeads() {
 
   // Build select options for assignment dropdown (include admins)
   const assignedSelectOptions = useMemo(() => {
-    const opts = [{ value: "", label: "None" }];
+    const opts = [];
     const seenIds = new Set();
 
     const cachedData = getCachedLeadData();
@@ -1763,25 +1792,25 @@ export default function EmployeeAllLeads() {
           onChange={(e) => setQ(e.target.value)}
           size="small"
         />
-       <FormControl size="small" sx={{ minWidth: 180 }}>
-  <InputLabel>Status</InputLabel>
-  <Select
-    value={statusFilter}
-    label="Status"
-    onChange={(e) => setStatusFilter(e.target.value)}
-  >
-    <MenuItem value="ALL">All</MenuItem>
+        <FormControl size="small" sx={{ minWidth: 180 }}>
+          <InputLabel>Status</InputLabel>
+          <Select
+            value={statusFilter}
+            label="Status"
+            onChange={(e) => setStatusFilter(e.target.value)}
+          >
+            <MenuItem value="ALL">All</MenuItem>
 
-    {statuses.map((status) => (
-      <MenuItem
-        key={status.id ?? status.pk ?? status.uuid}
-        value={status.id ?? status.pk ?? status.uuid}
-      >
-        {status.name || status.status_name || status.label}
-      </MenuItem>
-    ))}
-  </Select>
-</FormControl>
+            {statuses.map((status) => (
+              <MenuItem
+                key={status.id ?? status.pk ?? status.uuid}
+                value={status.id ?? status.pk ?? status.uuid}
+              >
+                {status.name || status.status_name || status.label}
+              </MenuItem>
+            ))}
+          </Select>
+        </FormControl>
 
         <FormControl size="small" sx={{ minWidth: 180 }}>
           <InputLabel>Assigned To</InputLabel>
@@ -1819,14 +1848,20 @@ export default function EmployeeAllLeads() {
         sx={{
           borderRadius: "12px",
           boxShadow: "none",
-          overflowX: "scroll",
-          maxWidth: "100%",
+          width: "100%",
+          px: { xs: 2, md: 3 },
+          overflowX: "auto",
+          maxHeight: "calc(100vh - 240px)",
         }}
       >
         <Table
+          stickyHeader
           aria-label="basic table"
           sx={{
-            tableLayout: "auto",
+            tableLayout: "fixed",
+            width: "100%",
+            minWidth: tableMinWidth,
+            "& td, & th": { whiteSpace: "normal", overflowWrap: "anywhere" },
           }}
         >
           <TableHead>
@@ -1834,7 +1869,6 @@ export default function EmployeeAllLeads() {
               {visibleColumns.includes("title") && (
                 <TableCell sx={tableHeaderCellStyles}>Lead Title</TableCell>
               )}
-
               {visibleColumns.includes("linkedIn") && (
                 <TableCell sx={tableHeaderCellStyles}>LinkedIn</TableCell>
               )}
@@ -1853,7 +1887,11 @@ export default function EmployeeAllLeads() {
                 </TableCell>
               )}
               {visibleColumns.includes("isActive") && (
-                <TableCell sx={{ ...tableHeaderCellStyles, textAlign: "center" }}>Active</TableCell>
+                <TableCell
+                  sx={{ ...tableHeaderCellStyles, textAlign: "center" }}
+                >
+                  Active
+                </TableCell>
               )}
               {visibleColumns.includes("source") && (
                 <TableCell sx={tableHeaderCellStyles}>Source</TableCell>
@@ -1882,13 +1920,23 @@ export default function EmployeeAllLeads() {
               {visibleColumns.includes("positionTitle") && (
                 <TableCell sx={tableHeaderCellStyles}>Position Title</TableCell>
               )}
-
               <TableCell sx={{ ...tableHeaderCellStyles, textAlign: "center" }}>
                 Notes
               </TableCell>
-              <TableCell sx={{ ...tableHeaderCellStyles, textAlign: "center" }}>
+              <TableCell
+                sx={{
+                  ...tableHeaderCellStyles,
+                  textAlign: "center",
+                  width: 72,
+                  whiteSpace: "nowrap",
+                  overflow: "hidden",
+                  textOverflow: "ellipsis",
+                  lineHeight: 1,
+                  padding: "8px",
+                }}
+              >
                 Actions
-              </TableCell>
+              </TableCell>{" "}
             </TableRow>
           </TableHead>
 
@@ -2049,12 +2097,20 @@ export default function EmployeeAllLeads() {
                       <TableCell>
                         <Select
                           value={(() => {
-                            const id = getEmployeeIdValue(lead.assigned_to || lead.assignedTo);
-                            return id === null || id === undefined ? "" : String(id);
+                            const id = getEmployeeIdValue(
+                              lead.assigned_to || lead.assignedTo
+                            );
+                            return id === null || id === undefined
+                              ? ""
+                              : String(id);
                           })()}
-                          onChange={(e) => handleAssignedChange(lead, e.target.value)}
+                          onChange={(e) =>
+                            handleAssignedChange(lead, e.target.value)
+                          }
                           size="small"
-                          disabled={assignedUpdatingLeadId === resolveLeadId(lead)}
+                          disabled={
+                            assignedUpdatingLeadId === resolveLeadId(lead)
+                          }
                           sx={{
                             minWidth: 160,
                             height: 32,
@@ -2072,7 +2128,10 @@ export default function EmployeeAllLeads() {
                           }}
                         >
                           {assignedSelectOptions.map((option) => (
-                            <MenuItem key={option.value || "none"} value={option.value}>
+                            <MenuItem
+                              key={option.value || "none"}
+                              value={option.value}
+                            >
                               {option.label}
                             </MenuItem>
                           ))}
@@ -2083,15 +2142,17 @@ export default function EmployeeAllLeads() {
                     {visibleColumns.includes("followUpAt") && (
                       <TableCell>
                         <FollowUpCell
-                            lead={lead}
-                            onUpdate={(updatedLead) => {
-                                setLeads((prevLeads) =>
-                                    prevLeads.map((l) => (l.id === lead.id ? { ...l, ...updatedLead } : l))
-                                );
-                                addLeadToCache(updatedLead);
-                            }}
-                            notifySuccess={notifySuccess}
-                            notifyError={notifyError}
+                          lead={lead}
+                          onUpdate={(updatedLead) => {
+                            setLeads((prevLeads) =>
+                              prevLeads.map((l) =>
+                                l.id === lead.id ? { ...l, ...updatedLead } : l
+                              )
+                            );
+                            addLeadToCache(updatedLead);
+                          }}
+                          notifySuccess={notifySuccess}
+                          notifyError={notifyError}
                         />
                       </TableCell>
                     )}
@@ -2159,9 +2220,14 @@ export default function EmployeeAllLeads() {
                     {visibleColumns.includes("isActive") && (
                       <TableCell align="center">
                         <Switch
-                          checked={lead.is_always_active || lead.always_active || false}
+                          checked={
+                            lead.is_always_active || lead.always_active || false
+                          }
                           onChange={() => handleToggleActive(lead)}
-                          disabled={activeTogglingLeadId === (lead.id || lead.pk || lead.uuid)}
+                          disabled={
+                            activeTogglingLeadId ===
+                            (lead.id || lead.pk || lead.uuid)
+                          }
                           size="small"
                           color="primary"
                         />
@@ -2241,10 +2307,11 @@ export default function EmployeeAllLeads() {
                       </IconButton>
                     </TableCell>
 
-                    <TableCell>
+                    <TableCell align="center" sx={{ width: 72, px: 1 }}>
                       <IconButton
                         size="small"
                         onClick={(e) => handleActionMenuOpen(e, lead)}
+                        sx={{ display: "flex", justifyContent: "center" }}
                       >
                         <MoreHorizIcon />
                       </IconButton>

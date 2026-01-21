@@ -439,8 +439,8 @@ export default function ManageEmployees() {
             No employees found.
           </Typography>
         ) : (
-          <Box sx={{ width: "100%", overflowX: "auto" }}>
-            <TableContainer sx={{ minWidth: 800 }}>
+            <Box sx={{ width: "100%", overflowX: "auto" }}>
+            <TableContainer sx={{ minWidth: 800, width: "fit-content", maxWidth: "100%", overflowX: "auto" }}>
               <Table>
                 <TableHead>
                   <TableRow>

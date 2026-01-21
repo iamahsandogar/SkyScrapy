@@ -90,13 +90,13 @@ import FollowUpCell from "../components/Leads/FollowUpCell";
 const ALL_COLUMNS = [
   { key: "title", label: "Lead Title" },
   { key: "linkedIn", label: "LinkedIn" },
-  { key: "status", label: "Status" },
+  { key: "status", label: "Lead Status" },
   { key: "assignedTo", label: "Assigned To" },
   { key: "followUpAt", label: "Follow-up At" },
   { key: "followupStatus", label: "Follow-up Status" },
   { key: "isActive", label: "Active" },
   { key: "source", label: "Source" },
-  { key: "lifecycle", label: "Lifecycle" },
+  { key: "lifecycle", label: "Lead Lifecycle" },
   { key: "description", label: "Description" },
   { key: "company", label: "Company" },
   { key: "firstName", label: "First Name" },
@@ -118,8 +118,13 @@ const DEFAULT_COLUMNS = [
   "isActive",
 ];
 const tableHeaderCellStyles = {
-  whiteSpace: "nowrap", // correct value
-  fontWeight: 700,
+  fontWeight: 600,
+  whiteSpace: "normal",
+  overflowWrap: "anywhere",
+  backgroundColor: "#fff", // important for sticky header
+  position: "sticky",
+  top: 0,
+  zIndex: 2,
 };
 
 // const tableBodyCellStyles = {
@@ -154,6 +159,7 @@ export default function AllLeads() {
     const stored = JSON.parse(localStorage.getItem("leadColumns")) || DEFAULT_COLUMNS;
     return stored.includes("isActive") ? stored : [...stored, "isActive"]; // ensure toggle column shows
   });
+  const tableMinWidth = Math.max(visibleColumns.length * 200, 1000);
   const [selectedLead, setSelectedLead] = useState(null);
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [notesDialogOpen, setNotesDialogOpen] = useState(false);
@@ -380,9 +386,29 @@ export default function AllLeads() {
           setEmployees(usersList);
         }
 
+        // Normalize lifecycle field (in case API returns object vs string)
+        const normalizeLifecycleField = (item) => {
+          try {
+            const v = item.lifecycle ?? item.lifecycle_obj ?? item.lifecycleObj ?? item.lifecycle_id ?? item.lifecycleId;
+            if (!v && v !== 0) {
+              return { ...item, lifecycle: item.lifecycle ?? "" };
+            }
+            if (typeof v === "string") return { ...item, lifecycle: v };
+            if (typeof v === "object" && v !== null) {
+              const name = v.name || v.label || v.title || v.lifecycle || String(v.id || v.pk || v.uuid || "");
+              return { ...item, lifecycle: name };
+            }
+            return { ...item, lifecycle: String(v) };
+          } catch (e) {
+            return { ...item, lifecycle: item.lifecycle ?? "" };
+          }
+        };
+
+        const normalizedLeadsList = leadsList.map(normalizeLifecycleField);
+
         // Filter leads based on user role
-        const filteredLeads = filterLeadsByUser(leadsList);
-        
+        const filteredLeads = filterLeadsByUser(normalizedLeadsList);
+
         setLeads(filteredLeads);
         setIsPageLoading(false);
         apiCallMadeRef.current.inProgress = false;
@@ -400,6 +426,33 @@ export default function AllLeads() {
 
     fetchLeads();
   }, [location.pathname]); // Refresh when navigating to this page
+
+  // Listen for leads added to the cache (e.g., local conversions) and update UI
+  useEffect(() => {
+    const handleCacheUpdate = (event) => {
+      try {
+        const detail = event?.detail || {};
+        const newLead = detail.lead;
+        if (!newLead) return;
+
+        const resolved = resolveLeadId(newLead) || newLead.id || `local-${Date.now()}`;
+        const normalized = { ...newLead, id: resolved };
+
+        setLeads((prev) => {
+          const exists = prev.some((l) => String(resolveLeadId(l)) === String(resolved));
+          if (exists) {
+            return prev.map((l) => (String(resolveLeadId(l)) === String(resolved) ? { ...l, ...normalized } : l));
+          }
+          return [normalized, ...prev];
+        });
+      } catch (e) {
+        console.error("Error handling leadCacheUpdated event:", e);
+      }
+    };
+
+    window.addEventListener("leadCacheUpdated", handleCacheUpdate);
+    return () => window.removeEventListener("leadCacheUpdated", handleCacheUpdate);
+  }, []);
 
   // Handler to update lead status
   const handleStatusChange = async (lead, newStatusId) => {
@@ -431,19 +484,19 @@ export default function AllLeads() {
         // Only include follow_up_at and follow_up_status if they have valid values
         // Status is independent of follow_up_at and follow_up_status, so we only include them if they exist
         ...((currentLead.follow_up_at || currentLead.followUpAt) &&
-        (currentLead.follow_up_at || currentLead.followUpAt) !== null &&
-        (currentLead.follow_up_at || currentLead.followUpAt) !== ""
+          (currentLead.follow_up_at || currentLead.followUpAt) !== null &&
+          (currentLead.follow_up_at || currentLead.followUpAt) !== ""
           ? {
-              follow_up_at: currentLead.follow_up_at || currentLead.followUpAt,
-            }
+            follow_up_at: currentLead.follow_up_at || currentLead.followUpAt,
+          }
           : {}),
         ...((currentLead.follow_up_status || currentLead.followupStatus) &&
-        (currentLead.follow_up_status || currentLead.followupStatus) !== null &&
-        (currentLead.follow_up_status || currentLead.followupStatus) !== ""
+          (currentLead.follow_up_status || currentLead.followupStatus) !== null &&
+          (currentLead.follow_up_status || currentLead.followupStatus) !== ""
           ? {
-              follow_up_status:
-                currentLead.follow_up_status || currentLead.followupStatus,
-            }
+            follow_up_status:
+              currentLead.follow_up_status || currentLead.followupStatus,
+          }
           : {}),
       };
 
@@ -489,8 +542,8 @@ export default function AllLeads() {
       // Handle "None" - convert to null for API
       const statusValue =
         newFollowUpStatus === "" ||
-        newFollowUpStatus === null ||
-        newFollowUpStatus === undefined
+          newFollowUpStatus === null ||
+          newFollowUpStatus === undefined
           ? null
           : newFollowUpStatus;
 
@@ -530,8 +583,7 @@ export default function AllLeads() {
         errorResponse: error?.response,
       });
       notifyError(
-        `Failed to update follow-up status: ${
-          error?.message || "Unknown error"
+        `Failed to update follow-up status: ${error?.message || "Unknown error"
         }`
       );
     } finally {
@@ -572,10 +624,10 @@ export default function AllLeads() {
       } else {
         // Fallback: construct from current lead (assigned_to will be just an ID)
         updatedLead = {
-        ...lead,
-        assigned_to: payload.assigned_to,
-        assignedTo: payload.assigned_to,
-      };
+          ...lead,
+          assigned_to: payload.assigned_to,
+          assignedTo: payload.assigned_to,
+        };
       }
 
       // Ensure we have all fields from currentLead merged in
@@ -633,8 +685,8 @@ export default function AllLeads() {
         contact_position_title: currentLead.contact_position_title || "",
         contact_linkedin_url: currentLead.contact_linkedin_url || "",
         ...((currentLead.follow_up_status || currentLead.followupStatus) &&
-        (currentLead.follow_up_status || currentLead.followupStatus) !== null &&
-        (currentLead.follow_up_status || currentLead.followupStatus) !== ""
+          (currentLead.follow_up_status || currentLead.followupStatus) !== null &&
+          (currentLead.follow_up_status || currentLead.followupStatus) !== ""
           ? { follow_up_status: currentLead.follow_up_status || currentLead.followupStatus }
           : {}),
       };
@@ -652,15 +704,15 @@ export default function AllLeads() {
       // Schedule follow-up
       const followUpPayload = currentLead.send_reminder_email
         ? {
-            follow_up_at: followUpValue,
-            send_reminder_email: true,
-            reminder_time_offset: currentLead.reminder_time_offset,
-          }
+          follow_up_at: followUpValue,
+          send_reminder_email: true,
+          reminder_time_offset: currentLead.reminder_time_offset,
+        }
         : {
-            send_reminder_email: false,
-            reminder_time_offset: null,
-            follow_up_at: followUpValue,
-          };
+          send_reminder_email: false,
+          reminder_time_offset: null,
+          follow_up_at: followUpValue,
+        };
 
       try {
         await apiRequest(`/api/leads/${leadId}/schedule-follow-up/`, {
@@ -913,7 +965,15 @@ export default function AllLeads() {
       case "source":
         return lead.source || "";
       case "lifecycle":
-        return lead.lifecycle || "";
+        {
+          const v = lead.lifecycle ?? lead.lifecycle_obj ?? lead.lifecycleObj ?? lead.lifecycle_id ?? lead.lifecycleId;
+          if (!v && v !== 0) return "";
+          if (typeof v === "string") return v;
+          if (typeof v === "object" && v !== null) {
+            return v.name || v.label || v.title || v.lifecycle || String(v.id || v.pk || v.uuid || "");
+          }
+          return String(v);
+        }
       case "description":
         return lead.description || "";
       case "company":
@@ -1056,7 +1116,7 @@ export default function AllLeads() {
 
   // Build select options for assigned employee dropdown
   const assignedSelectOptions = useMemo(() => {
-    const opts = [{ value: "", label: "None" }];
+    const opts = [];
     const seenIds = new Set();
 
     employees.forEach((emp, idx) => {
@@ -1169,923 +1229,976 @@ export default function AllLeads() {
     URL.revokeObjectURL(url);
   };
 
-  // const handleConvertToProject = async (lead) => {
-  //   try {
-  //     console.log("Converting lead to project:", lead);
+  const handleConvertToProject = async (lead) => {
+    if (!lead) return;
+    const leadId = resolveLeadId(lead);
+    if (!leadId) {
+      notifyError("Invalid lead selected");
+      return;
+    }
 
-  //     // Map lead fields to project fields (handle both API response formats)
-  //     const leadTitle =
-  //       lead.title ||
-  //       (lead.contact_first_name && lead.contact_last_name
-  //         ? `${lead.contact_first_name} ${lead.contact_last_name}`
-  //         : lead.firstName && lead.lastName
-  //         ? `${lead.firstName} ${lead.lastName}`
-  //         : "Untitled Project");
+    setActionLoading(true);
+    try {
+      await apiRequest(`/api/leads/${leadId}/convert-to-project/`, {
+        method: "POST",
+        body: JSON.stringify({ is_project: true }),
+      });
 
-  //     const leadDescription = lead.description || "";
-  //     const leadAssignedTo = lead.assigned_to || lead.assignedTo || null;
-  //     const leadStatus = lead.status || null;
+      // Remove converted lead from list and cache
+      setLeads((prev) => prev.filter((l) => String(resolveLeadId(l)) !== String(leadId)));
+      removeLeadFromCache(lead);
 
-  //     // Only send fields your backend expects
-  //     const newProject = {
-  //       title: leadTitle,
-  //       status: leadStatus,
-  //       description: leadDescription,
-  //       assigned_to: leadAssignedTo,
-  //       start_date: new Date().toISOString().split("T")[0], // Format as YYYY-MM-DD
-  //       end_date: null,
-  //     };
-
-  //     console.log("Project payload:", newProject);
-
-  //     const projectResponse = await apiRequest("/api/projects/", {
-  //       method: "POST",
-  //       body: JSON.stringify(newProject),
-  //     });
-
-  //     console.log("Project created:", projectResponse);
-
-  //     // Delete the lead after successful creation
-  //     await apiRequest(`/api/leads/${lead.id}/`, { method: "DELETE" });
-  //     setLeads(leads.filter((l) => l.id !== lead.id));
-  //     removeLeadFromCache(lead);
-
-  //     notifySuccess(`Lead "${leadTitle}" converted to project successfully!`);
-  //     navigate(`/management/projects`);
-  //   } catch (err) {
-  //     console.error("Failed to convert lead:", err);
-  //     console.error("Error details:", {
-  //       message: err.message,
-  //       lead: lead,
-  //     });
-  //     notifyError(
-  //       "Failed to convert lead: " + (err.message || "Unknown error")
-  //     );
-  //   }
-  // };
-
-  const handleOpenCustomize = (e) => setAnchorEl(e.currentTarget);
-  const handleCloseCustomize = () => setAnchorEl(null);
-
-  const toggleColumn = (key) => {
-    const updated = visibleColumns.includes(key)
-      ? visibleColumns.filter((c) => c !== key)
-      : [...visibleColumns, key];
-    setVisibleColumns(updated);
-    localStorage.setItem("leadColumns", JSON.stringify(updated));
-  };
-
-  const handleResetColumns = () => {
-    setVisibleColumns(DEFAULT_COLUMNS);
-    localStorage.setItem("leadColumns", JSON.stringify(DEFAULT_COLUMNS));
-  };
-
-  const handleClearColumns = () => {
-    setVisibleColumns([]);
-    localStorage.setItem("leadColumns", JSON.stringify([]));
-  };
-
-  const normalizeFollowUpDate = (value) => {
-    if (!value) return "None";
-    const parsed = new Date(value);
-    if (Number.isNaN(parsed.getTime())) return "None";
-    return parsed.toISOString().split("T")[0];
-  };
-
-  const assignedFilterOptions = useMemo(() => {
-    const options = new Map();
-    options.set("All", { value: "All", label: "All" });
-    options.set("None", { value: "None", label: "None" });
-
-    leads.forEach((lead) => {
-      const name = getEmployeeName(lead.assigned_to || lead.assignedTo);
-      if (name && name !== "None") {
-        options.set(name, { value: name, label: name });
+      notifySuccess("Lead converted to project successfully");
+    } catch (err) {
+      console.error("Convert to project failed:", err);
+      const status = err?.status;
+      if (status === 403) {
+        notifyError("You do not have permission to convert this lead");
+      } else if (status === 400) {
+        notifyError(err.message || "Invalid request for conversion");
+      } else {
+        notifyError(err.message || "Failed to convert lead to project");
       }
-    });
+    } finally {
+      setActionLoading(false);
+    }
+  };
 
-    return Array.from(options.values());
-  }, [leads, employees]);
+    const handleOpenCustomize = (e) => setAnchorEl(e.currentTarget);
+    const handleCloseCustomize = () => setAnchorEl(null);
 
-  const followUpFilterOptions = useMemo(() => {
-    const options = new Map();
-    options.set("All", { value: "All", label: "All" });
-    options.set("None", { value: "None", label: "None" });
+    const toggleColumn = (key) => {
+      const updated = visibleColumns.includes(key)
+        ? visibleColumns.filter((c) => c !== key)
+        : [...visibleColumns, key];
+      setVisibleColumns(updated);
+      localStorage.setItem("leadColumns", JSON.stringify(updated));
+    };
 
-    leads.forEach((lead) => {
-      const rawFollowUp = lead.follow_up_at || lead.followUpAt;
-      const normalized = normalizeFollowUpDate(rawFollowUp);
-      if (normalized !== "None") {
-        const label = new Date(rawFollowUp).toLocaleDateString("en-US", {
-          year: "numeric",
-          month: "short",
-          day: "numeric",
-        });
-        options.set(normalized, { value: normalized, label });
-      }
-    });
+    const handleResetColumns = () => {
+      setVisibleColumns(DEFAULT_COLUMNS);
+      localStorage.setItem("leadColumns", JSON.stringify(DEFAULT_COLUMNS));
+    };
 
-    return Array.from(options.values());
-  }, [leads]);
-  // ===== FILTER LOGIC =====
-  const filteredLeads = useMemo(() => {
-    return leads.filter((lead) => {
-      // STATUS FILTER
-      if (statusFilter !== "ALL") {
-        const leadStatusId =
-          typeof lead.status === "object"
-            ? lead.status?.id
-            : lead.status;
+    const handleClearColumns = () => {
+      setVisibleColumns([]);
+      localStorage.setItem("leadColumns", JSON.stringify([]));
+    };
+
+    const normalizeFollowUpDate = (value) => {
+      if (!value) return "None";
+      const parsed = new Date(value);
+      if (Number.isNaN(parsed.getTime())) return "None";
+      return parsed.toISOString().split("T")[0];
+    };
+
+    const assignedFilterOptions = useMemo(() => {
+      const options = new Map();
+      options.set("All", { value: "All", label: "All" });
+
+      leads.forEach((lead) => {
+        const name = getEmployeeName(lead.assigned_to || lead.assignedTo);
+        if (name && name !== "None") {
+          options.set(name, { value: name, label: name });
+        }
+      });
+
+      return Array.from(options.values());
+    }, [leads, employees]);
+
+    const followUpFilterOptions = useMemo(() => {
+      const options = new Map();
+      options.set("All", { value: "All", label: "All" });
+      options.set("None", { value: "None", label: "None" });
+
+      leads.forEach((lead) => {
+        const rawFollowUp = lead.follow_up_at || lead.followUpAt;
+        const normalized = normalizeFollowUpDate(rawFollowUp);
+        if (normalized !== "None") {
+          const label = new Date(rawFollowUp).toLocaleDateString("en-US", {
+            year: "numeric",
+            month: "short",
+            day: "numeric",
+          });
+          options.set(normalized, { value: normalized, label });
+        }
+      });
+
+      return Array.from(options.values());
+    }, [leads]);
+    // ===== FILTER LOGIC =====
+    const filteredLeads = useMemo(() => {
+      return leads.filter((lead) => {
+        // STATUS FILTER
+        if (statusFilter !== "ALL") {
+          const leadStatusId =
+            typeof lead.status === "object"
+              ? lead.status?.id
+              : lead.status;
   
-        if (String(leadStatusId) !== String(statusFilter)) {
+          if (String(leadStatusId) !== String(statusFilter)) {
+            return false;
+          }
+        }
+  
+        // SEARCH FILTER (if you already have it)
+        if (q && !lead.title?.toLowerCase().includes(q.toLowerCase())) {
           return false;
         }
-      }
   
-      // SEARCH FILTER (if you already have it)
-      if (q && !lead.title?.toLowerCase().includes(q.toLowerCase())) {
-        return false;
-      }
-  
-      return true;
-    });
-  }, [leads, statusFilter, q]);
+        return true;
+      });
+    }, [leads, statusFilter, q]);
   
 
-  return (
-    <Box>
-      <Topbar>
-        <Typography variant="h5" fontWeight="bold">
-          All Leads
-        </Typography>
-        {/* Desktop Buttons */}
-        <Box sx={{ display: { xs: "none", md: "flex" } }} gap={2}>
-          <Button
-            variant="outlined"
-            startIcon={<CloudDownloadIcon />}
-            onClick={handleExportLeadsCSV}
-          >
-            Export Leads CSV
-          </Button>
-          <Button
-            variant="contained"
-            startIcon={<AddIcon />}
-            onClick={handleOpenCreateLead}
-          >
-            Add New Lead
-          </Button>
-          <Button variant="outlined" onClick={handleOpenCustomize}>
-            Customize Columns
-          </Button>
-        </Box>
+    return (
+      <Box>
+        <Topbar>
+          <Typography variant="h5" fontWeight="bold">
+            All Leads
+          </Typography>
+          {/* Desktop Buttons */}
+          <Box sx={{ display: { xs: "none", md: "flex" } }} gap={2}>
+            <Button
+              variant="outlined"
+              startIcon={<CloudDownloadIcon />}
+              onClick={handleExportLeadsCSV}
+            >
+              Export Leads CSV
+            </Button>
+            <Button
+              variant="contained"
+              startIcon={<AddIcon />}
+              onClick={handleOpenCreateLead}
+            >
+              Add New Lead
+            </Button>
+            <Button variant="outlined" onClick={handleOpenCustomize}>
+              Customize Columns
+            </Button>
+          </Box>
 
-        {/* Mobile 3-dot menu */}
-        <Box sx={{ display: { xs: "flex", md: "none" } }}>
-          <IconButton onClick={(e) => setMobileMenuAnchorEl(e.currentTarget)}>
-            <MoreVertIcon />
-          </IconButton>
+          {/* Mobile 3-dot menu */}
+          <Box sx={{ display: { xs: "flex", md: "none" } }}>
+            <IconButton onClick={(e) => setMobileMenuAnchorEl(e.currentTarget)}>
+              <MoreVertIcon />
+            </IconButton>
 
-          <Menu
-            anchorEl={mobileMenuAnchorEl}
-            open={Boolean(mobileMenuAnchorEl)}
-            onClose={() => setMobileMenuAnchorEl(null)}
-            PaperProps={{ sx: { minWidth: 200, p: 1 } }} // optional padding for better spacing
-          >
-            {/* Export Leads CSV */}
-            <MenuItem>
-              <Button
-                fullWidth
-                variant="outlined"
-                startIcon={<CloudDownloadIcon />}
-                onClick={() => {
-                  handleExportLeadsCSV();
-                  setMobileMenuAnchorEl(null); // close menu
-                }}
-              >
-                Export Leads CSV
-              </Button>
-            </MenuItem>
+            <Menu
+              anchorEl={mobileMenuAnchorEl}
+              open={Boolean(mobileMenuAnchorEl)}
+              onClose={() => setMobileMenuAnchorEl(null)}
+              PaperProps={{ sx: { minWidth: 200, p: 1 } }} // optional padding for better spacing
+            >
+              {/* Export Leads CSV */}
+              <MenuItem>
+                <Button
+                  fullWidth
+                  variant="outlined"
+                  startIcon={<CloudDownloadIcon />}
+                  onClick={() => {
+                    handleExportLeadsCSV();
+                    setMobileMenuAnchorEl(null); // close menu
+                  }}
+                >
+                  Export Leads CSV
+                </Button>
+              </MenuItem>
 
-            {/* Add New Lead */}
-            <MenuItem>
-              <Button
-                fullWidth
-                variant="contained"
-                startIcon={<AddIcon />}
-                onClick={() => {
-                  handleOpenCreateLead();
-                  setMobileMenuAnchorEl(null);
-                }}
-              >
-                Add New Lead
-              </Button>
-            </MenuItem>
+              {/* Add New Lead */}
+              <MenuItem>
+                <Button
+                  fullWidth
+                  variant="contained"
+                  startIcon={<AddIcon />}
+                  onClick={() => {
+                    handleOpenCreateLead();
+                    setMobileMenuAnchorEl(null);
+                  }}
+                >
+                  Add New Lead
+                </Button>
+              </MenuItem>
 
-            {/* Customize Columns */}
-            <MenuItem>
-              <Button
-                fullWidth
-                variant="outlined"
-                onClick={(e) => {
-                  handleOpenCustomize(e);
-                  setMobileMenuAnchorEl(null);
-                }}
-              >
-                Customize Columns
-              </Button>
-            </MenuItem>
-          </Menu>
-        </Box>
-      </Topbar>
+              {/* Customize Columns */}
+              <MenuItem>
+                <Button
+                  fullWidth
+                  variant="outlined"
+                  onClick={(e) => {
+                    handleOpenCustomize(e);
+                    setMobileMenuAnchorEl(null);
+                  }}
+                >
+                  Customize Columns
+                </Button>
+              </MenuItem>
+            </Menu>
+          </Box>
+        </Topbar>
 
-      {/* Customize Columns Menu */}
-      <Menu
-        anchorEl={anchorEl}
-        open={Boolean(anchorEl)}
-        onClose={handleCloseCustomize}
-        PaperProps={{ sx: { minWidth: 240 } }}
-      >
-        {/* Actions */}
-        <Box
-          display="flex"
-          justifyContent="space-between"
-          px={2}
-          py={1}
-          gap={1}
+        {/* Customize Columns Menu */}
+        <Menu
+          anchorEl={anchorEl}
+          open={Boolean(anchorEl)}
+          onClose={handleCloseCustomize}
+          PaperProps={{ sx: { minWidth: 240 } }}
         >
-          <Button size="small" variant="outlined" onClick={handleResetColumns}>
-            Reset
-          </Button>
-
-          <Button
-            size="small"
-            color="error"
-            variant="outlined"
-            onClick={handleClearColumns}
+          {/* Actions */}
+          <Box
+            display="flex"
+            justifyContent="space-between"
+            px={2}
+            py={1}
+            gap={1}
           >
-            Clear
-          </Button>
+            <Button
+              size="small"
+              variant="outlined"
+              onClick={handleResetColumns}
+            >
+              Reset
+            </Button>
+
+            <Button
+              size="small"
+              color="error"
+              variant="outlined"
+              onClick={handleClearColumns}
+            >
+              Clear
+            </Button>
+          </Box>
+
+          <Box sx={{ borderTop: "1px solid #eee", my: 1 }} />
+
+          {/* Column Checkboxes */}
+          {ALL_COLUMNS.map((col) => (
+            <MenuItem key={col.key} dense>
+              <FormControlLabel
+                control={
+                  <Checkbox
+                    checked={visibleColumns.includes(col.key)}
+                    onChange={() => toggleColumn(col.key)}
+                  />
+                }
+                label={col.label}
+              />
+            </MenuItem>
+          ))}
+        </Menu>
+
+        {/* Search & Filter */}
+        <Box display="flex" gap={2} mt={2} mb={2}>
+          <TextField
+            placeholder="Search by title, name, email, company, assigned to, source, lifecycle, description, or date..."
+            value={q}
+            onChange={(e) => setQ(e.target.value)}
+            size="small"
+          />
+          <FormControl size="small" sx={{ minWidth: 180 }}>
+            <InputLabel>Status</InputLabel>
+            <Select
+              value={statusFilter}
+              label="Status"
+              onChange={(e) => setStatusFilter(e.target.value)}
+            >
+              <MenuItem value="ALL">All</MenuItem>
+
+              {statuses.map((status) => (
+                <MenuItem key={status.id} value={status.id}>
+                  {status.name}
+                </MenuItem>
+              ))}
+            </Select>
+          </FormControl>
+
+          <FormControl size="small" sx={{ minWidth: 180 }}>
+            <InputLabel>Assigned To</InputLabel>
+            <Select
+              label="Assigned To"
+              value={assignedFilter}
+              onChange={(e) => setAssignedFilter(e.target.value)}
+            >
+              {assignedFilterOptions.map((option) => (
+                <MenuItem key={option.value} value={option.value}>
+                  {option.label}
+                </MenuItem>
+              ))}
+            </Select>
+          </FormControl>
+          <FormControl size="small" sx={{ minWidth: 180 }}>
+            <InputLabel>Follow-up At</InputLabel>
+            <Select
+              label="Follow-up At"
+              value={followUpFilter}
+              onChange={(e) => setFollowUpFilter(e.target.value)}
+            >
+              {followUpFilterOptions.map((option) => (
+                <MenuItem key={option.value} value={option.value}>
+                  {option.label}
+                </MenuItem>
+              ))}
+            </Select>
+          </FormControl>
         </Box>
 
-        <Box sx={{ borderTop: "1px solid #eee", my: 1 }} />
-
-        {/* Column Checkboxes */}
-        {ALL_COLUMNS.map((col) => (
-          <MenuItem key={col.key} dense>
-            <FormControlLabel
-              control={
-                <Checkbox
-                  checked={visibleColumns.includes(col.key)}
-                  onChange={() => toggleColumn(col.key)}
-                />
-              }
-              label={col.label}
-            />
-          </MenuItem>
-        ))}
-      </Menu>
-
-      {/* Search & Filter */}
-      <Box display="flex" gap={2} mt={2} mb={2}>
-        <TextField
-          placeholder="Search by title, name, email, company, assigned to, source, lifecycle, description, or date..."
-          value={q}
-          onChange={(e) => setQ(e.target.value)}
-          size="small"
-        />
-        <FormControl size="small" sx={{ minWidth: 180 }}>
-  <InputLabel>Status</InputLabel>
-  <Select
-    value={statusFilter}
-    label="Status"
-    onChange={(e) => setStatusFilter(e.target.value)}
-  >
-    <MenuItem value="ALL">All</MenuItem>
-
-    {statuses.map((status) => (
-      <MenuItem key={status.id} value={status.id}>
-        {status.name}
-      </MenuItem>
-    ))}
-  </Select>
-</FormControl>
-
-        <FormControl size="small" sx={{ minWidth: 180 }}>
-          <InputLabel>Assigned To</InputLabel>
-          <Select
-            label="Assigned To"
-            value={assignedFilter}
-            onChange={(e) => setAssignedFilter(e.target.value)}
-          >
-            {assignedFilterOptions.map((option) => (
-              <MenuItem key={option.value} value={option.value}>
-                {option.label}
-              </MenuItem>
-            ))}
-          </Select>
-        </FormControl>
-        <FormControl size="small" sx={{ minWidth: 180 }}>
-          <InputLabel>Follow-up At</InputLabel>
-          <Select
-            label="Follow-up At"
-            value={followUpFilter}
-            onChange={(e) => setFollowUpFilter(e.target.value)}
-          >
-            {followUpFilterOptions.map((option) => (
-              <MenuItem key={option.value} value={option.value}>
-                {option.label}
-              </MenuItem>
-            ))}
-          </Select>
-        </FormControl>
-      </Box>
-
-      {/* Leads Table */}
-      <TableContainer
-        component={Paper}
-        sx={{
-          borderRadius: "12px",
-          boxShadow: "none",
-          overflowX: "scroll",
-          maxWidth: "100%",
-        }}
-      >
-        <Table
-          aria-label="basic table"
+        {/* Leads Table */}
+        <TableContainer
+          component={Paper}
           sx={{
-            tableLayout: "auto",
+            borderRadius: "12px",
+            boxShadow: "none",
+            width: "100%",
+            px: { xs: 2, md: 3 },
+            overflowX: "auto",
+            maxHeight: "calc(100vh - 240px)",
           }}
         >
-          <TableHead>
-            <TableRow>
-              {visibleColumns.includes("title") && (
-                <TableCell sx={tableHeaderCellStyles}>Lead Title</TableCell>
-              )}
-
-              {visibleColumns.includes("linkedIn") && (
-                <TableCell sx={tableHeaderCellStyles}>LinkedIn</TableCell>
-              )}
-              {visibleColumns.includes("status") && (
-                <TableCell sx={tableHeaderCellStyles}>Lead Status</TableCell>
-              )}
-              {visibleColumns.includes("assignedTo") && (
-                <TableCell sx={tableHeaderCellStyles}>Assigned To</TableCell>
-              )}
-              {visibleColumns.includes("followUpAt") && (
-                <TableCell sx={tableHeaderCellStyles}>Follow-up At</TableCell>
-              )}
-              {visibleColumns.includes("followupStatus") && (
-                <TableCell sx={tableHeaderCellStyles}>
-                  Follow-up Status
-                </TableCell>
-              )}
-              {visibleColumns.includes("source") && (
-                <TableCell sx={tableHeaderCellStyles}>Source</TableCell>
-              )}
-              {visibleColumns.includes("lifecycle") && (
-                <TableCell sx={tableHeaderCellStyles}>Lifecycle</TableCell>
-              )}
-              {visibleColumns.includes("description") && (
-                <TableCell sx={tableHeaderCellStyles}>Description</TableCell>
-              )}
-              {visibleColumns.includes("company") && (
-                <TableCell sx={tableHeaderCellStyles}>Company</TableCell>
-              )}
-              {visibleColumns.includes("firstName") && (
-                <TableCell sx={tableHeaderCellStyles}>First Name</TableCell>
-              )}
-              {visibleColumns.includes("lastName") && (
-                <TableCell sx={tableHeaderCellStyles}>Last Name</TableCell>
-              )}
-              {visibleColumns.includes("email") && (
-                <TableCell sx={tableHeaderCellStyles}>Email</TableCell>
-              )}
-              {visibleColumns.includes("phone") && (
-                <TableCell sx={tableHeaderCellStyles}>Phone</TableCell>
-              )}
-              {visibleColumns.includes("positionTitle") && (
-                <TableCell sx={tableHeaderCellStyles}>Position Title</TableCell>
-              )}
-              {visibleColumns.includes("isActive") && (
-                <TableCell sx={{ ...tableHeaderCellStyles, textAlign: "center" }}>Active</TableCell>
-              )}
-              <TableCell sx={{ ...tableHeaderCellStyles, textAlign: "center" }}>
-                Notes
-              </TableCell>
-              <TableCell sx={{ ...tableHeaderCellStyles, textAlign: "center" }}>
-                Actions
-              </TableCell>
-            </TableRow>
-          </TableHead>
-
-          <TableBody>
-            {filteredLeads.length === 0 ? (
+          <Table
+            stickyHeader
+            aria-label="basic table"
+            sx={{
+              tableLayout: "fixed",
+              width: "100%",
+              minWidth: tableMinWidth,
+              "& td, & th": { whiteSpace: "normal", overflowWrap: "anywhere" },
+            }}
+          >
+            <TableHead>
               <TableRow>
-                <TableCell colSpan={visibleColumns.length + 2} align="center">
-                  No leads found.
-                </TableCell>
-              </TableRow>
-            ) : (
-              filteredLeads.map((lead, leadIndex) => {
-                const currentLeadId = resolveLeadId(lead);
-                const normalizedLeadId = currentLeadId
-                  ? String(currentLeadId)
-                  : null;
-                const rowKey =
-                  currentLeadId ||
-                  lead.id ||
-                  lead.pk ||
-                  lead.uuid ||
-                  lead.lead_id ||
-                  `lead-${leadIndex}`;
-                const isHighlighted =
-                  Boolean(normalizedLeadId && highlightedLeadId) &&
-                  normalizedLeadId === highlightedLeadId;
-                const attachRowRef = normalizedLeadId
-                  ? (node) => {
-                      if (node) {
-                        rowRefs.current[normalizedLeadId] = node;
-                      } else {
-                        delete rowRefs.current[normalizedLeadId];
-                      }
-                    }
-                  : undefined;
-                // Debug: Log lead data to understand structure
-                if (lead.assigned_to || lead.assignedTo) {
-                  console.log("Lead assigned_to data:", {
-                    leadId: lead.id,
-                    assigned_to: lead.assigned_to,
-                    assignedTo: lead.assignedTo,
-                    employeesCount: employees.length,
-                    employees: employees.map((e) => ({
-                      id: e.id || e.pk || e.uuid,
-                      name: `${e.firstName || e.first_name} ${
-                        e.lastName || e.last_name
-                      }`,
-                    })),
-                  });
-                }
-                return (
-                  <TableRow
-                    key={rowKey}
-                    ref={attachRowRef}
-                    sx={{
-                      ...(isHighlighted && {
-                        backgroundColor: colors.bg[200],
-                        transition: "background-color 0.4s ease",
-                      }),
-                    }}
+                {visibleColumns.includes("title") && (
+                  <TableCell sx={tableHeaderCellStyles}>Lead Title</TableCell>
+                )}
+                {visibleColumns.includes("linkedIn") && (
+                  <TableCell sx={tableHeaderCellStyles}>LinkedIn</TableCell>
+                )}
+                {visibleColumns.includes("status") && (
+                  <TableCell sx={tableHeaderCellStyles}>Lead Status</TableCell>
+                )}
+                {visibleColumns.includes("lifecycle") && (
+                  <TableCell sx={tableHeaderCellStyles}>
+                    Lead Lifecycle
+                  </TableCell>
+                )}
+                {visibleColumns.includes("assignedTo") && (
+                  <TableCell sx={{ ...tableHeaderCellStyles, minWidth: 220 }}>
+                    Assigned To
+                  </TableCell>
+                )}
+                {visibleColumns.includes("followUpAt") && (
+                  <TableCell sx={{ ...tableHeaderCellStyles, minWidth: 180 }}>
+                    Follow-up At
+                  </TableCell>
+                )}
+                {visibleColumns.includes("followupStatus") && (
+                  <TableCell sx={tableHeaderCellStyles}>
+                    Follow-up Status
+                  </TableCell>
+                )}
+                {visibleColumns.includes("source") && (
+                  <TableCell sx={tableHeaderCellStyles}>Source</TableCell>
+                )}
+                {visibleColumns.includes("description") && (
+                  <TableCell sx={tableHeaderCellStyles}>Description</TableCell>
+                )}
+                {visibleColumns.includes("company") && (
+                  <TableCell sx={tableHeaderCellStyles}>Company</TableCell>
+                )}
+                {visibleColumns.includes("firstName") && (
+                  <TableCell sx={tableHeaderCellStyles}>First Name</TableCell>
+                )}
+                {visibleColumns.includes("lastName") && (
+                  <TableCell sx={tableHeaderCellStyles}>Last Name</TableCell>
+                )}
+                {visibleColumns.includes("email") && (
+                  <TableCell sx={tableHeaderCellStyles}>Email</TableCell>
+                )}
+                {visibleColumns.includes("phone") && (
+                  <TableCell sx={tableHeaderCellStyles}>Phone</TableCell>
+                )}
+                {visibleColumns.includes("positionTitle") && (
+                  <TableCell sx={tableHeaderCellStyles}>
+                    Position Title
+                  </TableCell>
+                )}
+                {visibleColumns.includes("isActive") && (
+                  <TableCell
+                    sx={{ ...tableHeaderCellStyles, textAlign: "center" }}
                   >
-                    {visibleColumns.includes("title") && (
-                      <TableCell>
-                        {getLeadFieldValue(lead, "title") || "-"}
-                      </TableCell>
-                    )}
+                    Active
+                  </TableCell>
+                )}
+                <TableCell
+                  sx={{ ...tableHeaderCellStyles, textAlign: "center" }}
+                >
+                  Notes
+                </TableCell>
+                <TableCell
+                  sx={{
+                    ...tableHeaderCellStyles,
+                    textAlign: "center",
+                    width: 72,
+                    whiteSpace: "nowrap",
+                    overflow: "hidden",
+                    textOverflow: "ellipsis",
+                    lineHeight: 1,
+                    padding: "8px",
+                  }}
+                >
+                  Actions
+                </TableCell>{" "}
+              </TableRow>
+            </TableHead>
 
-                    {visibleColumns.includes("linkedIn") && (
-                      <TableCell>
-                        {(() => {
-                          const linkedInUrl =
-                            lead.contact_linkedin_url || lead.linkedIn;
-                          return linkedInUrl ? (
-                            <a
-                              href={linkedInUrl}
-                              target="_blank"
-                              rel="noopener noreferrer"
-                              style={{
-                                textDecoration: "none",
-                                color: "#0A66C2",
+            <TableBody>
+              {filteredLeads.length === 0 ? (
+                <TableRow>
+                  <TableCell colSpan={visibleColumns.length + 2} align="center">
+                    No leads found.
+                  </TableCell>
+                </TableRow>
+              ) : (
+                filteredLeads.map((lead, leadIndex) => {
+                  const currentLeadId = resolveLeadId(lead);
+                  const normalizedLeadId = currentLeadId
+                    ? String(currentLeadId)
+                    : null;
+                  const rowKey =
+                    currentLeadId ||
+                    lead.id ||
+                    lead.pk ||
+                    lead.uuid ||
+                    lead.lead_id ||
+                    `lead-${leadIndex}`;
+                  const isHighlighted =
+                    Boolean(normalizedLeadId && highlightedLeadId) &&
+                    normalizedLeadId === highlightedLeadId;
+                  const attachRowRef = normalizedLeadId
+                    ? (node) => {
+                        if (node) {
+                          rowRefs.current[normalizedLeadId] = node;
+                        } else {
+                          delete rowRefs.current[normalizedLeadId];
+                        }
+                      }
+                    : undefined;
+                  // Debug: Log lead data to understand structure
+                  if (lead.assigned_to || lead.assignedTo) {
+                    console.log("Lead assigned_to data:", {
+                      leadId: lead.id,
+                      assigned_to: lead.assigned_to,
+                      assignedTo: lead.assignedTo,
+                      employeesCount: employees.length,
+                      employees: employees.map((e) => ({
+                        id: e.id || e.pk || e.uuid,
+                        name: `${e.firstName || e.first_name} ${
+                          e.lastName || e.last_name
+                        }`,
+                      })),
+                    });
+                  }
+                  return (
+                    <TableRow
+                      key={rowKey}
+                      ref={attachRowRef}
+                      sx={{
+                        ...(isHighlighted && {
+                          backgroundColor: colors.bg[200],
+                          transition: "background-color 0.4s ease",
+                        }),
+                      }}
+                    >
+                      {visibleColumns.includes("title") && (
+                        <TableCell>
+                          {getLeadFieldValue(lead, "title") || "-"}
+                        </TableCell>
+                      )}
+
+                      {visibleColumns.includes("linkedIn") && (
+                        <TableCell>
+                          {(() => {
+                            const linkedInUrl =
+                              lead.contact_linkedin_url || lead.linkedIn;
+                            return linkedInUrl ? (
+                              <a
+                                href={linkedInUrl}
+                                target="_blank"
+                                rel="noopener noreferrer"
+                                style={{
+                                  textDecoration: "none",
+                                  color: "#0A66C2",
+                                }}
+                              >
+                                <FaLinkedin size={24} />
+                              </a>
+                            ) : (
+                              "-"
+                            );
+                          })()}
+                        </TableCell>
+                      )}
+
+                      {visibleColumns.includes("status") && (
+                        <TableCell>
+                          <Box
+                            sx={{
+                              position: "relative",
+                              display: "inline-flex",
+                              alignItems: "center",
+                            }}
+                          >
+                            <Select
+                              value={(() => {
+                                // Get the status ID from the lead
+                                // Status cannot be None, so if empty, use first available status
+                                const statusId = lead.status;
+                                if (
+                                  statusId === null ||
+                                  statusId === undefined ||
+                                  statusId === ""
+                                ) {
+                                  // If no status, default to first available status
+                                  if (statuses.length > 0) {
+                                    const firstStatus = statuses[0];
+                                    return typeof firstStatus === "object" &&
+                                      firstStatus !== null
+                                      ? firstStatus.id || firstStatus.pk
+                                      : firstStatus;
+                                  }
+                                  return "";
+                                }
+                                // If status is an object, extract the ID
+                                if (
+                                  typeof statusId === "object" &&
+                                  statusId !== null
+                                ) {
+                                  return statusId.id || statusId.pk || "";
+                                }
+                                return String(statusId);
+                              })()}
+                              onChange={(e) => {
+                                // Convert to integer - status cannot be null/empty
+                                const selectedId = parseInt(e.target.value, 10);
+                                if (!isNaN(selectedId)) {
+                                  handleStatusChange(lead, selectedId);
+                                }
+                              }}
+                              size="small"
+                              disabled={statusUpdatingLeadId === lead.id}
+                              sx={{
+                                minWidth: 120,
+                                height: 32,
+                                "& .MuiSelect-select": {
+                                  padding: "4px 8px",
+                                  fontSize: "0.875rem",
+                                },
+                              }}
+                              MenuProps={{
+                                PaperProps: {
+                                  style: {
+                                    maxHeight: 300,
+                                  },
+                                },
                               }}
                             >
-                              <FaLinkedin size={24} />
-                            </a>
-                          ) : (
-                            "-"
-                          );
-                        })()}
-                      </TableCell>
-                    )}
+                              {statuses.map((status, index) => {
+                                // Handle different status structures - match CreateLead form logic
+                                const statusId =
+                                  typeof status === "object" && status !== null
+                                    ? status.id || status.pk
+                                    : status;
+                                const statusName =
+                                  typeof status === "string"
+                                    ? status
+                                    : status.name ||
+                                      status.label ||
+                                      status.status_name ||
+                                      String(statusId);
+                                const key = statusId || index;
 
-                    {visibleColumns.includes("status") && (
-                      <TableCell>
-                        <Box sx={{ position: "relative", display: "inline-flex", alignItems: "center" }}>
-                          <Select
-                            value={(() => {
-                              // Get the status ID from the lead
-                              // Status cannot be None, so if empty, use first available status
-                              const statusId = lead.status;
-                              if (
-                                statusId === null ||
-                                statusId === undefined ||
-                                statusId === ""
-                              ) {
-                                // If no status, default to first available status
-                                if (statuses.length > 0) {
-                                  const firstStatus = statuses[0];
-                                  return typeof firstStatus === "object" &&
-                                    firstStatus !== null
-                                    ? firstStatus.id || firstStatus.pk
-                                    : firstStatus;
-                                }
-                                return "";
-                              }
-                              // If status is an object, extract the ID
-                              if (
-                                typeof statusId === "object" &&
-                                statusId !== null
-                              ) {
-                                return statusId.id || statusId.pk || "";
-                              }
-                              return String(statusId);
-                            })()}
-                            onChange={(e) => {
-                              // Convert to integer - status cannot be null/empty
-                              const selectedId = parseInt(e.target.value, 10);
-                              if (!isNaN(selectedId)) {
-                                handleStatusChange(lead, selectedId);
-                              }
-                            }}
-                            size="small"
-                            disabled={statusUpdatingLeadId === lead.id}
+                                return (
+                                  <MenuItem key={key} value={statusId}>
+                                    {statusName}
+                                  </MenuItem>
+                                );
+                              })}
+                            </Select>
+                            {statusUpdatingLeadId === lead.id && (
+                              <CircularProgress size={16} sx={{ ml: 1 }} />
+                            )}
+                          </Box>
+                        </TableCell>
+                      )}
+
+                      {visibleColumns.includes("lifecycle") && (
+                        <TableCell>
+                          {getLeadFieldValue(lead, "lifecycle") || "-"}
+                        </TableCell>
+                      )}
+
+                      {visibleColumns.includes("assignedTo") && (
+                        <TableCell sx={{ minWidth: 220, pr: 2 }}>
+                          <Box
                             sx={{
-                              minWidth: 120,
-                              height: 32,
-                              "& .MuiSelect-select": {
-                                padding: "4px 8px",
-                                fontSize: "0.875rem",
-                              },
-                            }}
-                            MenuProps={{
-                              PaperProps: {
-                                style: {
-                                  maxHeight: 300,
-                                },
-                              },
+                              position: "relative",
+                              display: "inline-flex",
+                              alignItems: "center",
                             }}
                           >
-                            {statuses.map((status, index) => {
-                              // Handle different status structures - match CreateLead form logic
-                              const statusId =
-                                typeof status === "object" && status !== null
-                                  ? status.id || status.pk
-                                  : status;
-                              const statusName =
-                                typeof status === "string"
-                                  ? status
-                                  : status.name ||
-                                    status.label ||
-                                    status.status_name ||
-                                    String(statusId);
-                              const key = statusId || index;
-
-                              return (
-                                <MenuItem key={key} value={statusId}>
-                                  {statusName}
+                            <Select
+                              value={(() => {
+                                const id = getEmployeeIdValue(
+                                  lead.assigned_to || lead.assignedTo
+                                );
+                                return id === null || id === undefined
+                                  ? ""
+                                  : String(id);
+                              })()}
+                              onChange={(e) =>
+                                handleAssignedChange(lead, e.target.value)
+                              }
+                              size="small"
+                              disabled={assignedUpdatingLeadId === lead.id}
+                              sx={{
+                                minWidth: 160,
+                                height: 32,
+                                "& .MuiSelect-select": {
+                                  padding: "4px 8px",
+                                  fontSize: "0.875rem",
+                                },
+                              }}
+                              MenuProps={{
+                                PaperProps: {
+                                  style: {
+                                    maxHeight: 300,
+                                  },
+                                },
+                              }}
+                            >
+                              {assignedSelectOptions.map((option) => (
+                                <MenuItem
+                                  key={option.value || "none"}
+                                  value={option.value}
+                                >
+                                  {option.label}
                                 </MenuItem>
-                              );
-                            })}
-                          </Select>
-                          {statusUpdatingLeadId === lead.id && (
-                            <CircularProgress
-                              size={16}
-                              sx={{ ml: 1 }}
-                            />
-                          )}
-                        </Box>
-                      </TableCell>
-                    )}
+                              ))}
+                            </Select>
+                            {assignedUpdatingLeadId === lead.id && (
+                              <CircularProgress size={16} sx={{ ml: 1 }} />
+                            )}
+                          </Box>
+                        </TableCell>
+                      )}
 
-                    {visibleColumns.includes("assignedTo") && (
-                      <TableCell>
-                        <Box sx={{ position: "relative", display: "inline-flex", alignItems: "center" }}>
-                          <Select
-                            value={(() => {
-                              const id = getEmployeeIdValue(lead.assigned_to || lead.assignedTo);
-                              return id === null || id === undefined ? "" : String(id);
-                            })()}
-                            onChange={(e) => handleAssignedChange(lead, e.target.value)}
-                            size="small"
-                            disabled={assignedUpdatingLeadId === lead.id}
-                            sx={{
-                              minWidth: 160,
-                              height: 32,
-                              "& .MuiSelect-select": {
-                                padding: "4px 8px",
-                                fontSize: "0.875rem",
-                              },
-                            }}
-                            MenuProps={{
-                              PaperProps: {
-                                style: {
-                                  maxHeight: 300,
-                                },
-                              },
-                            }}
-                          >
-                            {assignedSelectOptions.map((option) => (
-                              <MenuItem key={option.value || "none"} value={option.value}>
-                                {option.label}
-                              </MenuItem>
-                            ))}
-                          </Select>
-                          {assignedUpdatingLeadId === lead.id && (
-                            <CircularProgress size={16} sx={{ ml: 1 }} />
-                          )}
-                        </Box>
-                      </TableCell>
-                    )}
-
-                    {visibleColumns.includes("followUpAt") && (
-                      <TableCell>
-                        <FollowUpCell
+                      {visibleColumns.includes("followUpAt") && (
+                        <TableCell sx={{ minWidth: 180 }}>
+                          <FollowUpCell
                             lead={lead}
                             onUpdate={(updatedLead) => {
-                                setLeads((prevLeads) =>
-                                    prevLeads.map((l) => (l.id === lead.id ? { ...l, ...updatedLead } : l))
-                                );
-                                addLeadToCache(updatedLead);
+                              setLeads((prevLeads) =>
+                                prevLeads.map((l) =>
+                                  l.id === lead.id
+                                    ? { ...l, ...updatedLead }
+                                    : l
+                                )
+                              );
+                              addLeadToCache(updatedLead);
                             }}
                             notifySuccess={notifySuccess}
                             notifyError={notifyError}
-                        />
-                      </TableCell>
-                    )}
+                          />
+                        </TableCell>
+                      )}
 
-                    {visibleColumns.includes("followupStatus") && (
-                      <TableCell>
-                        <Box sx={{ position: "relative", display: "inline-flex", alignItems: "center" }}>
-                          <Select
-                            value={(() => {
-                              // Explicitly handle null/undefined/empty values for "None"
-                              const status =
-                                lead.follow_up_status || lead.followupStatus;
-                              return status === null ||
-                                status === undefined ||
-                                status === ""
-                                ? ""
-                                : status;
-                            })()}
-                            onChange={(e) => {
-                              // Explicitly handle "None" selection (empty string)
-                              // This ensures "None" is easily mutable
-                              const selectedValue =
-                                e.target.value === "" ? "" : e.target.value;
-                              handleFollowUpStatusChange(lead, selectedValue);
-                            }}
-                            size="small"
-                            disabled={followUpUpdatingLeadId === lead.id}
+                      {visibleColumns.includes("followupStatus") && (
+                        <TableCell>
+                          <Box
                             sx={{
-                              minWidth: 120,
-                              height: 32,
-                              "& .MuiSelect-select": {
-                                padding: "4px 8px",
-                                fontSize: "0.875rem",
-                              },
-                            }}
-                            MenuProps={{
-                              PaperProps: {
-                                style: {
-                                  maxHeight: 300,
-                                },
-                              },
-                            }}
-                            SelectProps={{
-                              displayEmpty: true,
-                              renderValue: (val) => {
-                                // Show "None" for empty/null/undefined values
-                                if (
-                                  val === "" ||
-                                  val === null ||
-                                  val === undefined
-                                ) {
-                                  return "None";
-                                }
-                                return val;
-                              },
+                              position: "relative",
+                              display: "inline-flex",
+                              alignItems: "center",
                             }}
                           >
-                            <MenuItem value="">
-                              <em>None</em>
-                            </MenuItem>
-                            <MenuItem value="done">done</MenuItem>
-                            <MenuItem value="pending">pending</MenuItem>
-                          </Select>
-                          {followUpUpdatingLeadId === lead.id && (
-                            <CircularProgress
-                              size={16}
-                              sx={{ ml: 1 }}
-                            />
-                          )}
-                        </Box>
-                      </TableCell>
-                    )}
+                            <Select
+                              value={(() => {
+                                // Explicitly handle null/undefined/empty values for "None"
+                                const status =
+                                  lead.follow_up_status || lead.followupStatus;
+                                return status === null ||
+                                  status === undefined ||
+                                  status === ""
+                                  ? ""
+                                  : status;
+                              })()}
+                              onChange={(e) => {
+                                // Explicitly handle "None" selection (empty string)
+                                // This ensures "None" is easily mutable
+                                const selectedValue =
+                                  e.target.value === "" ? "" : e.target.value;
+                                handleFollowUpStatusChange(lead, selectedValue);
+                              }}
+                              size="small"
+                              disabled={followUpUpdatingLeadId === lead.id}
+                              sx={{
+                                minWidth: 120,
+                                height: 32,
+                                "& .MuiSelect-select": {
+                                  padding: "4px 8px",
+                                  fontSize: "0.875rem",
+                                },
+                              }}
+                              MenuProps={{
+                                PaperProps: {
+                                  style: {
+                                    maxHeight: 300,
+                                  },
+                                },
+                              }}
+                              SelectProps={{
+                                displayEmpty: true,
+                                renderValue: (val) => {
+                                  // Show "None" for empty/null/undefined values
+                                  if (
+                                    val === "" ||
+                                    val === null ||
+                                    val === undefined
+                                  ) {
+                                    return "None";
+                                  }
+                                  return val;
+                                },
+                              }}
+                            >
+                              <MenuItem value="">
+                                <em>None</em>
+                              </MenuItem>
+                              <MenuItem value="done">done</MenuItem>
+                              <MenuItem value="pending">pending</MenuItem>
+                            </Select>
+                            {followUpUpdatingLeadId === lead.id && (
+                              <CircularProgress size={16} sx={{ ml: 1 }} />
+                            )}
+                          </Box>
+                        </TableCell>
+                      )}
 
-                    {visibleColumns.includes("source") && (
-                      <TableCell>
-                        {getLeadFieldValue(lead, "source") || "-"}
-                      </TableCell>
-                    )}
-                    {visibleColumns.includes("lifecycle") && (
-                      <TableCell>
-                        {getLeadFieldValue(lead, "lifecycle") || "-"}
-                      </TableCell>
-                    )}
+                      {visibleColumns.includes("source") && (
+                        <TableCell>
+                          {getLeadFieldValue(lead, "source") || "-"}
+                        </TableCell>
+                      )}
 
-                    {visibleColumns.includes("description") && (
-                      <TableCell>
-                        {(() => {
-                          const desc = getLeadFieldValue(lead, "description");
-                          return desc && desc.length > 50
-                            ? desc.slice(0, 50) + "..."
-                            : desc || "-";
-                        })()}
-                      </TableCell>
-                    )}
+                      {visibleColumns.includes("description") && (
+                        <TableCell>
+                          {(() => {
+                            const desc = getLeadFieldValue(lead, "description");
+                            return desc && desc.length > 50
+                              ? desc.slice(0, 50) + "..."
+                              : desc || "-";
+                          })()}
+                        </TableCell>
+                      )}
 
-                    {visibleColumns.includes("company") && (
-                      <TableCell>
-                        {getLeadFieldValue(lead, "company") || "-"}
-                      </TableCell>
-                    )}
+                      {visibleColumns.includes("company") && (
+                        <TableCell>
+                          {getLeadFieldValue(lead, "company") || "-"}
+                        </TableCell>
+                      )}
 
-                    {visibleColumns.includes("firstName") && (
-                      <TableCell>
-                        {getLeadFieldValue(lead, "firstName") || "-"}
-                      </TableCell>
-                    )}
+                      {visibleColumns.includes("firstName") && (
+                        <TableCell>
+                          {getLeadFieldValue(lead, "firstName") || "-"}
+                        </TableCell>
+                      )}
 
-                    {visibleColumns.includes("lastName") && (
-                      <TableCell>
-                        {getLeadFieldValue(lead, "lastName") || "-"}
-                      </TableCell>
-                    )}
+                      {visibleColumns.includes("lastName") && (
+                        <TableCell>
+                          {getLeadFieldValue(lead, "lastName") || "-"}
+                        </TableCell>
+                      )}
 
-                    {visibleColumns.includes("email") && (
-                      <TableCell>
-                        {getLeadFieldValue(lead, "email") || "-"}
-                      </TableCell>
-                    )}
+                      {visibleColumns.includes("email") && (
+                        <TableCell>
+                          {getLeadFieldValue(lead, "email") || "-"}
+                        </TableCell>
+                      )}
 
-                    {visibleColumns.includes("phone") && (
-                      <TableCell>
-                        {getLeadFieldValue(lead, "phone") || "-"}
-                      </TableCell>
-                    )}
+                      {visibleColumns.includes("phone") && (
+                        <TableCell>
+                          {getLeadFieldValue(lead, "phone") || "-"}
+                        </TableCell>
+                      )}
 
-                    {visibleColumns.includes("positionTitle") && (
-                      <TableCell>
-                        {getLeadFieldValue(lead, "positionTitle") || "-"}
-                      </TableCell>
-                    )}
+                      {visibleColumns.includes("positionTitle") && (
+                        <TableCell>
+                          {getLeadFieldValue(lead, "positionTitle") || "-"}
+                        </TableCell>
+                      )}
 
-                    {visibleColumns.includes("isActive") && (
+                      {visibleColumns.includes("isActive") && (
+                        <TableCell align="center">
+                          <Switch
+                            checked={
+                              lead.is_always_active ||
+                              lead.always_active ||
+                              false
+                            }
+                            onChange={() => handleToggleActive(lead)}
+                            disabled={
+                              activeTogglingLeadId ===
+                              (lead.id || lead.pk || lead.uuid)
+                            }
+                            size="small"
+                            color="primary"
+                          />
+                        </TableCell>
+                      )}
                       <TableCell align="center">
-                        <Switch
-                          checked={lead.is_always_active || lead.always_active || false}
-                          onChange={() => handleToggleActive(lead)}
-                          disabled={activeTogglingLeadId === (lead.id || lead.pk || lead.uuid)}
+                        <IconButton
                           size="small"
-                          color="primary"
-                        />
+                          aria-label="Open lead notes"
+                          onClick={() => {
+                            setNotesDialogLead(lead);
+                            setNotesDialogOpen(true);
+                          }}
+                          sx={{
+                            color: "#1d57ccff",
+                            transition: "transform 0.2s ease",
+                            "&:hover": { transform: "scale(1.1)" },
+                          }}
+                        >
+                          <FaComment size={18} />
+                        </IconButton>
                       </TableCell>
-                    )}
-                    <TableCell align="center">
-                      <IconButton
-                        size="small"
-                        aria-label="Open lead notes"
-                        onClick={() => {
-                          setNotesDialogLead(lead);
-                          setNotesDialogOpen(true);
-                        }}
-                        sx={{
-                          color: "#1d57ccff",
-                          transition: "transform 0.2s ease",
-                          "&:hover": { transform: "scale(1.1)" },
-                        }}
-                      >
-                        <FaComment size={18} />
-                      </IconButton>
-                    </TableCell>
 
-                    <TableCell>
-                      <IconButton
-                        size="small"
-                        onClick={(e) => handleActionMenuOpen(e, lead)}
-                      >
-                        <MoreHorizIcon />
-                      </IconButton>
-                    </TableCell>
-                  </TableRow>
-                );
-              })
-            )}
-          </TableBody>
-        </Table>
-      </TableContainer>
-      <Menu
-        anchorEl={actionAnchorEl}
-        open={actionOpen}
-        onClose={handleActionMenuClose}
-        anchorOrigin={{ vertical: "bottom", horizontal: "right" }}
-        transformOrigin={{ vertical: "top", horizontal: "right" }}
-      >
-        <MenuItem
-          onClick={() => {
-            handleViewLead(menuLead);
-            handleActionMenuClose();
-          }}
+                      <TableCell align="center" sx={{ width: 72, px: 1 }}>
+                        <IconButton
+                          size="small"
+                          onClick={(e) => handleActionMenuOpen(e, lead)}
+                          sx={{ display: "flex", justifyContent: "center" }}
+                        >
+                          <MoreHorizIcon />
+                        </IconButton>
+                      </TableCell>
+                    </TableRow>
+                  );
+                })
+              )}
+            </TableBody>
+          </Table>
+        </TableContainer>
+        <Menu
+          anchorEl={actionAnchorEl}
+          open={actionOpen}
+          onClose={handleActionMenuClose}
+          anchorOrigin={{ vertical: "bottom", horizontal: "right" }}
+          transformOrigin={{ vertical: "top", horizontal: "right" }}
         >
-          <VisibilityIcon fontSize="small" sx={{ mr: 1 }} />
-          View
-        </MenuItem>
-
-        <MenuItem
-          onClick={() => {
-            handleNavigateToEditLead(menuLead);
-            handleActionMenuClose();
-          }}
-        >
-          <EditIcon fontSize="small" sx={{ mr: 1 }} />
-          Edit
-        </MenuItem>
-
-        {/* <MenuItem
-          onClick={() => {
-            handleConvertToProject(menuLead);
-            handleActionMenuClose();
-          }}
-        >
-          <AssignmentTurnedInIcon fontSize="small" sx={{ mr: 1 }} />
-          Convert to Project
-        </MenuItem> */}
-
-        <MenuItem
-          onClick={() => {
-            openDeleteDialog(menuLead);
-            handleActionMenuClose();
-          }}
-          sx={{ color: "error.main" }}
-        >
-          <DeleteIcon fontSize="small" sx={{ mr: 1 }} />
-          Delete
-        </MenuItem>
-      </Menu>
-
-      <Dialog open={deleteDialog.open} onClose={closeDeleteDialog}>
-        <DialogTitle>Confirm Deletion</DialogTitle>
-        <DialogContent>
-          <DialogContentText>
-            {deleteDialog.lead
-              ? `Are you sure you want to delete "${
-                  deleteDialog.lead.title || "this lead"
-                }"?`
-              : "Are you sure you want to delete this lead?"}
-          </DialogContentText>
-        </DialogContent>
-        <DialogActions>
-          <Button onClick={closeDeleteDialog} disabled={isDeleting}>Cancel</Button>
-          <Button
-            onClick={confirmDeleteLead}
-            color="error"
-            variant="contained"
-            disabled={isDeleting}
+          <MenuItem
+            onClick={() => {
+              handleViewLead(menuLead);
+              handleActionMenuClose();
+            }}
           >
-            {isDeleting ? <CircularProgress size={24} color="inherit" /> : "Delete"}
-          </Button>
-        </DialogActions>
-      </Dialog>
+            <VisibilityIcon fontSize="small" sx={{ mr: 1 }} />
+            View
+          </MenuItem>
 
-      <EditLeadModal
-        open={editDialog.open}
-        leadId={editDialog.leadId}
-        lead={editDialog.lead}
-        onClose={closeEditDialog}
-        onSuccess={handleLeadUpdated}
-      />
+          <MenuItem
+            onClick={() => {
+              handleNavigateToEditLead(menuLead);
+              handleActionMenuClose();
+            }}
+          >
+            <EditIcon fontSize="small" sx={{ mr: 1 }} />
+            Edit
+          </MenuItem>
 
-      <Dialog
-        open={notesDialogOpen}
-        onClose={closeNotesDialog}
-        fullWidth
-        maxWidth="sm"
-      >
-        <DialogTitle>{notesDialogLead?.title || "Lead Notes"}</DialogTitle>
-        <DialogContent dividers>
-          <LeadNotesChat
-            leadId={getLeadIdForNotes(notesDialogLead) || undefined}
-          />
-        </DialogContent>
-        <DialogActions>
-          <Button onClick={closeNotesDialog}>Close</Button>
-        </DialogActions>
-      </Dialog>
-      <LeadDetailsModal
-        open={isModalOpen}
-        onClose={handleCloseModal}
-        lead={selectedLead}
-        getEmployeeName={getEmployeeName}
-        getStatusName={getStatusName}
-      />
-    </Box>
-  );
-}
+          <MenuItem
+            onClick={() => {
+              handleConvertToProject(menuLead);
+              handleActionMenuClose();
+            }}
+          >
+            <AssignmentTurnedInIcon fontSize="small" sx={{ mr: 1 }} />
+            Convert to Project
+          </MenuItem>
+
+          <MenuItem
+            onClick={() => {
+              openDeleteDialog(menuLead);
+              handleActionMenuClose();
+            }}
+            sx={{ color: "error.main" }}
+          >
+            <DeleteIcon fontSize="small" sx={{ mr: 1 }} />
+            Delete
+          </MenuItem>
+        </Menu>
+
+        <Dialog open={deleteDialog.open} onClose={closeDeleteDialog}>
+          <DialogTitle>Confirm Deletion</DialogTitle>
+          <DialogContent>
+            <DialogContentText>
+              {deleteDialog.lead
+                ? `Are you sure you want to delete "${
+                    deleteDialog.lead.title || "this lead"
+                  }"?`
+                : "Are you sure you want to delete this lead?"}
+            </DialogContentText>
+          </DialogContent>
+          <DialogActions>
+            <Button onClick={closeDeleteDialog} disabled={isDeleting}>
+              Cancel
+            </Button>
+            <Button
+              onClick={confirmDeleteLead}
+              color="error"
+              variant="contained"
+              disabled={isDeleting}
+            >
+              {isDeleting ? (
+                <CircularProgress size={24} color="inherit" />
+              ) : (
+                "Delete"
+              )}
+            </Button>
+          </DialogActions>
+        </Dialog>
+
+        <EditLeadModal
+          open={editDialog.open}
+          leadId={editDialog.leadId}
+          lead={editDialog.lead}
+          onClose={closeEditDialog}
+          onSuccess={handleLeadUpdated}
+        />
+
+        <Dialog
+          open={notesDialogOpen}
+          onClose={closeNotesDialog}
+          fullWidth
+          maxWidth="sm"
+        >
+          <DialogTitle>{notesDialogLead?.title || "Lead Notes"}</DialogTitle>
+          <DialogContent dividers>
+            <LeadNotesChat
+              leadId={getLeadIdForNotes(notesDialogLead) || undefined}
+            />
+          </DialogContent>
+          <DialogActions>
+            <Button onClick={closeNotesDialog}>Close</Button>
+          </DialogActions>
+        </Dialog>
+        <LeadDetailsModal
+          open={isModalOpen}
+          onClose={handleCloseModal}
+          lead={selectedLead}
+          getEmployeeName={getEmployeeName}
+          getStatusName={getStatusName}
+        />
+      </Box>
+    );
+  }

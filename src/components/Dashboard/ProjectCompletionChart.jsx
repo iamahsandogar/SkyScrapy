@@ -13,32 +13,49 @@ import {
 } from "@mui/material";
 import { useEffect, useState } from "react";
 import { colors } from "../../design-system/tokens";
+import apiRequest from "../services/api";
 
 export default function ProjectCompletionTable() {
   const [data, setData] = useState([]);
 
   useEffect(() => {
-    const projects = JSON.parse(localStorage.getItem("projects")) || [];
-    const employees = JSON.parse(localStorage.getItem("employees")) || [];
+    const fetchAndCompute = async () => {
+      try {
+        const data = await apiRequest("/api/leads/projects/");
+        const projects = data?.projects || data?.results || data || [];
 
-    const getEmployeeName = (id) => {
-      const emp = employees.find((e) => String(e.id) === String(id));
-      return emp ? `${emp.firstName} ${emp.lastName}` : null;
+        const getEmployeeName = (assigned) => {
+          if (!assigned && assigned !== 0) return null;
+          if (typeof assigned === "object") {
+            const first = assigned.firstName || assigned.first_name || assigned.name || "";
+            const last = assigned.lastName || assigned.last_name || "";
+            const name = `${first} ${last}`.trim();
+            return name || null;
+          }
+          return String(assigned);
+        };
+
+        const counts = {};
+        (Array.isArray(projects) ? projects : []).forEach((proj) => {
+          const status = proj.status || proj.project_status || "";
+          if (String(status).toLowerCase().includes("completed")) {
+            const name = getEmployeeName(proj.assigned_to || proj.assignedTo || proj.assignedToId || proj.assigned_to_id);
+            if (name) counts[name] = (counts[name] || 0) + 1;
+          }
+        });
+
+        const tableData = Object.entries(counts)
+          .map(([assignedTo, count]) => ({ assignedTo, count }))
+          .sort((a, b) => b.count - a.count);
+
+        setData(tableData);
+      } catch (err) {
+        console.error("Failed to load projects for completion chart:", err);
+        setData([]);
+      }
     };
 
-    const counts = {};
-    projects.forEach((proj) => {
-      if (proj.status === "Completed") {
-        const name = getEmployeeName(proj.assignedTo);
-        if (name) counts[name] = (counts[name] || 0) + 1;
-      }
-    });
-
-    const tableData = Object.entries(counts)
-      .map(([assignedTo, count]) => ({ assignedTo, count }))
-      .sort((a, b) => b.count - a.count);
-
-    setData(tableData);
+    fetchAndCompute();
   }, []);
 
   if (data.length === 0) {
@@ -81,11 +98,14 @@ export default function ProjectCompletionTable() {
           }}
         >
           <TableContainer
-            sx={{
-              maxHeight: "135px", // shows header + top 3 rows
-              overflowY: "auto",
-            }}
-          >
+              sx={{
+                width: "fit-content",
+                maxWidth: "100%",
+                display: "inline-block",
+                maxHeight: "135px", // shows header + top 3 rows
+                overflowY: "auto",
+              }}
+            >
             <Table stickyHeader size="small">
               <TableHead>
                 <TableRow>
