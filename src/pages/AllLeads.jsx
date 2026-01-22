@@ -616,10 +616,61 @@ export default function AllLeads() {
 
       // Fetch updated lead from API to get the latest data
       const updatedLeadResponse = await apiRequest(`/api/leads/${leadId}/`);
-      const updatedLead = updatedLeadResponse?.data || updatedLeadResponse;
+      const apiUpdatedLead = updatedLeadResponse?.data || updatedLeadResponse;
 
-      if (updatedLead) {
-        // Update local state with fresh data from API
+      if (apiUpdatedLead) {
+        // Merge API response with current lead to preserve all fields
+        // This ensures we don't lose any data that might not be in the API response
+        const mergedLead = {
+          ...currentLead,
+          ...apiUpdatedLead,
+          // Ensure lifecycle is set correctly
+          lifecycle: lifecycleIdValue || null,
+          lifecycle_id: lifecycleIdValue || null,
+          lifecycleId: lifecycleIdValue || null,
+        };
+
+        // Normalize lifecycle field to ensure consistent format
+        const normalizeLifecycleField = (item) => {
+          try {
+            const v = item.lifecycle ?? item.lifecycle_obj ?? item.lifecycleObj ?? item.lifecycle_id ?? item.lifecycleId;
+            if (!v && v !== 0) {
+              return { ...item, lifecycle: item.lifecycle ?? "" };
+            }
+            if (typeof v === "string") return { ...item, lifecycle: v };
+            if (typeof v === "object" && v !== null) {
+              const name = v.name || v.label || v.title || v.lifecycle || String(v.id || v.pk || v.uuid || "");
+              return { ...item, lifecycle: name };
+            }
+            return { ...item, lifecycle: String(v) };
+          } catch (e) {
+            return { ...item, lifecycle: item.lifecycle ?? "" };
+          }
+        };
+
+        const normalizedLead = normalizeLifecycleField(mergedLead);
+
+        // Update local state with merged data
+        setLeads((prevLeads) => {
+          const leadIndex = prevLeads.findIndex((l) => l.id === leadId);
+          if (leadIndex >= 0) {
+            const newLeads = [...prevLeads];
+            newLeads[leadIndex] = normalizedLead;
+            return newLeads;
+          }
+          return prevLeads;
+        });
+
+        // Update cache so other components reflect changes
+        addLeadToCache(normalizedLead);
+      } else {
+        // If API response is empty, just update the lifecycle field locally
+        const updatedLead = {
+          ...currentLead,
+          lifecycle: lifecycleIdValue || null,
+          lifecycle_id: lifecycleIdValue || null,
+          lifecycleId: lifecycleIdValue || null,
+        };
         setLeads((prevLeads) => {
           const leadIndex = prevLeads.findIndex((l) => l.id === leadId);
           if (leadIndex >= 0) {
@@ -629,6 +680,7 @@ export default function AllLeads() {
           }
           return prevLeads;
         });
+        addLeadToCache(updatedLead);
       }
 
       notifySuccess("Lead lifecycle updated successfully");

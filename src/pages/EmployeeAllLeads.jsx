@@ -176,7 +176,7 @@ export default function EmployeeAllLeads() {
   const actionOpen = Boolean(actionAnchorEl);
   const rowRefs = useRef({});
   const highlightTimer = useRef(null);
-  const apiCallMadeRef = useRef({ pathname: null, userId: null, called: false });
+  const apiCallMadeRef = useRef({ pathname: null, userId: null, locationKey: null, called: false });
   const [highlightedLeadId, setHighlightedLeadId] = useState(null);
   const focusLeadId = useMemo(() => {
     const stateLeadId = location.state?.focusLeadId;
@@ -242,12 +242,15 @@ export default function EmployeeAllLeads() {
 
       // Ensure API is called only once per mount
       const currentPath = location.pathname;
+      const currentLocationKey = location.key; // location.key changes on every navigation
       const hasPathChanged = apiCallMadeRef.current.pathname !== currentPath;
       const hasUserChanged = apiCallMadeRef.current.userId !== employeeId;
+      const hasLocationKeyChanged = apiCallMadeRef.current.locationKey !== currentLocationKey;
       
-      // Only prevent duplicate calls if path and user haven't changed AND we've already called
-      if (apiCallMadeRef.current.called && !hasPathChanged && !hasUserChanged) {
-        console.log("API call already made for this page/user, skipping duplicate call");
+      // Only prevent duplicate calls if path, user, and location key haven't changed AND we've already called
+      // location.key changes on every navigation, so this ensures we refetch when navigating back
+      if (apiCallMadeRef.current.called && !hasPathChanged && !hasUserChanged && !hasLocationKeyChanged) {
+        console.log("API call already made for this page/user/location, skipping duplicate call");
         setLeadsLoading(false);
         setStatusesLoading(false);
         return;
@@ -256,6 +259,7 @@ export default function EmployeeAllLeads() {
       // Mark as called BEFORE making the API call to prevent race conditions
       apiCallMadeRef.current.pathname = currentPath;
       apiCallMadeRef.current.userId = employeeId;
+      apiCallMadeRef.current.locationKey = currentLocationKey;
       apiCallMadeRef.current.called = true;
 
       // Helper function to filter leads assigned to this employee
@@ -363,13 +367,15 @@ export default function EmployeeAllLeads() {
         return filtered;
       };
 
-      // Try cached data first for instant display
+      // Try cached data first for instant display (but only if location key hasn't changed)
+      // If location key changed, it means we navigated back, so we should refetch fresh data
       const cachedData = getCachedLeadData();
       const CACHE_MAX_AGE = 5 * 60 * 1000; // 5 minutes
       const cacheAge = cachedData?.timestamp ? Date.now() - cachedData.timestamp : Infinity;
       const isCacheFresh = cacheAge < CACHE_MAX_AGE;
+      const shouldUseCache = isCacheFresh && !hasLocationKeyChanged;
 
-      if (cachedData?.leads && isCacheFresh) {
+      if (cachedData?.leads && shouldUseCache) {
         console.log("=== USING CACHED DATA (FRESH) - SKIPPING API CALL ===");
         console.log("Cached leads count:", cachedData.leads.length);
         console.log("Cache age:", Math.round(cacheAge / 1000), "seconds");
@@ -397,8 +403,9 @@ export default function EmployeeAllLeads() {
         return; // Use cache, don't make API call
       }
 
-      // Cache is stale or missing, fetch fresh data from API (ONLY API CALL - gets leads, statuses, employees, sources)
-      if (cachedData?.leads && !isCacheFresh) {
+      // Cache is stale or missing, or we navigated back - fetch fresh data from API
+      // If location key changed (navigated back), skip stale cache and fetch fresh
+      if (cachedData?.leads && !isCacheFresh && !hasLocationKeyChanged) {
         console.log("=== CACHE IS STALE, USING FOR INSTANT DISPLAY THEN FETCHING FRESH ===");
         console.log("Cache age:", Math.round(cacheAge / 1000), "seconds");
         
@@ -559,13 +566,14 @@ export default function EmployeeAllLeads() {
 
     // Reset the ref when component unmounts or key dependencies change
     return () => {
-      // Reset ref when pathname or user changes to allow new API call
+      // Reset ref when pathname, user, or location key changes to allow new API call
       if (location.pathname !== apiCallMadeRef.current.pathname || 
-          currentUserId !== apiCallMadeRef.current.userId) {
-        apiCallMadeRef.current = { pathname: null, userId: null, called: false };
+          currentUserId !== apiCallMadeRef.current.userId ||
+          location.key !== apiCallMadeRef.current.locationKey) {
+        apiCallMadeRef.current = { pathname: null, userId: null, locationKey: null, called: false };
       }
     };
-  }, [location.pathname, currentUserId]);
+  }, [location.pathname, location.key, currentUserId]);
 
   // Use ref to store currentUserId so event listener always has latest value
   const currentUserIdRef = useRef(currentUserId);
@@ -659,8 +667,6 @@ export default function EmployeeAllLeads() {
   // Handler to update lifecycle
   const handleLifecycleChange = async (lead, newLifecycleId) => {
     setLifecycleUpdatingLeadId(lead.id);
-    setActionLoading(true);
-    setActionMessage("Updating lifecycle...");
     try {
       const leadId = lead.id;
 
@@ -775,8 +781,6 @@ export default function EmployeeAllLeads() {
       notifyError("Failed to update lead lifecycle");
     } finally {
       setLifecycleUpdatingLeadId(null);
-      setActionLoading(false);
-      setActionMessage("");
     }
   };
 
@@ -2226,7 +2230,7 @@ export default function EmployeeAllLeads() {
                               handleLifecycleChange(lead, selectedValue);
                             }}
                             size="small"
-                            disabled={lifecycleUpdatingLeadId === lead.id || actionLoading}
+                            disabled={lifecycleUpdatingLeadId === lead.id}
                             sx={{
                               minWidth: 120,
                               height: 32,

@@ -113,8 +113,9 @@ const FollowUpCell = ({ lead, onUpdate, notifySuccess, notifyError }) => {
         
         console.log("FollowUpCell: Sending PATCH payload:", patchPayload);
         
+        let patchResponse = null;
         try {
-            await apiRequest(`/api/leads/${leadId}/`, {
+            patchResponse = await apiRequest(`/api/leads/${leadId}/`, {
                 method: "PATCH",
                 body: JSON.stringify(patchPayload),
             });
@@ -141,8 +142,33 @@ const FollowUpCell = ({ lead, onUpdate, notifySuccess, notifyError }) => {
             });
         }
 
-        // Update parent state
-        if (onUpdate) {
+        // Get the complete updated lead - use PATCH response if available, otherwise fetch
+        let apiUpdatedLead = null;
+        if (patchResponse) {
+            apiUpdatedLead = patchResponse.data || patchResponse.lead || patchResponse;
+        }
+        
+        // If PATCH response doesn't contain full lead data, fetch it
+        if (!apiUpdatedLead || !apiUpdatedLead.id) {
+            const updatedLeadResponse = await apiRequest(`/api/leads/${leadId}/`);
+            apiUpdatedLead = updatedLeadResponse?.data || updatedLeadResponse;
+        }
+
+        // Update parent state with complete lead data
+        if (onUpdate && apiUpdatedLead) {
+            // Merge current lead with API response to preserve all fields
+            const mergedLead = {
+                ...lead,
+                ...apiUpdatedLead,
+                // Ensure these fields are set correctly
+                follow_up_at: followUpValue || apiUpdatedLead.follow_up_at,
+                followUpAt: followUpValue || apiUpdatedLead.followUpAt,
+                send_reminder_email: formData.send_reminder_email,
+                reminder_time_offset: formData.reminder_time_offset || apiUpdatedLead.reminder_time_offset
+            };
+            onUpdate(mergedLead);
+        } else if (onUpdate) {
+            // Fallback: use partial update if API response is empty
             onUpdate({
                 ...lead,
                 follow_up_at: followUpValue,
