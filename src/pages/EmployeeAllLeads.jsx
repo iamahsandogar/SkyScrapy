@@ -178,7 +178,7 @@ export default function EmployeeAllLeads() {
   const actionOpen = Boolean(actionAnchorEl);
   const rowRefs = useRef({});
   const highlightTimer = useRef(null);
-  const apiCallMadeRef = useRef({ pathname: null, userId: null, called: false });
+  const apiCallMadeRef = useRef({ pathname: null, userId: null, locationKey: null, called: false });
   const [highlightedLeadId, setHighlightedLeadId] = useState(null);
   const focusLeadId = useMemo(() => {
     const stateLeadId = location.state?.focusLeadId;
@@ -242,14 +242,18 @@ export default function EmployeeAllLeads() {
         return;
       }
 
-      // Ensure API is called only once per mount
+      // Ensure API is called when navigating to this page
+      // Use location.key to detect navigation (changes on each navigation)
       const currentPath = location.pathname;
+      const locationKey = location.key; // This changes on each navigation
       const hasPathChanged = apiCallMadeRef.current.pathname !== currentPath;
       const hasUserChanged = apiCallMadeRef.current.userId !== employeeId;
+      const hasNavigated = apiCallMadeRef.current.locationKey !== locationKey;
       
-      // Only prevent duplicate calls if path and user haven't changed AND we've already called
-      if (apiCallMadeRef.current.called && !hasPathChanged && !hasUserChanged) {
-        console.log("API call already made for this page/user, skipping duplicate call");
+      // Always fetch if path/user changed or if we've navigated to this page
+      // Only skip if same path, same user, same location key, and already called
+      if (apiCallMadeRef.current.called && !hasPathChanged && !hasUserChanged && !hasNavigated) {
+        console.log("API call already made for this page/user/navigation, skipping duplicate call");
         setLeadsLoading(false);
         setStatusesLoading(false);
         return;
@@ -258,6 +262,7 @@ export default function EmployeeAllLeads() {
       // Mark as called BEFORE making the API call to prevent race conditions
       apiCallMadeRef.current.pathname = currentPath;
       apiCallMadeRef.current.userId = employeeId;
+      apiCallMadeRef.current.locationKey = locationKey;
       apiCallMadeRef.current.called = true;
 
       // Helper function to filter leads assigned to this employee
@@ -365,68 +370,31 @@ export default function EmployeeAllLeads() {
         return filtered;
       };
 
-      // Try cached data first for instant display
+      // Always fetch fresh leads from API to ensure we have all leads
+      // Cache may only contain partial data (e.g., only newly created lead)
       const cachedData = getCachedLeadData();
-      const CACHE_MAX_AGE = 5 * 60 * 1000; // 5 minutes
-      const cacheAge = cachedData?.timestamp ? Date.now() - cachedData.timestamp : Infinity;
-      const isCacheFresh = cacheAge < CACHE_MAX_AGE;
-
-      if (cachedData?.leads && isCacheFresh) {
-        console.log("=== USING CACHED DATA (FRESH) - SKIPPING API CALL ===");
-        console.log("Cached leads count:", cachedData.leads.length);
-        console.log("Cache age:", Math.round(cacheAge / 1000), "seconds");
-        
-        // Set statuses from cache
-        if (cachedData.statuses) {
-          setStatuses(cachedData.statuses);
-        }
-        // Set users from cache if available
-        if (cachedData.users && Array.isArray(cachedData.users)) {
-          setUsers(cachedData.users);
-        } else if (cachedData.employees && Array.isArray(cachedData.employees)) {
-          setUsers(cachedData.employees);
-        }
-        setStatusesLoading(false);
-        
-        const filteredLeads = filterLeadsByEmployee(cachedData.leads);
-        console.log(
-          "Filtered leads count after filtering:",
-          filteredLeads.length
-        );
-        setLeads(filteredLeads);
-        setLeadsLoading(false);
-        apiCallMadeRef.current.called = true; // Mark as done, using cache
-        return; // Use cache, don't make API call
+      
+      // Use cache only for statuses/users metadata for instant display, but always fetch leads from API
+      if (cachedData?.statuses) {
+        setStatuses(cachedData.statuses);
       }
-
-      // Cache is stale or missing, fetch fresh data from API (ONLY API CALL - gets leads, statuses, employees, sources)
-      if (cachedData?.leads && !isCacheFresh) {
-        console.log("=== CACHE IS STALE, USING FOR INSTANT DISPLAY THEN FETCHING FRESH ===");
-        console.log("Cache age:", Math.round(cacheAge / 1000), "seconds");
-        
-        // Set statuses from stale cache for instant display
-        if (cachedData.statuses) {
-          setStatuses(cachedData.statuses);
-        }
-        // Set users from stale cache for instant display
-        if (cachedData.users && Array.isArray(cachedData.users)) {
-          setUsers(cachedData.users);
-        } else if (cachedData.employees && Array.isArray(cachedData.employees)) {
-          setUsers(cachedData.employees);
-        }
-        setStatusesLoading(false);
-        
-        const filteredLeads = filterLeadsByEmployee(cachedData.leads);
-        setLeads(filteredLeads);
-        setLeadsLoading(false);
-        // Continue to fetch fresh data below
+      if (cachedData?.users && Array.isArray(cachedData.users)) {
+        setUsers(cachedData.users);
+      } else if (cachedData?.employees && Array.isArray(cachedData.employees)) {
+        setUsers(cachedData.employees);
       }
+      
+      console.log("=== ALWAYS FETCHING LEADS FROM API (ignoring cache for leads) ===");
+      console.log("Cache may contain partial data, so fetching fresh leads from API");
 
       // Mark that we're making the API call
       apiCallMadeRef.current.called = true;
+      apiCallMadeRef.current.inProgress = true;
       console.log("Fetching fresh data from /api/leads/ API...");
       const data = await apiRequest("/api/leads/");
       console.log("=== API RESPONSE RAW ===", data);
+      console.log("API Response type:", typeof data);
+      console.log("API Response keys:", data ? Object.keys(data) : 'null/undefined');
 
       // Handle different response formats for leads
       let leadsList = [];
@@ -449,6 +417,8 @@ export default function EmployeeAllLeads() {
           "Could not parse leads from API response. Full response:",
           data
         );
+        // If we can't parse leads, set empty array to prevent errors
+        leadsList = [];
       }
       
       console.log(`=== FETCHED LEADS ===`);
@@ -456,7 +426,12 @@ export default function EmployeeAllLeads() {
       console.log(`API Response count field: ${data?.count || 'not provided'}`);
       console.log(`API Response limit field: ${data?.limit || 'not provided'}`);
       console.log(`API Response offset field: ${data?.offset || 'not provided'}`);
-      console.log("Lead IDs from API:", leadsList.map(l => l.id));
+      console.log("Lead IDs from API:", leadsList.map(l => l?.id || 'no-id'));
+      
+      // If no leads were found, log warning but continue
+      if (leadsList.length === 0) {
+        console.warn("⚠️ No leads found in API response. Response structure:", data);
+      }
       
       // Check if API is paginating and we need to fetch more
       const totalCount = data?.count || null;
@@ -595,20 +570,34 @@ export default function EmployeeAllLeads() {
       };
 
       const normalizedLeadsList = leadsList.map(normalizeLifecycleField);
+      console.log("=== NORMALIZED LEADS ===");
+      console.log("Normalized leads count:", normalizedLeadsList.length);
 
       // Filter leads to show only those assigned to this employee
       const filteredLeads = filterLeadsByEmployee(normalizedLeadsList);
       console.log("=== AFTER FILTERING ===");
       console.log("Filtered leads count:", filteredLeads.length);
       console.log("Original leads count:", leadsList.length);
+      console.log("Employee ID used for filtering:", employeeId);
 
+      // Always set leads, even if empty (to show empty state)
       setLeads(filteredLeads);
+      console.log("✅ Leads state updated with", filteredLeads.length, "leads");
+      console.log("Sample lead IDs:", filteredLeads.slice(0, 5).map(l => l?.id));
 
       // No cache updates - data always comes from API
-      } catch (err) {
-        console.error("Failed to fetch leads:", err);
-        alert("Failed to load leads");
-        setLeads([]);
+      apiCallMadeRef.current.inProgress = false;
+    } catch (err) {
+        console.error("❌ Failed to fetch leads:", err);
+        console.error("Error details:", {
+          message: err?.message,
+          stack: err?.stack,
+          response: err?.response,
+        });
+        notifyError("Failed to load leads. Please refresh the page.");
+        // Don't clear leads on error - keep existing data if available
+        // setLeads([]);
+        apiCallMadeRef.current.inProgress = false;
       } finally {
         setLeadsLoading(false);
         setStatusesLoading(false);
@@ -619,13 +608,14 @@ export default function EmployeeAllLeads() {
 
     // Reset the ref when component unmounts or key dependencies change
     return () => {
-      // Reset ref when pathname or user changes to allow new API call
+      // Reset ref when pathname, user, or location key changes to allow new API call
       if (location.pathname !== apiCallMadeRef.current.pathname || 
-          currentUserId !== apiCallMadeRef.current.userId) {
-        apiCallMadeRef.current = { pathname: null, userId: null, called: false };
+          currentUserId !== apiCallMadeRef.current.userId ||
+          location.key !== apiCallMadeRef.current.locationKey) {
+        apiCallMadeRef.current = { pathname: null, userId: null, locationKey: null, called: false };
       }
     };
-  }, [location.pathname, currentUserId]);
+  }, [location.pathname, location.key, currentUserId]);
 
   // Use ref to store currentUserId so event listener always has latest value
   const currentUserIdRef = useRef(currentUserId);
