@@ -163,6 +163,8 @@ export default function EmployeeAllLeads() {
   const [statusesLoading, setStatusesLoading] = useState(true);
   const [assignedUpdatingLeadId, setAssignedUpdatingLeadId] = useState(null);
   const [lifecycleUpdatingLeadId, setLifecycleUpdatingLeadId] = useState(null);
+  const [statusUpdatingLeadId, setStatusUpdatingLeadId] = useState(null);
+  const [followUpStatusUpdatingLeadId, setFollowUpStatusUpdatingLeadId] = useState(null);
   const [actionAnchorEl, setActionAnchorEl] = useState(null);
   const [menuLead, setMenuLead] = useState(null);
   const [mobileMenuAnchorEl, setMobileMenuAnchorEl] = useState(null);
@@ -176,7 +178,7 @@ export default function EmployeeAllLeads() {
   const actionOpen = Boolean(actionAnchorEl);
   const rowRefs = useRef({});
   const highlightTimer = useRef(null);
-  const apiCallMadeRef = useRef({ pathname: null, userId: null, locationKey: null, called: false });
+  const apiCallMadeRef = useRef({ pathname: null, userId: null, called: false });
   const [highlightedLeadId, setHighlightedLeadId] = useState(null);
   const focusLeadId = useMemo(() => {
     const stateLeadId = location.state?.focusLeadId;
@@ -242,15 +244,12 @@ export default function EmployeeAllLeads() {
 
       // Ensure API is called only once per mount
       const currentPath = location.pathname;
-      const currentLocationKey = location.key; // location.key changes on every navigation
       const hasPathChanged = apiCallMadeRef.current.pathname !== currentPath;
       const hasUserChanged = apiCallMadeRef.current.userId !== employeeId;
-      const hasLocationKeyChanged = apiCallMadeRef.current.locationKey !== currentLocationKey;
       
-      // Only prevent duplicate calls if path, user, and location key haven't changed AND we've already called
-      // location.key changes on every navigation, so this ensures we refetch when navigating back
-      if (apiCallMadeRef.current.called && !hasPathChanged && !hasUserChanged && !hasLocationKeyChanged) {
-        console.log("API call already made for this page/user/location, skipping duplicate call");
+      // Only prevent duplicate calls if path and user haven't changed AND we've already called
+      if (apiCallMadeRef.current.called && !hasPathChanged && !hasUserChanged) {
+        console.log("API call already made for this page/user, skipping duplicate call");
         setLeadsLoading(false);
         setStatusesLoading(false);
         return;
@@ -259,7 +258,6 @@ export default function EmployeeAllLeads() {
       // Mark as called BEFORE making the API call to prevent race conditions
       apiCallMadeRef.current.pathname = currentPath;
       apiCallMadeRef.current.userId = employeeId;
-      apiCallMadeRef.current.locationKey = currentLocationKey;
       apiCallMadeRef.current.called = true;
 
       // Helper function to filter leads assigned to this employee
@@ -367,15 +365,13 @@ export default function EmployeeAllLeads() {
         return filtered;
       };
 
-      // Try cached data first for instant display (but only if location key hasn't changed)
-      // If location key changed, it means we navigated back, so we should refetch fresh data
+      // Try cached data first for instant display
       const cachedData = getCachedLeadData();
       const CACHE_MAX_AGE = 5 * 60 * 1000; // 5 minutes
       const cacheAge = cachedData?.timestamp ? Date.now() - cachedData.timestamp : Infinity;
       const isCacheFresh = cacheAge < CACHE_MAX_AGE;
-      const shouldUseCache = isCacheFresh && !hasLocationKeyChanged;
 
-      if (cachedData?.leads && shouldUseCache) {
+      if (cachedData?.leads && isCacheFresh) {
         console.log("=== USING CACHED DATA (FRESH) - SKIPPING API CALL ===");
         console.log("Cached leads count:", cachedData.leads.length);
         console.log("Cache age:", Math.round(cacheAge / 1000), "seconds");
@@ -403,9 +399,8 @@ export default function EmployeeAllLeads() {
         return; // Use cache, don't make API call
       }
 
-      // Cache is stale or missing, or we navigated back - fetch fresh data from API
-      // If location key changed (navigated back), skip stale cache and fetch fresh
-      if (cachedData?.leads && !isCacheFresh && !hasLocationKeyChanged) {
+      // Cache is stale or missing, fetch fresh data from API (ONLY API CALL - gets leads, statuses, employees, sources)
+      if (cachedData?.leads && !isCacheFresh) {
         console.log("=== CACHE IS STALE, USING FOR INSTANT DISPLAY THEN FETCHING FRESH ===");
         console.log("Cache age:", Math.round(cacheAge / 1000), "seconds");
         
@@ -429,7 +424,7 @@ export default function EmployeeAllLeads() {
 
       // Mark that we're making the API call
       apiCallMadeRef.current.called = true;
-      console.log("Fetching fresh data from /api/leads/ API (SINGLE API CALL for all data)...");
+      console.log("Fetching fresh data from /api/leads/ API...");
       const data = await apiRequest("/api/leads/");
       console.log("=== API RESPONSE RAW ===", data);
 
@@ -454,6 +449,64 @@ export default function EmployeeAllLeads() {
           "Could not parse leads from API response. Full response:",
           data
         );
+      }
+      
+      console.log(`=== FETCHED LEADS ===`);
+      console.log(`Total leads fetched: ${leadsList.length}`);
+      console.log(`API Response count field: ${data?.count || 'not provided'}`);
+      console.log(`API Response limit field: ${data?.limit || 'not provided'}`);
+      console.log(`API Response offset field: ${data?.offset || 'not provided'}`);
+      console.log("Lead IDs from API:", leadsList.map(l => l.id));
+      
+      // Check if API is paginating and we need to fetch more
+      const totalCount = data?.count || null;
+      const apiLimit = data?.limit || null;
+      const apiOffset = data?.offset || 0;
+      
+      // If count is provided and it's more than what we got, fetch remaining pages
+      if (totalCount !== null && leadsList.length < totalCount) {
+        console.log(`⚠️ API is paginating: Got ${leadsList.length} of ${totalCount} leads. Fetching remaining...`);
+        let allLeads = [...leadsList];
+        let currentOffset = leadsList.length;
+        const fetchLimit = 1000; // Use large limit for remaining pages
+        
+        while (allLeads.length < totalCount) {
+          try {
+            const nextPageUrl = `/api/leads/?limit=${fetchLimit}&offset=${currentOffset}`;
+            console.log(`Fetching next page: offset=${currentOffset}`);
+            const nextPageData = await apiRequest(nextPageUrl);
+            
+            let nextPageLeads = [];
+            if (nextPageData && Array.isArray(nextPageData.leads)) {
+              nextPageLeads = nextPageData.leads;
+            } else if (nextPageData?.data?.leads && Array.isArray(nextPageData.data.leads)) {
+              nextPageLeads = nextPageData.data.leads;
+            } else if (nextPageData?.leads && Array.isArray(nextPageData.leads)) {
+              nextPageLeads = nextPageData.leads;
+            }
+            
+            if (nextPageLeads.length === 0) {
+              console.log("No more leads in next page, stopping");
+              break;
+            }
+            
+            allLeads = [...allLeads, ...nextPageLeads];
+            currentOffset += nextPageLeads.length;
+            
+            console.log(`Fetched ${nextPageLeads.length} more leads. Total now: ${allLeads.length}`);
+            
+            // Safety check
+            if (allLeads.length >= totalCount) break;
+          } catch (e) {
+            console.error("Error fetching next page:", e);
+            break;
+          }
+        }
+        
+        leadsList = allLeads;
+        console.log(`=== FINAL LEADS COUNT ===`);
+        console.log(`Total leads after pagination: ${leadsList.length}`);
+        console.log("All lead IDs:", leadsList.map(l => l.id));
       }
 
       // Extract statuses from the leads API response
@@ -566,14 +619,13 @@ export default function EmployeeAllLeads() {
 
     // Reset the ref when component unmounts or key dependencies change
     return () => {
-      // Reset ref when pathname, user, or location key changes to allow new API call
+      // Reset ref when pathname or user changes to allow new API call
       if (location.pathname !== apiCallMadeRef.current.pathname || 
-          currentUserId !== apiCallMadeRef.current.userId ||
-          location.key !== apiCallMadeRef.current.locationKey) {
-        apiCallMadeRef.current = { pathname: null, userId: null, locationKey: null, called: false };
+          currentUserId !== apiCallMadeRef.current.userId) {
+        apiCallMadeRef.current = { pathname: null, userId: null, called: false };
       }
     };
-  }, [location.pathname, location.key, currentUserId]);
+  }, [location.pathname, currentUserId]);
 
   // Use ref to store currentUserId so event listener always has latest value
   const currentUserIdRef = useRef(currentUserId);
@@ -657,10 +709,9 @@ export default function EmployeeAllLeads() {
       addLeadToCache(updatedLead);
     } catch (error) {
       console.error("Failed to update lead status:", error);
-      alert("Failed to update lead status");
+      notifyError("Failed to update lead status");
     } finally {
-      setActionLoading(false);
-      setActionMessage("");
+      setStatusUpdatingLeadId(null);
     }
   };
 
@@ -786,8 +837,8 @@ export default function EmployeeAllLeads() {
 
   // Handler to update follow-up status
   const handleFollowUpStatusChange = async (lead, newFollowUpStatus) => {
-    setActionLoading(true);
-    setActionMessage("Updating follow-up status...");
+    const leadId = lead.id;
+    setFollowUpStatusUpdatingLeadId(leadId);
     try {
       const leadId = lead.id;
 
@@ -869,14 +920,13 @@ export default function EmployeeAllLeads() {
         errorMessage: error?.message,
         errorResponse: error?.response,
       });
-      alert(
+      notifyError(
         `Failed to update follow-up status: ${
           error?.message || "Unknown error"
         }`
       );
     } finally {
-      setActionLoading(false);
-      setActionMessage("");
+      setFollowUpStatusUpdatingLeadId(null);
     }
   };
 
@@ -2115,81 +2165,93 @@ export default function EmployeeAllLeads() {
 
                     {visibleColumns.includes("status") && (
                       <TableCell>
-                        <Select
-                          value={(() => {
-                            // Get the status ID from the lead
-                            // Status cannot be None, so if empty, use first available status
-                            const statusId = lead.status;
-                            if (
-                              statusId === null ||
-                              statusId === undefined ||
-                              statusId === ""
-                            ) {
-                              // If no status, default to first available status
-                              if (statuses.length > 0) {
-                                const firstStatus = statuses[0];
-                                return typeof firstStatus === "object" &&
-                                  firstStatus !== null
-                                  ? firstStatus.id || firstStatus.pk
-                                  : firstStatus;
-                              }
-                              return "";
-                            }
-                            // If status is an object, extract the ID
-                            if (
-                              typeof statusId === "object" &&
-                              statusId !== null
-                            ) {
-                              return statusId.id || statusId.pk || "";
-                            }
-                            return String(statusId);
-                          })()}
-                          onChange={(e) => {
-                            // Convert to integer - status cannot be null/empty
-                            const selectedId = parseInt(e.target.value, 10);
-                            if (!isNaN(selectedId)) {
-                              handleStatusChange(lead, selectedId);
-                            }
-                          }}
-                          size="small"
+                        <Box
                           sx={{
-                            minWidth: 120,
-                            height: 32,
-                            "& .MuiSelect-select": {
-                              padding: "4px 8px",
-                              fontSize: "0.875rem",
-                            },
-                          }}
-                          MenuProps={{
-                            PaperProps: {
-                              style: {
-                                maxHeight: 300,
-                              },
-                            },
+                            position: "relative",
+                            display: "inline-flex",
+                            alignItems: "center",
                           }}
                         >
-                          {statuses.map((status, index) => {
-                            // Handle different status structures - match CreateLead form logic
-                            const statusId =
-                              typeof status === "object" && status !== null
-                                ? status.id || status.pk
-                                : status;
-                            const statusName =
-                              typeof status === "string"
-                                ? status
-                                : status.name ||
-                                  status.label ||
-                                  status.status_name ||
-                                  String(statusId);
-                            const key = statusId || index;
+                          <Select
+                            value={(() => {
+                              // Get the status ID from the lead
+                              // Status cannot be None, so if empty, use first available status
+                              const statusId = lead.status;
+                              if (
+                                statusId === null ||
+                                statusId === undefined ||
+                                statusId === ""
+                              ) {
+                                // If no status, default to first available status
+                                if (statuses.length > 0) {
+                                  const firstStatus = statuses[0];
+                                  return typeof firstStatus === "object" &&
+                                    firstStatus !== null
+                                    ? firstStatus.id || firstStatus.pk
+                                    : firstStatus;
+                                }
+                                return "";
+                              }
+                              // If status is an object, extract the ID
+                              if (
+                                typeof statusId === "object" &&
+                                statusId !== null
+                              ) {
+                                return statusId.id || statusId.pk || "";
+                              }
+                              return String(statusId);
+                            })()}
+                            onChange={(e) => {
+                              // Convert to integer - status cannot be null/empty
+                              const selectedId = parseInt(e.target.value, 10);
+                              if (!isNaN(selectedId)) {
+                                handleStatusChange(lead, selectedId);
+                              }
+                            }}
+                            size="small"
+                            disabled={statusUpdatingLeadId === lead.id}
+                            sx={{
+                              minWidth: 120,
+                              height: 32,
+                              "& .MuiSelect-select": {
+                                padding: "4px 8px",
+                                fontSize: "0.875rem",
+                              },
+                            }}
+                            MenuProps={{
+                              PaperProps: {
+                                style: {
+                                  maxHeight: 300,
+                                },
+                              },
+                            }}
+                          >
+                            {statuses.map((status, index) => {
+                              // Handle different status structures - match CreateLead form logic
+                              const statusId =
+                                typeof status === "object" && status !== null
+                                  ? status.id || status.pk
+                                  : status;
+                              const statusName =
+                                typeof status === "string"
+                                  ? status
+                                  : status.name ||
+                                    status.label ||
+                                    status.status_name ||
+                                    String(statusId);
+                              const key = statusId || index;
 
-                            return (
-                              <MenuItem key={key} value={statusId}>
-                                {statusName}
-                              </MenuItem>
-                            );
-                          })}
-                        </Select>
+                              return (
+                                <MenuItem key={key} value={statusId}>
+                                  {statusName}
+                                </MenuItem>
+                              );
+                            })}
+                          </Select>
+                          {statusUpdatingLeadId === lead.id && (
+                            <CircularProgress size={16} sx={{ ml: 1 }} />
+                          )}
+                        </Box>
                       </TableCell>
                     )}
 
@@ -2331,61 +2393,73 @@ export default function EmployeeAllLeads() {
 
                     {visibleColumns.includes("followupStatus") && (
                       <TableCell>
-                        <Select
-                          value={(() => {
-                            // Explicitly handle null/undefined/empty values for "None"
-                            const status =
-                              lead.follow_up_status || lead.followupStatus;
-                            return status === null ||
-                              status === undefined ||
-                              status === ""
-                              ? ""
-                              : status;
-                          })()}
-                          onChange={(e) => {
-                            // Explicitly handle "None" selection (empty string)
-                            // This ensures "None" is easily mutable
-                            const selectedValue =
-                              e.target.value === "" ? "" : e.target.value;
-                            handleFollowUpStatusChange(lead, selectedValue);
-                          }}
-                          size="small"
+                        <Box
                           sx={{
-                            minWidth: 120,
-                            height: 32,
-                            "& .MuiSelect-select": {
-                              padding: "4px 8px",
-                              fontSize: "0.875rem",
-                            },
-                          }}
-                          MenuProps={{
-                            PaperProps: {
-                              style: {
-                                maxHeight: 300,
-                              },
-                            },
-                          }}
-                          SelectProps={{
-                            displayEmpty: true,
-                            renderValue: (val) => {
-                              // Show "None" for empty/null/undefined values
-                              if (
-                                val === "" ||
-                                val === null ||
-                                val === undefined
-                              ) {
-                                return "None";
-                              }
-                              return val;
-                            },
+                            position: "relative",
+                            display: "inline-flex",
+                            alignItems: "center",
                           }}
                         >
-                          <MenuItem value="">
-                            <em>None</em>
-                          </MenuItem>
-                          <MenuItem value="done">done</MenuItem>
-                          <MenuItem value="pending">pending</MenuItem>
-                        </Select>
+                          <Select
+                            value={(() => {
+                              // Explicitly handle null/undefined/empty values for "None"
+                              const status =
+                                lead.follow_up_status || lead.followupStatus;
+                              return status === null ||
+                                status === undefined ||
+                                status === ""
+                                ? ""
+                                : status;
+                            })()}
+                            onChange={(e) => {
+                              // Explicitly handle "None" selection (empty string)
+                              // This ensures "None" is easily mutable
+                              const selectedValue =
+                                e.target.value === "" ? "" : e.target.value;
+                              handleFollowUpStatusChange(lead, selectedValue);
+                            }}
+                            size="small"
+                            disabled={followUpStatusUpdatingLeadId === lead.id}
+                            sx={{
+                              minWidth: 120,
+                              height: 32,
+                              "& .MuiSelect-select": {
+                                padding: "4px 8px",
+                                fontSize: "0.875rem",
+                              },
+                            }}
+                            MenuProps={{
+                              PaperProps: {
+                                style: {
+                                  maxHeight: 300,
+                                },
+                              },
+                            }}
+                            SelectProps={{
+                              displayEmpty: true,
+                              renderValue: (val) => {
+                                // Show "None" for empty/null/undefined values
+                                if (
+                                  val === "" ||
+                                  val === null ||
+                                  val === undefined
+                                ) {
+                                  return "None";
+                                }
+                                return val;
+                              },
+                            }}
+                          >
+                            <MenuItem value="">
+                              <em>None</em>
+                            </MenuItem>
+                            <MenuItem value="done">done</MenuItem>
+                            <MenuItem value="pending">pending</MenuItem>
+                          </Select>
+                          {followUpStatusUpdatingLeadId === lead.id && (
+                            <CircularProgress size={16} sx={{ ml: 1 }} />
+                          )}
+                        </Box>
                       </TableCell>
                     )}
 

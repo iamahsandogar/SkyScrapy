@@ -283,14 +283,28 @@ export default function AllLeads() {
               lead.assigned_to_id ||
               lead.assignedToId;
 
-            // Handle case where assigned_to might be an object with id property
+            // Handle case where assigned_to might be an object with nested structure
+            // API returns: assigned_to.user_details.id (user ID) or assigned_to.id (profile ID)
             if (
               assignedTo &&
               typeof assignedTo === "object" &&
               assignedTo !== null
             ) {
-              assignedTo =
-                assignedTo.id || assignedTo.pk || assignedTo.uuid || assignedTo;
+              // CRITICAL: Check user_details.id first (this is the actual user ID)
+              // The API structure is: assigned_to.user_details.id
+              if (assignedTo.user_details && assignedTo.user_details.id) {
+                assignedTo = assignedTo.user_details.id;
+              } else {
+                // Fallback to other possible ID fields
+                assignedTo =
+                  assignedTo.id ||
+                  assignedTo.pk ||
+                  assignedTo.uuid ||
+                  assignedTo.user_id ||
+                  assignedTo.userId ||
+                  assignedTo.profile_id ||
+                  assignedTo.profileId;
+              }
             }
 
             // If assigned_to is null/undefined, this lead won't match - skip it
@@ -376,6 +390,64 @@ export default function AllLeads() {
           } else if (data.data?.leads && Array.isArray(data.data.leads)) {
             leadsList = data.data.leads;
           }
+        }
+        
+        console.log(`=== FETCHED LEADS ===`);
+        console.log(`Total leads fetched: ${leadsList.length}`);
+        console.log(`API Response count field: ${data?.count || 'not provided'}`);
+        console.log(`API Response limit field: ${data?.limit || 'not provided'}`);
+        console.log(`API Response offset field: ${data?.offset || 'not provided'}`);
+        console.log("Lead IDs from API:", leadsList.map(l => l.id));
+        
+        // Check if API is paginating and we need to fetch more
+        const totalCount = data?.count || null;
+        const apiLimit = data?.limit || null;
+        const apiOffset = data?.offset || 0;
+        
+        // If count is provided and it's more than what we got, fetch remaining pages
+        if (totalCount !== null && leadsList.length < totalCount) {
+          console.log(`⚠️ API is paginating: Got ${leadsList.length} of ${totalCount} leads. Fetching remaining...`);
+          let allLeads = [...leadsList];
+          let currentOffset = leadsList.length;
+          const fetchLimit = 1000; // Use large limit for remaining pages
+          
+          while (allLeads.length < totalCount) {
+            try {
+              const nextPageUrl = `/api/leads/?limit=${fetchLimit}&offset=${currentOffset}`;
+              console.log(`Fetching next page: offset=${currentOffset}`);
+              const nextPageData = await apiRequest(nextPageUrl);
+              
+              let nextPageLeads = [];
+              if (nextPageData && Array.isArray(nextPageData.leads)) {
+                nextPageLeads = nextPageData.leads;
+              } else if (nextPageData?.data?.leads && Array.isArray(nextPageData.data.leads)) {
+                nextPageLeads = nextPageData.data.leads;
+              } else if (nextPageData?.leads && Array.isArray(nextPageData.leads)) {
+                nextPageLeads = nextPageData.leads;
+              }
+              
+              if (nextPageLeads.length === 0) {
+                console.log("No more leads in next page, stopping");
+                break;
+              }
+              
+              allLeads = [...allLeads, ...nextPageLeads];
+              currentOffset += nextPageLeads.length;
+              
+              console.log(`Fetched ${nextPageLeads.length} more leads. Total now: ${allLeads.length}`);
+              
+              // Safety check
+              if (allLeads.length >= totalCount) break;
+            } catch (e) {
+              console.error("Error fetching next page:", e);
+              break;
+            }
+          }
+          
+          leadsList = allLeads;
+          console.log(`=== FINAL LEADS COUNT ===`);
+          console.log(`Total leads after pagination: ${leadsList.length}`);
+          console.log("All lead IDs:", leadsList.map(l => l.id));
         }
 
         // Extract statuses, users (employees), and lifecycles from the API response

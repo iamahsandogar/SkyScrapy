@@ -662,6 +662,8 @@ export default function CreateLead() {
         !formData[field] ||
         (typeof formData[field] === "string" && formData[field].trim() === "")
       ) {
+        console.log(`❌ Validation failed: Missing required field "${field}"`);
+        console.log(`Field value:`, formData[field]);
         return false;
       }
     }
@@ -671,25 +673,44 @@ export default function CreateLead() {
       formData.contact_linkedin_url &&
       !isValidLinkedInURL(formData.contact_linkedin_url)
     ) {
+      console.log("❌ Validation failed: Invalid LinkedIn URL");
       notifyError("Please enter a valid LinkedIn URL !");
       return false;
     }
 
+    console.log("✅ All validations passed");
     return true;
   };
 
-  const handleSubmit = async () => {
+  const handleSubmit = async (e) => {
+    // Prevent any default form submission behavior
+    if (e) {
+      e.preventDefault();
+      e.stopPropagation();
+    }
+    
+    console.log("=== CREATE LEAD BUTTON CLICKED ===");
+    console.log("Form data:", formData);
+    console.log("Is Admin:", isAdmin);
+    console.log("Edit ID:", editId);
+    
     if (!validateForm()) {
+      console.log("❌ Form validation failed");
       notifyError("Please fill all required fields !");
       return;
     }
+    
+    console.log("✅ Form validation passed");
 
     // Prepare payload according to API structure
     // Validation: If reminder is enabled, follow-up date must be selected
     if (formData.send_reminder_email && !formData.follow_up_at) {
+      console.log("❌ Validation failed: Reminder enabled but no follow-up date");
       notifyError("Please select a follow-up date/time to set a reminder.");
       return;
     }
+    
+    console.log("✅ All validations passed - proceeding to API call");
 
     const payload = {
       title: formData.title.trim(),
@@ -741,46 +762,50 @@ export default function CreateLead() {
     );
 
     const callScheduleFollowUp = async (leadId) => {
-      const followUpPayload = formData.send_reminder_email
-        ? {
-            follow_up_at: (() => {
-              if (formData.follow_up_at && formData.follow_up_time) {
-                const date = dayjs(formData.follow_up_at);
-                const time = dayjs(formData.follow_up_time);
-                return date
-                  .hour(time.hour())
-                  .minute(time.minute())
-                  .second(0)
-                  .millisecond(0)
-                  .format();
-              } else if (formData.follow_up_at) {
-                return dayjs(formData.follow_up_at).startOf("day").format();
-              }
-              return null;
-            })(),
-            send_reminder_email: true,
-            reminder_time_offset: formData.reminder_time_offset,
-          }
-        : {
-            send_reminder_email: false,
-            reminder_time_offset: null,
-          };
-
+      // 🛑 2nd FIX — SAFETY GUARD (ADD THIS PART)
+      if (
+        !formData.send_reminder_email ||
+        !formData.follow_up_at ||
+        !formData.follow_up_time
+      ) {
+        console.log("⏭ Skipping follow-up scheduling");
+        return;
+      }
+    
+      // ⬇️ Your existing code stays the same
+      const followUpPayload = {
+        follow_up_at: (() => {
+          const date = dayjs(formData.follow_up_at);
+          const time = dayjs(formData.follow_up_time);
+          return date
+            .hour(time.hour())
+            .minute(time.minute())
+            .second(0)
+            .millisecond(0)
+            .format();
+        })(),
+        send_reminder_email: true,
+        reminder_time_offset: formData.reminder_time_offset,
+      };
+    
       try {
         await apiRequest(`/api/leads/${leadId}/schedule-follow-up/`, {
           method: "POST",
           body: JSON.stringify(followUpPayload),
         });
-        console.log("Schedule follow-up called successfully");
+        console.log("✅ Schedule follow-up called successfully");
       } catch (error) {
-        console.error("Failed to schedule follow-up:", error);
+        console.error("❌ Failed to schedule follow-up:", error);
         notifyError("Lead saved, but failed to schedule follow-up.");
       }
     };
+    
+    
 
     try {
       if (editId) {
-        // 🔁 UPDATE LEAD
+        // 🔁 UPDATE LEAD (PATCH)
+        console.log("📝 Updating existing lead with ID:", editId);
         const response = await apiRequest(`/api/leads/${editId}/`, {
           method: "PATCH",
           body: JSON.stringify(payload),
@@ -877,11 +902,22 @@ export default function CreateLead() {
           clearLeadDataCache();
         }
       } else {
-        // ➕ CREATE LEAD
+        // ➕ CREATE NEW LEAD - POST /api/leads/
+        // This block executes when creating a new lead (no editId)
+        console.log("=== CREATING NEW LEAD ===");
+        console.log("✅ No editId found - This is a CREATE operation");
+        console.log("🚀 Calling POST /api/leads/");
+        console.log("Endpoint: POST /api/leads/");
+        console.log("Payload:", JSON.stringify(payload, null, 2));
+        
+        // ✅ REQUIRED: Call POST /api/leads/ to create new lead
+        // This API endpoint creates a new lead in the database
         const response = await apiRequest("/api/leads/", {
           method: "POST",
           body: JSON.stringify(payload),
         });
+        
+        console.log("✅ POST /api/leads/ SUCCESS - Response:", response);
         notifySuccess("Lead created successfully!");
 
         // Parse the response to get the created lead
@@ -901,9 +937,15 @@ export default function CreateLead() {
 
         if (createdLead) {
           const newLeadId = createdLead.id || createdLead.pk || createdLead.uuid;
-          if (newLeadId) {
-             await callScheduleFollowUp(newLeadId);
+          if (
+            newLeadId &&
+            formData.send_reminder_email &&
+            formData.follow_up_at &&
+            formData.follow_up_time
+          ) {
+            await callScheduleFollowUp(newLeadId);
           }
+          
         }
 
         // If response doesn't have all fields, merge with form data
@@ -1043,6 +1085,7 @@ export default function CreateLead() {
                   Cancel
                 </Button>
                 <Button
+                  type="button"
                   variant="contained"
                   sx={{
                     borderRadius: 2,
@@ -1051,7 +1094,10 @@ export default function CreateLead() {
                     px: 3,
                     py: 1,
                   }}
-                  onClick={handleSubmit}
+                  onClick={(e) => {
+                    console.log("🔘 Create Lead button clicked");
+                    handleSubmit(e);
+                  }}
                 >
                   {editId ? "Update Lead" : "Create Lead"}
                 </Button>
