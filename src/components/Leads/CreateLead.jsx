@@ -704,11 +704,15 @@ export default function CreateLead() {
 
     // Prepare payload according to API structure
     // Validation: If reminder is enabled, follow-up date must be selected
-    if (formData.send_reminder_email && !formData.follow_up_at) {
-      console.log("❌ Validation failed: Reminder enabled but no follow-up date");
-      notifyError("Please select a follow-up date/time to set a reminder.");
+    if (
+      !formData.send_reminder_email ||
+      !formData.follow_up_at ||
+      !formData.follow_up_time
+    ) {
+      console.log("⏭ Skipping follow-up scheduling");
       return;
     }
+    
     
     console.log("✅ All validations passed - proceeding to API call");
 
