@@ -217,6 +217,20 @@ const fetchLeadFromApi = async (id) => {
             : parseInt(statusIdRaw, 10)
           : statusIdRaw;
 
+      // Extract lifecycle ID similar to status
+      const lifecycleObj = typeof leadPayload.lifecycle === "object" ? leadPayload.lifecycle : null;
+      const lifecycleIdRaw = lifecycleObj 
+        ? (lifecycleObj.id || lifecycleObj.pk || lifecycleObj.uuid)
+        : (leadPayload.lifecycle_id || leadPayload.lifecycleId || leadPayload.lifecycle);
+      const lifecycleId =
+        lifecycleIdRaw === undefined || lifecycleIdRaw === null || lifecycleIdRaw === ""
+          ? null
+          : typeof lifecycleIdRaw === "string"
+          ? Number.isNaN(parseInt(lifecycleIdRaw, 10))
+            ? lifecycleIdRaw
+            : parseInt(lifecycleIdRaw, 10)
+          : lifecycleIdRaw;
+
       let assignedToValue = leadPayload.assigned_to || leadPayload.assignedTo || null;
       let assignedProfileId = null;
       if (assignedToValue && typeof assignedToValue === "object") {
@@ -344,7 +358,7 @@ if (availableEmployees.length > 0 && finalAssignedTo) {
         title: leadPayload.title || leadPayload.leadTitle || "",
         status: statusId,
         source: leadPayload.source || "",
-        lifecycle: leadPayload.lifecycle || "",
+        lifecycle: lifecycleId,
         description: leadPayload.description || "",
         company_name: leadPayload.company_name || leadPayload.company || "",
         contact_first_name:
@@ -481,9 +495,9 @@ if (availableEmployees.length > 0 && finalAssignedTo) {
   const buildPayload = () => {
     const payload = {
       title: formData.title.trim(),
-      status: formData.status,
+      status: formData.status, // Already an ID from form
       source: formData.source?.trim() || "",
-      lifecycle: formData.lifecycle?.trim() || "",
+      lifecycle: formData.lifecycle || null, // Already an ID from form
       description: formData.description?.trim() || "",
       company_name: formData.company_name?.trim() || "",
       contact_first_name: formData.contact_first_name.trim(),

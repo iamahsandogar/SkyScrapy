@@ -24,6 +24,7 @@ import {
   DialogContent,
   DialogActions,
   Switch,
+  CircularProgress,
 } from "@mui/material";
 
 import CloudDownloadIcon from "@mui/icons-material/CloudDownload";
@@ -51,6 +52,9 @@ import {
   removeLeadFromCache,
 } from "../utils/prefetchData";
 import MoreVertIcon from "@mui/icons-material/MoreVert";
+import { LocalizationProvider, DatePicker } from "@mui/x-date-pickers";
+import { AdapterDayjs } from "@mui/x-date-pickers/AdapterDayjs";
+import dayjs from "dayjs";
 
 
 const getChipStyles = (status) => {
@@ -141,7 +145,7 @@ export default function EmployeeAllLeads() {
   const [q, setQ] = useState("");
   const [statusFilter, setStatusFilter] = useState("ALL");
   const [assignedFilter, setAssignedFilter] = useState("All");
-  const [followUpFilter, setFollowUpFilter] = useState("All");
+  const [followUpFilter, setFollowUpFilter] = useState(null);
   const [anchorEl, setAnchorEl] = useState(null);
   const [visibleColumns, setVisibleColumns] = useState(() => {
     const stored = JSON.parse(localStorage.getItem("leadColumns")) || DEFAULT_COLUMNS;
@@ -153,9 +157,11 @@ export default function EmployeeAllLeads() {
   const [notesDialogOpen, setNotesDialogOpen] = useState(false);
   const [notesDialogLead, setNotesDialogLead] = useState(null);
   const [statuses, setStatuses] = useState([]);
+  const [lifecycles, setLifecycles] = useState([]);
   const [leadsLoading, setLeadsLoading] = useState(true);
   const [statusesLoading, setStatusesLoading] = useState(true);
   const [assignedUpdatingLeadId, setAssignedUpdatingLeadId] = useState(null);
+  const [lifecycleUpdatingLeadId, setLifecycleUpdatingLeadId] = useState(null);
   const [actionAnchorEl, setActionAnchorEl] = useState(null);
   const [menuLead, setMenuLead] = useState(null);
   const [mobileMenuAnchorEl, setMobileMenuAnchorEl] = useState(null);
@@ -468,9 +474,22 @@ export default function EmployeeAllLeads() {
         console.log("Extracted sources from data.sources:", sourcesList.length);
       }
 
-      // Set statuses from API response
+      // Extract lifecycles from the leads API response
+      let lifecyclesList = [];
+      if (data?.lifecycles && Array.isArray(data.lifecycles)) {
+        lifecyclesList = data.lifecycles;
+        console.log("Extracted lifecycles from leads API response:", lifecyclesList.length);
+      } else if (data?.data?.lifecycles && Array.isArray(data.data.lifecycles)) {
+        lifecyclesList = data.data.lifecycles;
+        console.log("Extracted lifecycles from data.lifecycles:", lifecyclesList.length);
+      }
+
+      // Set statuses and lifecycles from API response
       if (statusesList.length > 0) {
         setStatuses(statusesList);
+      }
+      if (lifecyclesList.length > 0) {
+        setLifecycles(lifecyclesList);
       }
       setStatusesLoading(false);
 
@@ -762,6 +781,104 @@ export default function EmployeeAllLeads() {
       console.error("Failed to update lead status:", error);
       alert("Failed to update lead status");
     } finally {
+      setActionLoading(false);
+      setActionMessage("");
+    }
+  };
+
+  // Handler to update lifecycle
+  const handleLifecycleChange = async (lead, newLifecycleId) => {
+    setLifecycleUpdatingLeadId(lead.id);
+    setActionLoading(true);
+    setActionMessage("Updating lifecycle...");
+    try {
+      const leadId = lead.id;
+
+      // Get the current lead data to preserve all fields
+      const currentLead = leads.find((l) => l.id === leadId);
+      if (!currentLead) {
+        console.error("Lead not found:", leadId);
+        return;
+      }
+
+      // Convert lifecycle ID to integer (API expects pk value, not name or dict)
+      let lifecycleIdValue = null;
+      if (newLifecycleId && newLifecycleId !== "" && newLifecycleId !== "None") {
+        // Convert to integer if it's a number string
+        const parsedId = typeof newLifecycleId === "string" && !isNaN(parseInt(newLifecycleId, 10))
+          ? parseInt(newLifecycleId, 10)
+          : newLifecycleId;
+        lifecycleIdValue = parsedId;
+      }
+
+      // Prepare payload with all lead fields, updating only lifecycle
+      const payload = {
+        title: currentLead.title || "",
+        status: (() => {
+          // Ensure status is sent as ID, not object
+          const st = currentLead.status;
+          if (typeof st === "object" && st !== null) {
+            return st.id || st.pk || st.uuid || null;
+          }
+          return st || null;
+        })(),
+        source: currentLead.source || "",
+        description: currentLead.description || "",
+        company_name: currentLead.company_name || "",
+        contact_first_name: currentLead.contact_first_name || "",
+        contact_last_name: currentLead.contact_last_name || "",
+        contact_email: currentLead.contact_email || "",
+        contact_phone: currentLead.contact_phone || "",
+        contact_position_title: currentLead.contact_position_title || "",
+        contact_linkedin_url: currentLead.contact_linkedin_url || "",
+        lifecycle: lifecycleIdValue || null,
+        ...((currentLead.follow_up_at || currentLead.followUpAt) &&
+        (currentLead.follow_up_at || currentLead.followUpAt) !== null &&
+        (currentLead.follow_up_at || currentLead.followUpAt) !== ""
+          ? {
+              follow_up_at: currentLead.follow_up_at || currentLead.followUpAt,
+            }
+          : {}),
+        ...((currentLead.follow_up_status || currentLead.followupStatus) &&
+        (currentLead.follow_up_status || currentLead.followupStatus) !== null &&
+        (currentLead.follow_up_status || currentLead.followupStatus) !== ""
+          ? {
+              follow_up_status:
+                currentLead.follow_up_status || currentLead.followupStatus,
+            }
+          : {}),
+      };
+
+      // Update via API
+      await apiRequest(`/api/leads/${leadId}/`, {
+        method: "PATCH",
+        body: JSON.stringify(payload),
+      });
+
+      // Update local state
+      const updatedLead = {
+        ...currentLead,
+        lifecycle: lifecycleIdValue || null,
+      };
+
+      setLeads((prevLeads) => {
+        const leadIndex = prevLeads.findIndex((l) => l.id === leadId);
+        if (leadIndex >= 0) {
+          const newLeads = [...prevLeads];
+          newLeads[leadIndex] = updatedLead;
+          return newLeads;
+        }
+        return prevLeads;
+      });
+
+      // Update cache
+      addLeadToCache(updatedLead);
+      notifySuccess("Lead lifecycle updated successfully");
+    } catch (error) {
+      console.error("Failed to update lead lifecycle:", error);
+      notifyError("Failed to update lead lifecycle");
+    } finally {
+      setLifecycleUpdatingLeadId(null);
       setActionLoading(false);
       setActionMessage("");
     }
@@ -1461,12 +1578,6 @@ export default function EmployeeAllLeads() {
     localStorage.setItem("leadColumns", JSON.stringify([]));
   };
 
-  const normalizeFollowUpDate = (value) => {
-    if (!value) return "None";
-    const parsed = new Date(value);
-    if (Number.isNaN(parsed.getTime())) return "None";
-    return parsed.toISOString().split("T")[0];
-  };
 
   const assignedFilterOptions = useMemo(() => {
     const options = new Map();
@@ -1522,26 +1633,6 @@ export default function EmployeeAllLeads() {
     return opts;
   }, [leads]);
 
-  const followUpFilterOptions = useMemo(() => {
-    const options = new Map();
-    options.set("All", { value: "All", label: "All" });
-    options.set("None", { value: "None", label: "None" });
-
-    leads.forEach((lead) => {
-      const rawFollowUp = lead.follow_up_at || lead.followUpAt;
-      const normalized = normalizeFollowUpDate(rawFollowUp);
-      if (normalized !== "None") {
-        const label = new Date(rawFollowUp).toLocaleDateString("en-US", {
-          year: "numeric",
-          month: "short",
-          day: "numeric",
-        });
-        options.set(normalized, { value: normalized, label });
-      }
-    });
-
-    return Array.from(options.values());
-  }, [leads]);
 
   // Filter logic
   const filteredLeads = useMemo(() => {
@@ -1573,28 +1664,62 @@ export default function EmployeeAllLeads() {
       }
 
       // FOLLOW-UP AT FILTER
-      if (followUpFilter !== "All") {
+      if (followUpFilter) {
         const rawFollowUp = lead.follow_up_at || lead.followUpAt;
-        const normalized = normalizeFollowUpDate(rawFollowUp);
-        if (followUpFilter === "None") {
-          if (normalized !== "None") {
-            return false;
-          }
-        } else {
-          if (normalized !== followUpFilter) {
-            return false;
-          }
+        if (!rawFollowUp) {
+          return false;
+        }
+        const leadDateObj = dayjs(rawFollowUp);
+        const filterDateObj = dayjs(followUpFilter);
+        if (!leadDateObj.isValid() || !filterDateObj.isValid()) {
+          return false;
+        }
+        const leadDate = leadDateObj.format("YYYY-MM-DD");
+        const filterDate = filterDateObj.format("YYYY-MM-DD");
+        if (leadDate !== filterDate) {
+          return false;
         }
       }
   
-      // SEARCH FILTER (optional)
-      if (q && !lead.title?.toLowerCase().includes(q.toLowerCase())) {
-        return false;
+      // SEARCH FILTER
+      if (q) {
+        const searchTerm = q.toLowerCase().trim();
+        if (!searchTerm) return true;
+
+        // Search in title
+        const title = (lead.title || "").toLowerCase();
+        // Search in email
+        const email = ((lead.contact_email || lead.email) || "").toLowerCase();
+        // Search in AssignedTo name
+        const assignedToName = getEmployeeName(lead.assigned_to || lead.assignedTo).toLowerCase();
+        // Search in status name
+        const statusName = getStatusName(lead.status).toLowerCase();
+        // Search in lifecycle name
+        const lifecycleName = (() => {
+          const v = lead.lifecycle ?? lead.lifecycle_obj ?? lead.lifecycleObj ?? lead.lifecycle_id ?? lead.lifecycleId;
+          if (!v && v !== 0) return "";
+          if (typeof v === "string") return v.toLowerCase();
+          if (typeof v === "object" && v !== null) {
+            return (v.name || v.label || v.title || v.lifecycle || String(v.id || v.pk || v.uuid || "")).toLowerCase();
+          }
+          return String(v).toLowerCase();
+        })();
+
+        // Check if search term matches any of these fields
+        if (
+          !title.includes(searchTerm) &&
+          !email.includes(searchTerm) &&
+          !assignedToName.includes(searchTerm) &&
+          !statusName.includes(searchTerm) &&
+          !lifecycleName.includes(searchTerm)
+        ) {
+          return false;
+        }
       }
   
       return true;
     });
-  }, [leads, statusFilter, assignedFilter, followUpFilter, q]);
+  }, [leads, statusFilter, assignedFilter, followUpFilter, q, statuses]);
 
   // Assign handler (employee can assign to self or admin)
   const handleAssignedChange = async (lead, newAssignedId) => {
@@ -1826,20 +1951,29 @@ export default function EmployeeAllLeads() {
             ))}
           </Select>
         </FormControl>
-        <FormControl size="small" sx={{ minWidth: 180 }}>
-          <InputLabel>Follow-up At</InputLabel>
-          <Select
-            label="Follow-up At"
-            value={followUpFilter}
-            onChange={(e) => setFollowUpFilter(e.target.value)}
+        <Box display="flex" gap={1} alignItems="center">
+          <LocalizationProvider dateAdapter={AdapterDayjs}>
+            <DatePicker
+              label="Follow-up At"
+              value={followUpFilter ? dayjs(followUpFilter) : null}
+              onChange={(newValue) => setFollowUpFilter(newValue)}
+              slotProps={{
+                textField: {
+                  size: "small",
+                  sx: { minWidth: 180 },
+                },
+              }}
+            />
+          </LocalizationProvider>
+          <Button
+            size="small"
+            variant={followUpFilter ? "outlined" : "contained"}
+            onClick={() => setFollowUpFilter(null)}
+            sx={{ minWidth: 60, height: 40 }}
           >
-            {followUpFilterOptions.map((option) => (
-              <MenuItem key={option.value} value={option.value}>
-                {option.label}
-              </MenuItem>
-            ))}
-          </Select>
-        </FormControl>
+            All
+          </Button>
+        </Box>
       </Box>
 
       {/* Leads Table */}
@@ -1875,6 +2009,9 @@ export default function EmployeeAllLeads() {
               {visibleColumns.includes("status") && (
                 <TableCell sx={tableHeaderCellStyles}>Lead Status</TableCell>
               )}
+              {visibleColumns.includes("lifecycle") && (
+                <TableCell sx={tableHeaderCellStyles}>Lead Lifecycle</TableCell>
+              )}
               {visibleColumns.includes("assignedTo") && (
                 <TableCell sx={tableHeaderCellStyles}>Assigned To</TableCell>
               )}
@@ -1895,9 +2032,6 @@ export default function EmployeeAllLeads() {
               )}
               {visibleColumns.includes("source") && (
                 <TableCell sx={tableHeaderCellStyles}>Source</TableCell>
-              )}
-              {visibleColumns.includes("lifecycle") && (
-                <TableCell sx={tableHeaderCellStyles}>Lifecycle</TableCell>
               )}
               {visibleColumns.includes("description") && (
                 <TableCell sx={tableHeaderCellStyles}>Description</TableCell>
@@ -2093,6 +2227,78 @@ export default function EmployeeAllLeads() {
                       </TableCell>
                     )}
 
+                    {visibleColumns.includes("lifecycle") && (
+                      <TableCell>
+                        <Box
+                          sx={{
+                            position: "relative",
+                            display: "inline-flex",
+                            alignItems: "center",
+                          }}
+                        >
+                          <Select
+                            value={(() => {
+                              const lifecycleValue = lead.lifecycle ?? lead.lifecycle_obj ?? lead.lifecycleObj ?? lead.lifecycle_id ?? lead.lifecycleId;
+                              if (!lifecycleValue && lifecycleValue !== 0) {
+                                return "";
+                              }
+                              // If it's an object, get the ID
+                              if (typeof lifecycleValue === "object" && lifecycleValue !== null) {
+                                return lifecycleValue.id || lifecycleValue.pk || lifecycleValue.uuid || "";
+                              }
+                              // If it's a string or number, try to find matching lifecycle by ID
+                              const foundLifecycle = lifecycles.find((lc) => {
+                                const lcId = lc.id || lc.pk || lc.uuid;
+                                const lcName = (lc.name || lc.label || lc.title || lc.lifecycle || "").toLowerCase();
+                                const valueStr = String(lifecycleValue).toLowerCase();
+                                return String(lcId) === String(lifecycleValue) || lcName === valueStr;
+                              });
+                              if (foundLifecycle) {
+                                return foundLifecycle.id || foundLifecycle.pk || foundLifecycle.uuid || "";
+                              }
+                              // If not found, return the value as-is (might be an ID)
+                              return String(lifecycleValue);
+                            })()}
+                            onChange={(e) => {
+                              const selectedValue = e.target.value;
+                              handleLifecycleChange(lead, selectedValue);
+                            }}
+                            size="small"
+                            disabled={lifecycleUpdatingLeadId === lead.id || actionLoading}
+                            sx={{
+                              minWidth: 120,
+                              height: 32,
+                              "& .MuiSelect-select": {
+                                padding: "4px 8px",
+                                fontSize: "0.875rem",
+                              },
+                            }}
+                            MenuProps={{
+                              PaperProps: {
+                                style: {
+                                  maxHeight: 300,
+                                },
+                              },
+                            }}
+                          >
+                            <MenuItem value="">None</MenuItem>
+                            {lifecycles.map((lc, index) => {
+                              const lcId = lc.id || lc.pk || lc.uuid || index;
+                              const lcName = lc.name || lc.label || lc.title || lc.lifecycle || `Lifecycle ${index + 1}`;
+                              return (
+                                <MenuItem key={lcId} value={lcId}>
+                                  {lcName}
+                                </MenuItem>
+                              );
+                            })}
+                          </Select>
+                          {lifecycleUpdatingLeadId === lead.id && (
+                            <CircularProgress size={16} sx={{ ml: 1 }} />
+                          )}
+                        </Box>
+                      </TableCell>
+                    )}
+
                     {visibleColumns.includes("assignedTo") && (
                       <TableCell>
                         <Select
@@ -2237,11 +2443,6 @@ export default function EmployeeAllLeads() {
                     {visibleColumns.includes("source") && (
                       <TableCell>
                         {getLeadFieldValue(lead, "source") || "-"}
-                      </TableCell>
-                    )}
-                    {visibleColumns.includes("lifecycle") && (
-                      <TableCell>
-                        {getLeadFieldValue(lead, "lifecycle") || "-"}
                       </TableCell>
                     )}
 

@@ -191,12 +191,34 @@ const LeadFormFields = ({
             select
             fullWidth
             name="lifecycle"
-            value={formData.lifecycle === undefined ? "" : formData.lifecycle}
-            onChange={onChange}
+            value={
+              formData.lifecycle === undefined || formData.lifecycle === null
+                ? ""
+                : formData.lifecycle
+            }
+            onChange={(e) => {
+              const parsed =
+                e.target.value === "" || e.target.value === undefined
+                  ? null
+                  : parseInt(e.target.value, 10);
+              onChange({ target: { name: "lifecycle", value: parsed } });
+            }}
             disabled={loadingMeta}
             SelectProps={{
               displayEmpty: true,
-              renderValue: (val) => (val === "" || val === null ? "None" : val),
+              renderValue: (val) => {
+                if (val === "" || val === null || val === undefined) return "None";
+                // Find lifecycle name from ID
+                const matched = lifecycles.find((lc) => {
+                  const lcId = typeof lc === "object" && lc !== null
+                    ? (lc.id || lc.pk || lc.uuid)
+                    : lc;
+                  return String(lcId) === String(val);
+                });
+                return matched
+                  ? (matched.name || matched.label || matched.title || matched.lifecycle || "Unknown")
+                  : "Unknown";
+              },
             }}
           >
             <MenuItem value="">None</MenuItem>
@@ -206,15 +228,18 @@ const LeadFormFields = ({
               </MenuItem>
             ) : (
               lifecycles.map((item, index) => {
-                const value =
-                  typeof item === "string" ? item : item.name || item.lifecycle || "";
-                const key =
-                  (typeof item === "object" &&
-                    (item.id || item.pk || item.uuid || item.name)) ||
-                  index;
+                const objectId =
+                  typeof item === "object"
+                    ? item.id || item.pk || item.lifecycle_id || item.uuid
+                    : null;
+                const lifecycleId = objectId !== null ? objectId : index;
+                const lifecycleName =
+                  typeof item === "string"
+                    ? item
+                    : item.name || item.lifecycle || item.label || item.title || "";
                 return (
-                  <MenuItem key={String(key)} value={value}>
-                    {value || "Unnamed Lifecycle"}
+                  <MenuItem key={String(lifecycleId)} value={lifecycleId}>
+                    {lifecycleName || "Untitled"}
                   </MenuItem>
                 );
               })

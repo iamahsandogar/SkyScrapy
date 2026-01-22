@@ -23,7 +23,7 @@ import {
 import CloudDownloadIcon from "@mui/icons-material/CloudDownload";
 import AddIcon from "@mui/icons-material/Add";
 import AssignmentTurnedInIcon from "@mui/icons-material/AssignmentTurnedIn";
-import { useEffect, useState } from "react";
+import { useEffect, useState, useMemo } from "react";
 import apiRequest from "../services/api";
 import { useNotification } from "../../contexts/NotificationContext.jsx";
 import { useNavigate } from "react-router-dom";
@@ -40,6 +40,9 @@ import DialogContent from "@mui/material/DialogContent";
 import DialogActions from "@mui/material/DialogActions";
 import MoreHorizonIcon from "@mui/icons-material/MoreHoriz";
 import Menu from "@mui/material/Menu";
+import { LocalizationProvider, DatePicker } from "@mui/x-date-pickers";
+import { AdapterDayjs } from "@mui/x-date-pickers/AdapterDayjs";
+import dayjs from "dayjs";
 
 const getChipStyles = (status) => {
   switch (status) {
@@ -80,7 +83,11 @@ export default function AllProjects() {
   const [projects, setProjects] = useState([]);
   const [actionLoading, setActionLoading] = useState(false);
   const [q, setQ] = useState("");
-  const [statusFilter, setStatusFilter] = useState("All");
+  const [statusFilter, setStatusFilter] = useState("ALL");
+  const [assignedFilter, setAssignedFilter] = useState("All");
+  const [followUpFilter, setFollowUpFilter] = useState(null);
+  const [statuses, setStatuses] = useState([]);
+  const [employees, setEmployees] = useState([]);
 
   const ALL_COLUMNS = [
     { key: "title", label: "Lead Title" },
@@ -168,6 +175,16 @@ export default function AllProjects() {
         const data = await apiRequest("/api/leads/projects/");
         const list = data?.projects || data?.results || data || [];
         setProjects(Array.isArray(list) ? list : []);
+
+        // Extract statuses and employees from the API response
+        if (data?.statuses && Array.isArray(data.statuses)) {
+          setStatuses(data.statuses);
+        }
+        if (data?.users && Array.isArray(data.users)) {
+          setEmployees(data.users);
+        } else if (data?.employees && Array.isArray(data.employees)) {
+          setEmployees(data.employees);
+        }
       } catch (err) {
         console.error("Failed to load projects:", err);
         notifyError("Failed to load projects");
@@ -178,18 +195,81 @@ export default function AllProjects() {
   }, []);
 
   const getEmployeeName = (assignedTo) => {
-    if (!assignedTo && assignedTo !== 0) return "None";
-    if (typeof assignedTo === "object") {
-      const first = assignedTo.firstName || assignedTo.first_name || assignedTo.name || "";
-      const last = assignedTo.lastName || assignedTo.last_name || "";
-      const name = `${first} ${last}`.trim();
-      if (name) return name;
-      // Try nested user object
-      const user = assignedTo.user || assignedTo.user_details;
-      if (user) return `${user.first_name || user.firstName || ""} ${user.last_name || user.lastName || ""}`.trim() || "None";
+    // Handle null, undefined, empty string, or "None"
+    if (!assignedTo && assignedTo !== 0) {
+      return "None";
     }
-    // If it's an id or string, return as-is
-    return String(assignedTo);
+
+    // If assigned_to is an object with user_details, extract name directly from it
+    if (typeof assignedTo === "object" && assignedTo !== null) {
+      // Check if user_details exists with first_name and last_name
+      if (assignedTo.user_details) {
+        const firstName =
+          assignedTo.user_details.first_name ||
+          assignedTo.user_details.firstName ||
+          "";
+        const lastName =
+          assignedTo.user_details.last_name ||
+          assignedTo.user_details.lastName ||
+          "";
+        const name = `${firstName} ${lastName}`.trim();
+        if (name) {
+          return name;
+        }
+      }
+
+      // Fallback: try to extract ID for lookup
+      const assignedToId =
+        assignedTo.id || assignedTo.pk || assignedTo.uuid || null;
+      if (!assignedToId) {
+        return "None";
+      }
+
+      // Try to find in employees array
+      if (employees && employees.length > 0) {
+        const assignedToIdStr = String(assignedToId);
+        const emp = employees.find((e) => {
+          const empId = e.id || e.pk || e.uuid;
+          if (!empId) return false;
+          const empIdStr = String(empId);
+          return empIdStr === assignedToIdStr;
+        });
+
+        if (emp) {
+          const firstName = emp.firstName || emp.first_name || "";
+          const lastName = emp.lastName || emp.last_name || "";
+          const name = `${firstName} ${lastName}`.trim();
+          if (name) {
+            return name;
+          }
+        }
+      }
+
+      // If no user_details and not found in employees, return "None"
+      return "None";
+    }
+
+    // If assignedTo is just an ID (string or number), try to find in employees array
+    const assignedToId = assignedTo;
+    if (employees && employees.length > 0) {
+      const assignedToIdStr = String(assignedToId);
+      const emp = employees.find((e) => {
+        const empId = e.id || e.pk || e.uuid;
+        if (!empId) return false;
+        const empIdStr = String(empId);
+        return empIdStr === assignedToIdStr;
+      });
+
+      if (emp) {
+        const firstName = emp.firstName || emp.first_name || "";
+        const lastName = emp.lastName || emp.last_name || "";
+        const name = `${firstName} ${lastName}`.trim();
+        return name || "None";
+      }
+    }
+
+    // If not found, return "None"
+    return "None";
   };
 
   // Convert project back to lead (admin-only action handled by backend)
@@ -344,18 +424,133 @@ export default function AllProjects() {
 
   // (no local lead->project flow on Projects page)
 
+  const assignedFilterOptions = useMemo(() => {
+    const options = new Map();
+    options.set("All", { value: "All", label: "All" });
+    options.set("None", { value: "None", label: "None" });
+
+    // Add employees from the employees array
+    if (employees && employees.length > 0) {
+      employees.forEach((emp) => {
+        const firstName = emp.firstName || emp.first_name || "";
+        const lastName = emp.lastName || emp.last_name || "";
+        const name = `${firstName} ${lastName}`.trim();
+        if (name) {
+          options.set(name, { value: name, label: name });
+        }
+      });
+    }
+
+    // Also add from projects (in case some employees are not in the employees array)
+    projects.forEach((proj) => {
+      const name = getEmployeeName(proj.assigned_to || proj.assignedTo);
+      if (name && name !== "None") {
+        options.set(name, { value: name, label: name });
+      }
+    });
+
+    return Array.from(options.values());
+  }, [projects, employees]);
+
   const filteredProjects = projects.filter((p) => {
     const qLower = q.trim().toLowerCase();
-    if (statusFilter !== "All" && p.status !== statusFilter) return false;
-    if (!qLower) return true;
-    // Search across many fields for parity with AllLeads
-    return (
-      (getProjectFieldValue(p, "title") || "").toLowerCase().includes(qLower) ||
-      (getProjectFieldValue(p, "company") || "").toLowerCase().includes(qLower) ||
-      (getProjectFieldValue(p, "firstName") || "").toLowerCase().includes(qLower) ||
-      (getProjectFieldValue(p, "lastName") || "").toLowerCase().includes(qLower) ||
-      (getProjectFieldValue(p, "email") || "").toLowerCase().includes(qLower)
-    );
+    
+    // STATUS FILTER
+    if (statusFilter !== "ALL") {
+      const projectStatusId =
+        typeof p.status === "object"
+          ? p.status?.id
+          : p.status;
+
+      if (String(projectStatusId) !== String(statusFilter)) {
+        return false;
+      }
+    }
+
+    // ASSIGNED TO FILTER
+    if (assignedFilter !== "All") {
+      const projectAssignedName = getEmployeeName(p.assigned_to || p.assignedTo);
+      if (assignedFilter === "None") {
+        if (projectAssignedName !== "None") {
+          return false;
+        }
+      } else {
+        if (projectAssignedName !== assignedFilter) {
+          return false;
+        }
+      }
+    }
+    
+    // FOLLOW-UP AT FILTER
+    if (followUpFilter) {
+      const rawFollowUp = p.follow_up_at || p.followUpAt;
+      if (!rawFollowUp) {
+        return false;
+      }
+      const projectDateObj = dayjs(rawFollowUp);
+      const filterDateObj = dayjs(followUpFilter);
+      if (!projectDateObj.isValid() || !filterDateObj.isValid()) {
+        return false;
+      }
+      const projectDate = projectDateObj.format("YYYY-MM-DD");
+      const filterDate = filterDateObj.format("YYYY-MM-DD");
+      if (projectDate !== filterDate) {
+        return false;
+      }
+    }
+    
+    // SEARCH FILTER
+    if (q) {
+      const searchTerm = q.toLowerCase().trim();
+      if (!searchTerm) return true;
+
+      // Search in title
+      const title = (getProjectFieldValue(p, "title") || "").toLowerCase();
+      // Search in email
+      const email = (getProjectFieldValue(p, "email") || "").toLowerCase();
+      // Search in AssignedTo name
+      const assignedToName = getEmployeeName(p.assigned_to || p.assignedTo).toLowerCase();
+      // Search in status name
+      const statusName = (() => {
+        const st = p.status;
+        if (typeof st === "object" && st !== null) {
+          return (st.name || st.label || st.status || st.title || String(st.id) || "").toLowerCase();
+        }
+        // If status is an ID, find the status name from statuses array
+        if (statuses && statuses.length > 0) {
+          const statusId = typeof st === "string" ? parseInt(st, 10) : st;
+          const statusObj = statuses.find((s) => {
+            const id = s.id || s.pk || s.uuid;
+            return id !== undefined && id !== null && (String(id) === String(statusId) || Number(id) === Number(statusId));
+          });
+          if (statusObj) {
+            return (statusObj.name || statusObj.status || statusObj.status_name || statusObj.label || "").toLowerCase();
+          }
+        }
+        return (st || "").toString().toLowerCase();
+      })();
+      // Search in lifecycle name
+      const lifecycleName = (() => {
+        const v = p.lifecycle ?? p.lifecycle_obj ?? p.lifecycleObj ?? p.lifecycle_id ?? p.lifecycleId;
+        if (!v && v !== 0) return "";
+        if (typeof v === "string") return v.toLowerCase();
+        if (typeof v === "object" && v !== null) {
+          return (v.name || v.label || v.title || v.lifecycle || String(v.id || v.pk || v.uuid || "")).toLowerCase();
+        }
+        return String(v).toLowerCase();
+      })();
+
+      // Check if search term matches any of these fields
+      if (
+        !title.includes(searchTerm) &&
+        !email.includes(searchTerm) &&
+        !assignedToName.includes(searchTerm) &&
+        !statusName.includes(searchTerm) &&
+        !lifecycleName.includes(searchTerm)
+      ) {
+        return false;
+      }
+    }
   });
   
 
@@ -387,21 +582,60 @@ export default function AllProjects() {
           onChange={(e) => setQ(e.target.value)}
           size="small"
         />
-        <FormControl size="small">
+        <FormControl size="small" sx={{ minWidth: 180 }}>
           <InputLabel>Status</InputLabel>
           <Select
-            label="Status"
             value={statusFilter}
+            label="Status"
             onChange={(e) => setStatusFilter(e.target.value)}
           >
-            <MenuItem value="All">All</MenuItem>
-            <MenuItem value="None">None</MenuItem>
-            <MenuItem value="In Progress">In Progress</MenuItem>
-            <MenuItem value="Pending">Pending</MenuItem>
-            <MenuItem value="Completed">Completed</MenuItem>
-            <MenuItem value="Rejected">Rejected</MenuItem>
+            <MenuItem value="ALL">All</MenuItem>
+
+            {statuses.map((status) => (
+              <MenuItem key={status.id} value={status.id}>
+                {status.name}
+              </MenuItem>
+            ))}
           </Select>
         </FormControl>
+
+        <FormControl size="small" sx={{ minWidth: 180 }}>
+          <InputLabel>Assigned To</InputLabel>
+          <Select
+            label="Assigned To"
+            value={assignedFilter}
+            onChange={(e) => setAssignedFilter(e.target.value)}
+          >
+            {assignedFilterOptions.map((option) => (
+              <MenuItem key={option.value} value={option.value}>
+                {option.label}
+              </MenuItem>
+            ))}
+          </Select>
+        </FormControl>
+        <Box display="flex" gap={1} alignItems="center">
+          <LocalizationProvider dateAdapter={AdapterDayjs}>
+            <DatePicker
+              label="Follow-up At"
+              value={followUpFilter ? dayjs(followUpFilter) : null}
+              onChange={(newValue) => setFollowUpFilter(newValue)}
+              slotProps={{
+                textField: {
+                  size: "small",
+                  sx: { minWidth: 180 },
+                },
+              }}
+            />
+          </LocalizationProvider>
+          <Button
+            size="small"
+            variant={followUpFilter ? "outlined" : "contained"}
+            onClick={() => setFollowUpFilter(null)}
+            sx={{ minWidth: 60, height: 40 }}
+          >
+            All
+          </Button>
+        </Box>
       </Box>
 
       {/* Projects Table */}
