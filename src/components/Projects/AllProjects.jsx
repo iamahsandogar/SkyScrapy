@@ -81,6 +81,7 @@ const getChipStyles = (status) => {
 
 export default function AllProjects() {
   const [projects, setProjects] = useState([]);
+  const [projectsLoading, setProjectsLoading] = useState(true);
   const [actionLoading, setActionLoading] = useState(false);
   const [q, setQ] = useState("");
   const [statusFilter, setStatusFilter] = useState("ALL");
@@ -168,12 +169,16 @@ export default function AllProjects() {
 
   const { notifyError, notifySuccess } = useNotification();
 
-  // Load projects from API
+  // Load projects from API (no cache)
   useEffect(() => {
     const fetchProjects = async () => {
+      setProjectsLoading(true);
       try {
         const data = await apiRequest("/api/leads/projects/");
+        console.log("=== PROJECTS API RESPONSE ===", data);
         const list = data?.projects || data?.results || data || [];
+        console.log("=== PARSED PROJECTS LIST ===", list);
+        console.log("=== PROJECTS COUNT ===", Array.isArray(list) ? list.length : 0);
         setProjects(Array.isArray(list) ? list : []);
 
         // Extract statuses and employees from the API response
@@ -189,6 +194,9 @@ export default function AllProjects() {
         console.error("Failed to load projects:", err);
         notifyError("Failed to load projects");
         setProjects([]);
+        setProjectsLoading(false);
+      } finally {
+        setProjectsLoading(false);
       }
     };
     fetchProjects();
@@ -551,6 +559,9 @@ export default function AllProjects() {
         return false;
       }
     }
+    
+    // If all filters pass, include this project
+    return true;
   });
   
 
@@ -700,10 +711,25 @@ export default function AllProjects() {
             </TableRow>
           </TableHead>
           <TableBody>
-            {filteredProjects.length === 0 ? (
+            {projectsLoading ? (
+              <TableRow>
+                <TableCell colSpan={visibleColumns.length + 2} align="center" sx={{ py: 4 }}>
+                  <CircularProgress size={40} />
+                  <Typography variant="body2" sx={{ mt: 2 }}>
+                    Loading projects from API...
+                  </Typography>
+                </TableCell>
+              </TableRow>
+            ) : filteredProjects.length === 0 && projects.length === 0 ? (
               <TableRow>
                 <TableCell colSpan={visibleColumns.length + 2} align="center">
                   No projects found.
+                </TableCell>
+              </TableRow>
+            ) : filteredProjects.length === 0 && projects.length > 0 ? (
+              <TableRow>
+                <TableCell colSpan={visibleColumns.length + 2} align="center">
+                  No projects match the current filters. ({projects.length} total projects)
                 </TableCell>
               </TableRow>
             ) : (

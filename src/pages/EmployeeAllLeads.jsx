@@ -239,21 +239,23 @@ export default function EmployeeAllLeads() {
         return;
       }
 
-      // Check if we've already made an API call for this pathname and user
+      // Ensure API is called only once per mount
       const currentPath = location.pathname;
       const hasPathChanged = apiCallMadeRef.current.pathname !== currentPath;
       const hasUserChanged = apiCallMadeRef.current.userId !== employeeId;
       
-      // Only prevent duplicate calls if path and user haven't changed
+      // Only prevent duplicate calls if path and user haven't changed AND we've already called
       if (apiCallMadeRef.current.called && !hasPathChanged && !hasUserChanged) {
         console.log("API call already made for this page/user, skipping duplicate call");
         setLeadsLoading(false);
+        setStatusesLoading(false);
         return;
       }
 
-      // Update ref to track current path and user
+      // Mark as called BEFORE making the API call to prevent race conditions
       apiCallMadeRef.current.pathname = currentPath;
       apiCallMadeRef.current.userId = employeeId;
+      apiCallMadeRef.current.called = true;
 
       // Helper function to filter leads assigned to this employee
       const filterLeadsByEmployee = (leadsList) => {
@@ -524,47 +526,26 @@ export default function EmployeeAllLeads() {
 
       setLeads(filteredLeads);
 
-      // Update cache with fresh data from leads API (leads, statuses, employees, sources)
-      const currentCache = getCachedLeadData();
-      if (currentCache) {
-        currentCache.leads = leadsList;
-        if (statusesList.length > 0) {
-          currentCache.statuses = statusesList;
-        }
-        if (employeesList.length > 0) {
-          currentCache.employees = employeesList;
-        }
-        if (sourcesList.length > 0) {
-          currentCache.sources = sourcesList;
-        }
-        currentCache.timestamp = Date.now();
-        localStorage.setItem("leadDataCache", JSON.stringify(currentCache));
-      } else {
-        // Create new cache entry if none exists
-        const newCache = {
-          statuses: statusesList,
-          sources: sourcesList,
-          employees: employeesList,
-          leads: leadsList,
-          timestamp: Date.now(),
-        };
-        localStorage.setItem("leadDataCache", JSON.stringify(newCache));
-      }
+      // No cache updates - data always comes from API
       } catch (err) {
         console.error("Failed to fetch leads:", err);
         alert("Failed to load leads");
         setLeads([]);
       } finally {
         setLeadsLoading(false);
+        setStatusesLoading(false);
       }
     };
 
     void fetchLeads();
 
-    // Reset the ref when component unmounts or key dependencies change significantly
+    // Reset the ref when component unmounts or key dependencies change
     return () => {
-      // Only reset if we're actually changing pages or user
-      // This prevents unnecessary resets during re-renders
+      // Reset ref when pathname or user changes to allow new API call
+      if (location.pathname !== apiCallMadeRef.current.pathname || 
+          currentUserId !== apiCallMadeRef.current.userId) {
+        apiCallMadeRef.current = { pathname: null, userId: null, called: false };
+      }
     };
   }, [location.pathname, currentUserId]);
 
@@ -574,137 +555,8 @@ export default function EmployeeAllLeads() {
     currentUserIdRef.current = currentUserId;
   }, [currentUserId]);
 
-  // Listen for cache updates from other components (e.g., when admin assigns lead to employee)
-  useEffect(() => {
-    const handleCacheUpdate = (event) => {
-      console.log("🔔 leadCacheUpdated event received:", event.detail);
-      const { lead: updatedLead } = event.detail || {};
-      if (!updatedLead) {
-        console.log("⚠️ No lead in event detail");
-        return;
-      }
-      
-      // Use ref to get latest currentUserId
-      const userId = currentUserIdRef.current;
-      if (!userId) {
-        console.log("⚠️ No currentUserId available");
-        return;
-      }
-
-      const updatedId = resolveLeadId(updatedLead);
-      if (!updatedId) {
-        console.log("⚠️ Could not resolve lead ID");
-        return;
-      }
-
-      console.log("📋 Processing cache update for lead:", {
-        leadId: updatedId,
-        currentUserId: userId,
-        assigned_to: updatedLead.assigned_to,
-        assignedTo: updatedLead.assignedTo,
-      });
-
-      // Extract assigned user ID - handle multiple formats
-      let assignedUserId = null;
-      let assignedTo = updatedLead.assigned_to || updatedLead.assignedTo;
-      
-      console.log("🔍 Extracting assigned user ID from:", {
-        assigned_to: updatedLead.assigned_to,
-        assignedTo: updatedLead.assignedTo,
-        type: typeof assignedTo,
-        isObject: assignedTo && typeof assignedTo === "object",
-      });
-      
-      if (assignedTo && typeof assignedTo === "object" && assignedTo !== null) {
-        // Check user_details.id first (this is the actual user ID)
-        if (assignedTo.user_details && assignedTo.user_details.id) {
-          assignedUserId = assignedTo.user_details.id;
-          console.log("✅ Found user ID in user_details.id:", assignedUserId);
-        } else if (assignedTo.userDetails && assignedTo.userDetails.id) {
-          assignedUserId = assignedTo.userDetails.id;
-          console.log("✅ Found user ID in userDetails.id:", assignedUserId);
-        } else {
-          // Fallback to other possible ID fields
-          assignedUserId = assignedTo.id || assignedTo.pk || assignedTo.uuid || 
-                           assignedTo.user_id || assignedTo.userId || 
-                           assignedTo.profile_id || assignedTo.profileId;
-          console.log("✅ Found user ID in fallback fields:", assignedUserId);
-        }
-      } else if (assignedTo !== null && assignedTo !== undefined && assignedTo !== "") {
-        // assigned_to is just an ID (number or string)
-        assignedUserId = assignedTo;
-        console.log("✅ assigned_to is direct ID:", assignedUserId);
-      }
-
-      // Check if assigned to admin
-      const assignedToAdmin = assignedTo && typeof assignedTo === "object" && assignedTo !== null &&
-        (isAdminUser(assignedTo) || isAdminUser(assignedTo.user_details || assignedTo.userDetails || assignedTo.user));
-
-      // Check if assigned to current employee - normalize both IDs for comparison
-      const normalizedAssignedId = assignedUserId ? String(assignedUserId).trim() : null;
-      const normalizedCurrentId = userId ? String(userId).trim() : null;
-      const stillAssignedToEmployee = normalizedAssignedId && normalizedCurrentId && 
-        normalizedAssignedId === normalizedCurrentId;
-
-      console.log("🔍 Assignment check:", {
-        stillAssignedToEmployee,
-        assignedToAdmin,
-        assignedUserId,
-        normalizedAssignedId: normalizedAssignedId,
-        normalizedCurrentId: normalizedCurrentId,
-        currentUserId: userId,
-        assignedToType: typeof assignedTo,
-        assignedToValue: assignedTo,
-      });
-
-      setLeads((prev) => {
-        const leadIndex = prev.findIndex((l) => resolveLeadId(l) === updatedId);
-
-        // If assigned to admin or not assigned to current employee, remove it
-        if (assignedToAdmin || !stillAssignedToEmployee) {
-          if (leadIndex >= 0) {
-            console.log("❌ Lead assigned to admin or different user, removing from employee view:", updatedId);
-            return prev.filter((lead) => resolveLeadId(lead) !== updatedId);
-          }
-          console.log("ℹ️ Lead not in list, no action needed");
-          return prev; // Already not in list
-        }
-
-        // Still assigned to current employee - add or update it
-        if (leadIndex >= 0) {
-          // Update existing lead
-          console.log("✅ Updating lead in employee view:", updatedId);
-          const newLeads = [...prev];
-          newLeads[leadIndex] = { ...newLeads[leadIndex], ...updatedLead };
-          return newLeads;
-        } else {
-          // Add new lead (was assigned to this employee)
-          console.log("➕ Adding newly assigned lead to employee view:", updatedId);
-          console.log("➕ Lead details:", {
-            id: updatedId,
-            title: updatedLead.title,
-            assigned_to: updatedLead.assigned_to,
-            assignedTo: updatedLead.assignedTo,
-          });
-          return [updatedLead, ...prev];
-        }
-      });
-    };
-
-    console.log("👂 Setting up leadCacheUpdated event listener for EmployeeAllLeads");
-    console.log("👂 Current user ID:", currentUserIdRef.current);
-    
-    // Add event listener
-    window.addEventListener('leadCacheUpdated', handleCacheUpdate);
-    
-    // Test: verify event listener is working (remove in production if needed)
-    console.log("✅ Event listener registered successfully");
-    
-    return () => {
-      console.log("🔇 Removing leadCacheUpdated event listener");
-      window.removeEventListener('leadCacheUpdated', handleCacheUpdate);
-    };
-  }, []); // Empty deps - we use ref for currentUserId
+  // Refetch leads from API when needed (no cache usage)
+  // Note: This component always fetches fresh data from API, no cache dependencies
 
   // Handler to update lead status
   const handleStatusChange = async (lead, newStatusId) => {
@@ -855,24 +707,50 @@ export default function EmployeeAllLeads() {
         body: JSON.stringify(payload),
       });
 
-      // Update local state
-      const updatedLead = {
-        ...currentLead,
-        lifecycle: lifecycleIdValue || null,
-      };
+      // Fetch updated lead from API to get the latest data
+      const updatedLeadResponse = await apiRequest(`/api/leads/${leadId}/`);
+      const apiUpdatedLead = updatedLeadResponse?.data || updatedLeadResponse;
 
-      setLeads((prevLeads) => {
-        const leadIndex = prevLeads.findIndex((l) => l.id === leadId);
-        if (leadIndex >= 0) {
-          const newLeads = [...prevLeads];
-          newLeads[leadIndex] = updatedLead;
-          return newLeads;
-        }
-        return prevLeads;
-      });
+      if (apiUpdatedLead) {
+        // Merge API response with current lead to preserve all fields
+        // This ensures we don't lose any data that might not be in the API response
+        const mergedLead = {
+          ...currentLead,
+          ...apiUpdatedLead,
+          // Ensure lifecycle is set correctly
+          lifecycle: lifecycleIdValue || null,
+          lifecycle_id: lifecycleIdValue || null,
+          lifecycleId: lifecycleIdValue || null,
+        };
 
-      // Update cache
-      addLeadToCache(updatedLead);
+        // Update local state with merged data
+        setLeads((prevLeads) => {
+          const leadIndex = prevLeads.findIndex((l) => l.id === leadId);
+          if (leadIndex >= 0) {
+            const newLeads = [...prevLeads];
+            newLeads[leadIndex] = mergedLead;
+            return newLeads;
+          }
+          return prevLeads;
+        });
+      } else {
+        // If API response is empty, just update the lifecycle field locally
+        setLeads((prevLeads) => {
+          const leadIndex = prevLeads.findIndex((l) => l.id === leadId);
+          if (leadIndex >= 0) {
+            const newLeads = [...prevLeads];
+            newLeads[leadIndex] = {
+              ...currentLead,
+              lifecycle: lifecycleIdValue || null,
+              lifecycle_id: lifecycleIdValue || null,
+              lifecycleId: lifecycleIdValue || null,
+            };
+            return newLeads;
+          }
+          return prevLeads;
+        });
+      }
+
       notifySuccess("Lead lifecycle updated successfully");
     } catch (error) {
       console.error("Failed to update lead lifecycle:", error);
@@ -1027,6 +905,46 @@ export default function EmployeeAllLeads() {
   };
 
   // Function to get status name from ID
+  const getLifecycleName = (lifecycleId) => {
+    // Handle null, undefined, or empty values
+    if (lifecycleId === null || lifecycleId === undefined || lifecycleId === "") {
+      return "None";
+    }
+
+    // If lifecycles array is not loaded yet, return a placeholder
+    if (!lifecycles || lifecycles.length === 0) {
+      console.warn("Lifecycles array not loaded yet, lifecycleId:", lifecycleId);
+      return "Loading...";
+    }
+
+    // If it's already a string and looks like a name (not just a number), return it
+    if (typeof lifecycleId === "string" && isNaN(lifecycleId)) {
+      return lifecycleId;
+    }
+
+    // Extract ID if it's an object
+    let idToFind = lifecycleId;
+    if (typeof lifecycleId === "object" && lifecycleId !== null) {
+      idToFind = lifecycleId.id || lifecycleId.pk || lifecycleId.uuid || lifecycleId;
+    }
+
+    // Convert to string for comparison
+    const idStr = String(idToFind);
+
+    // Find matching lifecycle in the array
+    const foundLifecycle = lifecycles.find((lc) => {
+      const lcId = lc.id || lc.pk || lc.uuid;
+      return String(lcId) === idStr;
+    });
+
+    if (foundLifecycle) {
+      return foundLifecycle.name || foundLifecycle.label || foundLifecycle.title || foundLifecycle.lifecycle || "Unknown";
+    }
+
+    // If not found, return the ID as string
+    return String(idToFind);
+  };
+
   const getStatusName = (statusId) => {
     // Handle null, undefined, or empty values
     if (statusId === null || statusId === undefined || statusId === "") {
@@ -2075,7 +1993,16 @@ export default function EmployeeAllLeads() {
           </TableHead>
 
           <TableBody>
-            {filteredLeads.length === 0 ? (
+            {leadsLoading || statusesLoading ? (
+              <TableRow>
+                <TableCell colSpan={visibleColumns.length + 2} align="center" sx={{ py: 4 }}>
+                  <CircularProgress size={40} />
+                  <Typography variant="body2" sx={{ mt: 2 }}>
+                    Loading leads from API...
+                  </Typography>
+                </TableCell>
+              </TableRow>
+            ) : filteredLeads.length === 0 ? (
               <TableRow>
                 <TableCell colSpan={visibleColumns.length + 2} align="center">
                   No leads found.
@@ -2604,6 +2531,7 @@ export default function EmployeeAllLeads() {
         lead={selectedLead}
         getEmployeeName={getEmployeeName}
         getStatusName={getStatusName}
+        getLifecycleName={getLifecycleName}
       />
     </Box>
   );

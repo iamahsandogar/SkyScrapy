@@ -358,6 +358,7 @@ export default function AllLeads() {
       };
 
       // Always fetch fresh data from /api/leads API
+      setIsPageLoading(true);
       try {
         console.log("Fetching fresh leads from /api/leads/ API...");
         const data = await apiRequest("/api/leads/");
@@ -613,24 +614,50 @@ export default function AllLeads() {
         body: JSON.stringify(payload),
       });
 
-      // Update local state
-      const updatedLead = {
-        ...currentLead,
-        lifecycle: lifecycleIdValue || null,
-      };
+      // Fetch updated lead from API to get the latest data
+      const updatedLeadResponse = await apiRequest(`/api/leads/${leadId}/`);
+      const apiUpdatedLead = updatedLeadResponse?.data || updatedLeadResponse;
 
-      setLeads((prevLeads) => {
-        const leadIndex = prevLeads.findIndex((l) => l.id === leadId);
-        if (leadIndex >= 0) {
-          const newLeads = [...prevLeads];
-          newLeads[leadIndex] = updatedLead;
-          return newLeads;
-        }
-        return prevLeads;
-      });
+      if (apiUpdatedLead) {
+        // Merge API response with current lead to preserve all fields
+        // This ensures we don't lose any data that might not be in the API response
+        const mergedLead = {
+          ...currentLead,
+          ...apiUpdatedLead,
+          // Ensure lifecycle is set correctly
+          lifecycle: lifecycleIdValue || null,
+          lifecycle_id: lifecycleIdValue || null,
+          lifecycleId: lifecycleIdValue || null,
+        };
 
-      // Update cache
-      addLeadToCache(updatedLead);
+        // Update local state with merged data
+        setLeads((prevLeads) => {
+          const leadIndex = prevLeads.findIndex((l) => l.id === leadId);
+          if (leadIndex >= 0) {
+            const newLeads = [...prevLeads];
+            newLeads[leadIndex] = mergedLead;
+            return newLeads;
+          }
+          return prevLeads;
+        });
+      } else {
+        // If API response is empty, just update the lifecycle field locally
+        setLeads((prevLeads) => {
+          const leadIndex = prevLeads.findIndex((l) => l.id === leadId);
+          if (leadIndex >= 0) {
+            const newLeads = [...prevLeads];
+            newLeads[leadIndex] = {
+              ...currentLead,
+              lifecycle: lifecycleIdValue || null,
+              lifecycle_id: lifecycleIdValue || null,
+              lifecycleId: lifecycleIdValue || null,
+            };
+            return newLeads;
+          }
+          return prevLeads;
+        });
+      }
+
       notifySuccess("Lead lifecycle updated successfully");
     } catch (error) {
       console.error("Failed to update lead lifecycle:", error);
@@ -850,6 +877,47 @@ export default function AllLeads() {
     } finally {
       setFollowUpAtUpdatingLeadId(null);
     }
+  };
+
+  // Function to get lifecycle name from ID
+  const getLifecycleName = (lifecycleId) => {
+    // Handle null, undefined, or empty values
+    if (lifecycleId === null || lifecycleId === undefined || lifecycleId === "") {
+      return "None";
+    }
+
+    // If lifecycles array is not loaded yet, return a placeholder
+    if (!lifecycles || lifecycles.length === 0) {
+      console.warn("Lifecycles array not loaded yet, lifecycleId:", lifecycleId);
+      return "Loading...";
+    }
+
+    // If it's already a string and looks like a name (not just a number), return it
+    if (typeof lifecycleId === "string" && isNaN(lifecycleId)) {
+      return lifecycleId;
+    }
+
+    // Extract ID if it's an object
+    let idToFind = lifecycleId;
+    if (typeof lifecycleId === "object" && lifecycleId !== null) {
+      idToFind = lifecycleId.id || lifecycleId.pk || lifecycleId.uuid || lifecycleId;
+    }
+
+    // Convert to string for comparison
+    const idStr = String(idToFind);
+
+    // Find matching lifecycle in the array
+    const foundLifecycle = lifecycles.find((lc) => {
+      const lcId = lc.id || lc.pk || lc.uuid;
+      return String(lcId) === idStr;
+    });
+
+    if (foundLifecycle) {
+      return foundLifecycle.name || foundLifecycle.label || foundLifecycle.title || foundLifecycle.lifecycle || "Unknown";
+    }
+
+    // If not found, return the ID as string
+    return String(idToFind);
   };
 
   // Function to get status name from ID
@@ -1647,7 +1715,7 @@ export default function AllLeads() {
         </Menu>
 
         {/* Search & Filter */}
-        <Box display="flex" gap={2} mt={2} mb={2}>
+        <Box display="flex" gap={2} mt={2} mb={2} alignItems="center" flexWrap="wrap">
           <TextField
             placeholder="Search by title, name, email, company, assigned to, source, lifecycle, description, or date..."
             value={q}
@@ -1699,15 +1767,33 @@ export default function AllLeads() {
                 }}
               />
             </LocalizationProvider>
-            <Button
+            {/* <Button
               size="small"
               variant={followUpFilter ? "outlined" : "contained"}
               onClick={() => setFollowUpFilter(null)}
               sx={{ minWidth: 60, height: 40 }}
             >
               All
-            </Button>
+            </Button> */}
           </Box>
+          <Button
+            size="small"
+            variant="outlined"
+            color="primary"
+            onClick={() => {
+              setQ("");
+              setStatusFilter("ALL");
+              setAssignedFilter("All");
+              setFollowUpFilter(null);
+            }}
+            sx={{ 
+              minWidth: 80, 
+              height: 40,
+              fontWeight: "bold"
+            }}
+          >
+            Reset All
+          </Button>
         </Box>
 
         {/* Leads Table */}
@@ -1819,7 +1905,16 @@ export default function AllLeads() {
             </TableHead>
 
             <TableBody>
-              {filteredLeads.length === 0 ? (
+              {isPageLoading ? (
+                <TableRow>
+                  <TableCell colSpan={visibleColumns.length + 2} align="center" sx={{ py: 4 }}>
+                    <CircularProgress size={40} />
+                    <Typography variant="body2" sx={{ mt: 2 }}>
+                      Loading leads from API...
+                    </Typography>
+                  </TableCell>
+                </TableRow>
+              ) : filteredLeads.length === 0 ? (
                 <TableRow>
                   <TableCell colSpan={visibleColumns.length + 2} align="center">
                     No leads found.
@@ -2431,6 +2526,7 @@ export default function AllLeads() {
           lead={selectedLead}
           getEmployeeName={getEmployeeName}
           getStatusName={getStatusName}
+          getLifecycleName={getLifecycleName}
         />
       </Box>
     );

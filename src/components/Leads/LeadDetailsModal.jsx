@@ -15,6 +15,7 @@ function LeadDetailsModal({
   lead,
   getEmployeeName,
   getStatusName,
+  getLifecycleName,
 }) {
   if (!lead) return null;
 
@@ -110,7 +111,16 @@ function LeadDetailsModal({
             <strong>Source:</strong> {getField("source", "source")}
           </Typography>
           <Typography>
-            <strong>Lifecycle:</strong> {getField("lifecycle", "lifecycle")}
+            <strong>Lifecycle:</strong>{" "}
+            {getLifecycleName
+              ? getLifecycleName(
+                  lead.lifecycle ??
+                    lead.lifecycle_obj ??
+                    lead.lifecycleObj ??
+                    lead.lifecycle_id ??
+                    lead.lifecycleId
+                )
+              : getField("lifecycle", "lifecycle")}
           </Typography>
           <Typography>
             <strong>Company:</strong> {getField("company", "company_name")}
