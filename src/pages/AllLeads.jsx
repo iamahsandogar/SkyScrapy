@@ -616,42 +616,15 @@ export default function AllLeads() {
 
       // Fetch updated lead from API to get the latest data
       const updatedLeadResponse = await apiRequest(`/api/leads/${leadId}/`);
-      const apiUpdatedLead = updatedLeadResponse?.data || updatedLeadResponse;
+      const updatedLead = updatedLeadResponse?.data || updatedLeadResponse;
 
-      if (apiUpdatedLead) {
-        // Merge API response with current lead to preserve all fields
-        // This ensures we don't lose any data that might not be in the API response
-        const mergedLead = {
-          ...currentLead,
-          ...apiUpdatedLead,
-          // Ensure lifecycle is set correctly
-          lifecycle: lifecycleIdValue || null,
-          lifecycle_id: lifecycleIdValue || null,
-          lifecycleId: lifecycleIdValue || null,
-        };
-
-        // Update local state with merged data
+      if (updatedLead) {
+        // Update local state with fresh data from API
         setLeads((prevLeads) => {
           const leadIndex = prevLeads.findIndex((l) => l.id === leadId);
           if (leadIndex >= 0) {
             const newLeads = [...prevLeads];
-            newLeads[leadIndex] = mergedLead;
-            return newLeads;
-          }
-          return prevLeads;
-        });
-      } else {
-        // If API response is empty, just update the lifecycle field locally
-        setLeads((prevLeads) => {
-          const leadIndex = prevLeads.findIndex((l) => l.id === leadId);
-          if (leadIndex >= 0) {
-            const newLeads = [...prevLeads];
-            newLeads[leadIndex] = {
-              ...currentLead,
-              lifecycle: lifecycleIdValue || null,
-              lifecycle_id: lifecycleIdValue || null,
-              lifecycleId: lifecycleIdValue || null,
-            };
+            newLeads[leadIndex] = updatedLead;
             return newLeads;
           }
           return prevLeads;
@@ -1464,7 +1437,6 @@ export default function AllLeads() {
     const assignedFilterOptions = useMemo(() => {
       const options = new Map();
       options.set("All", { value: "All", label: "All" });
-      options.set("None", { value: "None", label: "None" });
 
       // Add employees from the employees array
       if (employees && employees.length > 0) {

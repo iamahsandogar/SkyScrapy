@@ -435,7 +435,6 @@ export default function AllProjects() {
   const assignedFilterOptions = useMemo(() => {
     const options = new Map();
     options.set("All", { value: "All", label: "All" });
-    options.set("None", { value: "None", label: "None" });
 
     // Add employees from the employees array
     if (employees && employees.length > 0) {
@@ -465,13 +464,33 @@ export default function AllProjects() {
     
     // STATUS FILTER
     if (statusFilter !== "ALL") {
-      const projectStatusId =
-        typeof p.status === "object"
-          ? p.status?.id
-          : p.status;
-
-      if (String(projectStatusId) !== String(statusFilter)) {
+      let projectStatusId = null;
+      
+      // Extract status ID from project
+      if (typeof p.status === "object" && p.status !== null) {
+        projectStatusId = p.status.id || p.status.pk || p.status.uuid || p.status.status_id;
+      } else if (p.status !== null && p.status !== undefined && p.status !== "") {
+        projectStatusId = p.status;
+      }
+      
+      // If project has no status and filter is not "None", exclude it
+      if (projectStatusId === null || projectStatusId === undefined) {
         return false;
+      }
+      
+      // Compare status IDs (handle both string and number comparisons)
+      const projectStatusIdStr = String(projectStatusId).trim();
+      const filterStatusIdStr = String(statusFilter).trim();
+      
+      if (projectStatusIdStr !== filterStatusIdStr) {
+        // Also try numeric comparison in case one is string and other is number
+        const projectStatusIdNum = Number(projectStatusId);
+        const filterStatusIdNum = Number(statusFilter);
+        if (!isNaN(projectStatusIdNum) && !isNaN(filterStatusIdNum) && projectStatusIdNum === filterStatusIdNum) {
+          // Numeric match found, allow it
+        } else {
+          return false;
+        }
       }
     }
 
@@ -593,7 +612,7 @@ export default function AllProjects() {
           onChange={(e) => setQ(e.target.value)}
           size="small"
         />
-        <FormControl size="small" sx={{ minWidth: 180 }}>
+        {/* <FormControl size="small" sx={{ minWidth: 180 }}>
           <InputLabel>Status</InputLabel>
           <Select
             value={statusFilter}
@@ -608,7 +627,7 @@ export default function AllProjects() {
               </MenuItem>
             ))}
           </Select>
-        </FormControl>
+        </FormControl> */}
 
         <FormControl size="small" sx={{ minWidth: 180 }}>
           <InputLabel>Assigned To</InputLabel>
@@ -640,19 +659,21 @@ export default function AllProjects() {
           </LocalizationProvider>
           <Button
             size="small"
-            variant={followUpFilter ? "outlined" : "contained"}
+            variant="outlined"
+            color="primary"
             onClick={() => setFollowUpFilter(null)}
-            sx={{ minWidth: 60, height: 40 }}
+            sx={{minWidth: 80, 
+              height: 40,
+              color: "primary",
+              fontWeight: "bold" }}
           >
-            All
+            Reset All
           </Button>
         </Box>
       </Box>
 
       {/* Projects Table */}
-      <Typography variant="h6" mt={2} mb={1}>
-        Projects
-      </Typography>
+      
       <TableContainer
         component={Paper}
         sx={{

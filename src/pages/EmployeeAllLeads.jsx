@@ -1885,11 +1885,14 @@ export default function EmployeeAllLeads() {
           </LocalizationProvider>
           <Button
             size="small"
-            variant={followUpFilter ? "outlined" : "contained"}
+            variant="outlined"
+            color="primary"
             onClick={() => setFollowUpFilter(null)}
-            sx={{ minWidth: 60, height: 40 }}
+            sx={{ height: 40,
+              color: "primary",
+              fontWeight: "bold"}}
           >
-            All
+            Reset All
           </Button>
         </Box>
       </Box>
