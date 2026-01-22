@@ -158,6 +158,7 @@ export default function EmployeeAllLeads() {
   const [notesDialogLead, setNotesDialogLead] = useState(null);
   const [statuses, setStatuses] = useState([]);
   const [lifecycles, setLifecycles] = useState([]);
+  const [users, setUsers] = useState([]); // Store users from API response
   const [leadsLoading, setLeadsLoading] = useState(true);
   const [statusesLoading, setStatusesLoading] = useState(true);
   const [assignedUpdatingLeadId, setAssignedUpdatingLeadId] = useState(null);
@@ -234,7 +235,7 @@ export default function EmployeeAllLeads() {
       }
 
       if (!employeeId) {
-        console.error("⚠️ Employee ID is missing! Cannot fetch leads.");
+        console.error("?? Employee ID is missing! Cannot fetch leads.");
         setLeadsLoading(false);
         return;
       }
@@ -346,7 +347,7 @@ export default function EmployeeAllLeads() {
         );
 
         if (filtered.length === 0 && leadsList.length > 0) {
-          console.warn("⚠️ NO LEADS MATCHED! Employee ID:", employeeId);
+          console.warn("?? NO LEADS MATCHED! Employee ID:", employeeId);
           console.warn(
             "Sample leads from API:",
             leadsList.slice(0, 5).map((l) => ({
@@ -377,6 +378,12 @@ export default function EmployeeAllLeads() {
         if (cachedData.statuses) {
           setStatuses(cachedData.statuses);
         }
+        // Set users from cache if available
+        if (cachedData.users && Array.isArray(cachedData.users)) {
+          setUsers(cachedData.users);
+        } else if (cachedData.employees && Array.isArray(cachedData.employees)) {
+          setUsers(cachedData.employees);
+        }
         setStatusesLoading(false);
         
         const filteredLeads = filterLeadsByEmployee(cachedData.leads);
@@ -398,6 +405,12 @@ export default function EmployeeAllLeads() {
         // Set statuses from stale cache for instant display
         if (cachedData.statuses) {
           setStatuses(cachedData.statuses);
+        }
+        // Set users from stale cache for instant display
+        if (cachedData.users && Array.isArray(cachedData.users)) {
+          setUsers(cachedData.users);
+        } else if (cachedData.employees && Array.isArray(cachedData.employees)) {
+          setUsers(cachedData.employees);
         }
         setStatusesLoading(false);
         
@@ -464,6 +477,11 @@ export default function EmployeeAllLeads() {
       } else if (data?.data?.employees && Array.isArray(data.data.employees)) {
         employeesList = data.data.employees;
         console.log("Extracted employees from data.employees:", employeesList.length);
+      }
+
+      // Store users in state
+      if (employeesList.length > 0) {
+        setUsers(employeesList);
       }
 
       // Extract sources from the leads API response
@@ -1528,18 +1546,27 @@ export default function EmployeeAllLeads() {
     const opts = [];
     const seenIds = new Set();
 
-    const cachedData = getCachedLeadData();
-    const employeesFromCache = cachedData?.employees || [];
-
-    // Include employees/admins from cache
-    employeesFromCache.forEach((emp) => {
-      const id = getEmployeeIdValue(emp);
+    // First, include all users from API response (this includes both role 0 and role 1 users)
+    users.forEach((user) => {
+      const id = getEmployeeIdValue(user);
       if (!id || seenIds.has(String(id))) return;
       seenIds.add(String(id));
-      opts.push({ value: String(id), label: buildEmployeeLabel(emp) });
+      opts.push({ value: String(id), label: buildEmployeeLabel(user) });
     });
 
-    // Include assigned users from current leads (fallback if not in cache)
+    // Fallback: Include employees/admins from cache if users state is empty
+    if (users.length === 0) {
+      const cachedData = getCachedLeadData();
+      const employeesFromCache = cachedData?.employees || [];
+      employeesFromCache.forEach((emp) => {
+        const id = getEmployeeIdValue(emp);
+        if (!id || seenIds.has(String(id))) return;
+        seenIds.add(String(id));
+        opts.push({ value: String(id), label: buildEmployeeLabel(emp) });
+      });
+    }
+
+    // Include assigned users from current leads (fallback if not in users or cache)
     leads.forEach((lead) => {
       const emp = lead.assigned_to || lead.assignedTo;
       const id = getEmployeeIdValue(emp);
@@ -1549,7 +1576,7 @@ export default function EmployeeAllLeads() {
     });
 
     return opts;
-  }, [leads]);
+  }, [users, leads]);
 
 
   // Filter logic
