@@ -661,7 +661,12 @@ export default function AllProjects() {
             size="small"
             variant="outlined"
             color="primary"
-            onClick={() => setFollowUpFilter(null)}
+            onClick={() => {
+              setQ("");
+              setStatusFilter("ALL");
+              setAssignedFilter("All");
+              setFollowUpFilter(null);
+            }}
             sx={{minWidth: 80, 
               height: 40,
               color: "primary",
