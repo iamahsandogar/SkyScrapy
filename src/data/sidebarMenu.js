@@ -29,6 +29,11 @@ export const sidebarMenu = [
   },
 
   {
+    label: "Projects",
+    icon: "Work",
+    path: "/management/projects",
+  },
+  {
     label: "Management",
     icon: "ManageAccounts",
     children: [
@@ -46,11 +51,6 @@ export const sidebarMenu = [
         label: "Manage Lead Options",
         icon: "Tune",
         path: "/management/manage-lead-options",
-      },
-      {
-        label: "Projects",
-        icon: "Work",
-        path: "/management/projects",
       },
     ],
   },
