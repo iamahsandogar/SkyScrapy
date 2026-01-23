@@ -291,7 +291,7 @@ export default function AllProjects() {
         body: JSON.stringify({ is_project: false }),
       });
       setProjects((prev) => prev.filter((p) => String(p.id) !== String(id)));
-      notifySuccess("Project converted to lead successfully");
+      notifySuccess("Project converted to lead successfully", { autoClose: 5000 });
     } catch (err) {
       console.error("Convert to lead failed:", err);
       const status = err?.status;
@@ -310,10 +310,10 @@ export default function AllProjects() {
       await apiRequest(`/api/leads/${id}`, { method: "DELETE" });
       setProjects((prev) => prev.filter((p) => String(p.id) !== String(id)));
       setDeleteDialog({ open: false, project: null });
-      notifySuccess("Project deleted successfully");
+      notifySuccess("Project deleted successfully", { autoClose: 5000 });
     } catch (err) {
       console.error("Failed to delete project:", err);
-      notifyError("Failed to delete project. Please try again.");
+      notifyError("Failed to delete project. Please try again.", { autoClose: 5000 });
     } finally {
       setIsDeleting(false);
     }

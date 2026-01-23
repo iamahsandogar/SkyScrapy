@@ -816,10 +816,10 @@ export default function EmployeeAllLeads() {
         });
       }
 
-      notifySuccess("Lead lifecycle updated successfully");
+      notifySuccess("Lead lifecycle updated successfully", { autoClose: 5000 });
     } catch (error) {
       console.error("Failed to update lead lifecycle:", error);
-      notifyError("Failed to update lead lifecycle");
+      notifyError("Failed to update lead lifecycle", { autoClose: 5000 });
     } finally {
       setLifecycleUpdatingLeadId(null);
     }

@@ -152,7 +152,7 @@ const FollowUpCell = ({ lead, onUpdate, notifySuccess, notifyError }) => {
             });
         }
         
-        if (notifySuccess) notifySuccess("Follow-up scheduled successfully");
+        if (notifySuccess) notifySuccess("Follow-up scheduled successfully", { autoClose: 5000 });
         setAnchorEl(null);
         
     } catch (error) {

@@ -67,7 +67,7 @@ export default function Login() {
       if (response?.user) {
         localStorage.setItem("user", JSON.stringify(response.user));
         localStorage.setItem("isAuth", "true");
-        notifySuccess("Login Successful");
+        notifySuccess("Login Successful", { autoClose: 5000 });
         
         navigateTimer.current = setTimeout(() => {
           navigate("/dashboard", { replace: true });

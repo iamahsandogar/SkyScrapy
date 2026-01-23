@@ -165,14 +165,14 @@ export default function EditLeadModal({ open, leadId, lead: initialLead, onClose
       return [];
     };
 
-const fetchLeadFromApi = async (id) => {
-  try {
-    return await apiRequest(`/api/leads/${id}/`);
-  } catch (error) {
-    console.warn("Trailing slash failed, trying fallback:", error);
-    return await apiRequest(`/api/leads/${id}`);
-  }
-};
+    const fetchLeadFromApi = async (id) => {
+      try {
+        return await apiRequest(`/api/leads/${id}/`);
+      } catch (error) {
+        console.warn("Trailing slash failed, trying fallback:", error);
+        return await apiRequest(`/api/leads/${id}`);
+      }
+    };
 
 
     const getLeadFromCache = (id) => {
@@ -212,24 +212,24 @@ const fetchLeadFromApi = async (id) => {
         statusIdRaw === undefined || statusIdRaw === null
           ? null
           : typeof statusIdRaw === "string"
-          ? Number.isNaN(parseInt(statusIdRaw, 10))
-            ? statusIdRaw
-            : parseInt(statusIdRaw, 10)
-          : statusIdRaw;
+            ? Number.isNaN(parseInt(statusIdRaw, 10))
+              ? statusIdRaw
+              : parseInt(statusIdRaw, 10)
+            : statusIdRaw;
 
       // Extract lifecycle ID similar to status
       const lifecycleObj = typeof leadPayload.lifecycle === "object" ? leadPayload.lifecycle : null;
-      const lifecycleIdRaw = lifecycleObj 
+      const lifecycleIdRaw = lifecycleObj
         ? (lifecycleObj.id || lifecycleObj.pk || lifecycleObj.uuid)
         : (leadPayload.lifecycle_id || leadPayload.lifecycleId || leadPayload.lifecycle);
       const lifecycleId =
         lifecycleIdRaw === undefined || lifecycleIdRaw === null || lifecycleIdRaw === ""
           ? null
           : typeof lifecycleIdRaw === "string"
-          ? Number.isNaN(parseInt(lifecycleIdRaw, 10))
-            ? lifecycleIdRaw
-            : parseInt(lifecycleIdRaw, 10)
-          : lifecycleIdRaw;
+            ? Number.isNaN(parseInt(lifecycleIdRaw, 10))
+              ? lifecycleIdRaw
+              : parseInt(lifecycleIdRaw, 10)
+            : lifecycleIdRaw;
 
       let assignedToValue = leadPayload.assigned_to || leadPayload.assignedTo || null;
       let assignedProfileId = null;
@@ -299,31 +299,31 @@ const fetchLeadFromApi = async (id) => {
           }
         }
       }
-const availableEmployees = Array.isArray(employeeList) ? employeeList : [];
+      const availableEmployees = Array.isArray(employeeList) ? employeeList : [];
 
-if (availableEmployees.length > 0 && finalAssignedTo) {
-  let matchedEmp = null;
+      if (availableEmployees.length > 0 && finalAssignedTo) {
+        let matchedEmp = null;
 
-  matchedEmp = availableEmployees.find((emp) => {
-    const empId = emp.id || emp.pk || emp.uuid;
-    return empId && String(empId) === String(finalAssignedTo);
-  });
+        matchedEmp = availableEmployees.find((emp) => {
+          const empId = emp.id || emp.pk || emp.uuid;
+          return empId && String(empId) === String(finalAssignedTo);
+        });
 
-  if (!matchedEmp) {
-    matchedEmp = availableEmployees.find((emp) => {
-      const empUserId =
-        emp.user_id ||
-        emp.userId ||
-        emp.user_details?.id ||
-        emp.userDetails?.id;
-      return empUserId && String(empUserId) === String(finalAssignedTo);
-    });
-  }
+        if (!matchedEmp) {
+          matchedEmp = availableEmployees.find((emp) => {
+            const empUserId =
+              emp.user_id ||
+              emp.userId ||
+              emp.user_details?.id ||
+              emp.userDetails?.id;
+            return empUserId && String(empUserId) === String(finalAssignedTo);
+          });
+        }
 
-  if (matchedEmp) {
-    finalAssignedTo = matchedEmp.id || matchedEmp.pk || matchedEmp.uuid;
-  }
-}
+        if (matchedEmp) {
+          finalAssignedTo = matchedEmp.id || matchedEmp.pk || matchedEmp.uuid;
+        }
+      }
 
       // Ensure assigned user shows in dropdown even if not in cached employees
       if (finalAssignedTo) {
@@ -460,7 +460,7 @@ if (availableEmployees.length > 0 && finalAssignedTo) {
       } finally {
         setLoadingLead(false);
       }
-        setIsDataLoaded(true);
+      setIsDataLoaded(true);
     };
 
     loadLead();
@@ -554,7 +554,9 @@ if (availableEmployees.length > 0 && finalAssignedTo) {
         body: JSON.stringify(payload),
       });
 
-      notifySuccess("Lead updated successfully!");
+      notifySuccess("Lead updated successfully!",
+            { autoClose: 5000 }
+          );
 
       // Calculate follow_up_at value for schedule call
       const followUpValue = (() => {
@@ -575,22 +577,25 @@ if (availableEmployees.length > 0 && finalAssignedTo) {
 
       // Schedule follow-up - Only if reminder is enabled
       if (formData.send_reminder_email) {
-          const followUpPayload = {
-            follow_up_at: followUpValue,
-            send_reminder_email: true,
-            reminder_time_offset: formData.reminder_time_offset || "exact",
-          };
+        const followUpPayload = {
+          follow_up_at: followUpValue,
+          send_reminder_email: true,
+          reminder_time_offset: formData.reminder_time_offset || "exact",
+        };
 
-          try {
-            await apiRequest(`/api/leads/${leadId}/schedule-follow-up/`, {
-              method: "POST",
-              body: JSON.stringify(followUpPayload),
-            });
-            console.log("Schedule follow-up called successfully");
-          } catch (error) {
-             console.error("Failed to schedule follow-up:", error);
-             notifyError("Lead updated, but failed to schedule reminder.");
-          }
+        try {
+          await apiRequest(`/api/leads/${leadId}/schedule-follow-up/`, {
+            method: "POST",
+            body: JSON.stringify(followUpPayload),
+          });
+          console.log("Schedule follow-up called successfully");
+        } catch (error) {
+          console.error("Failed to schedule follow-up:", error);
+          notifyError(
+            "Lead updated, but you cannot schedule reminders for leads not assigned to you.",
+            { autoClose: 5000 }
+          );
+        }
       }
 
       let updatedLead = null;
@@ -638,14 +643,14 @@ if (availableEmployees.length > 0 && finalAssignedTo) {
             updatedLead.follow_up_at ||
             (formData.follow_up_at && formData.follow_up_time
               ? dayjs(formData.follow_up_at)
-                  .hour(dayjs(formData.follow_up_time).hour())
-                  .minute(dayjs(formData.follow_up_time).minute())
-                  .second(0)
-                  .millisecond(0)
-                  .format()
+                .hour(dayjs(formData.follow_up_time).hour())
+                .minute(dayjs(formData.follow_up_time).minute())
+                .second(0)
+                .millisecond(0)
+                .format()
               : formData.follow_up_at
-              ? dayjs(formData.follow_up_at).startOf("day").format()
-              : null),
+                ? dayjs(formData.follow_up_at).startOf("day").format()
+                : null),
           follow_up_status:
             updatedLead.follow_up_status || formData.follow_up_status,
           assigned_to:

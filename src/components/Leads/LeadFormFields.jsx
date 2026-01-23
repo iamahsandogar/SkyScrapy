@@ -23,6 +23,7 @@ const LeadFormFields = ({
   onReminderToggle = () => {},
   onReminderOffsetChange = () => {},
   onLinkedInBlur = () => {},
+  showAssignedTo = true, // Show by default, hide for employees
 }) => {
   const statuses = normalizeArray(meta.status);
   const sources = normalizeArray(meta.source);
@@ -264,52 +265,50 @@ const LeadFormFields = ({
       </Box>
 
       <Box display="flex" gap={2} flexWrap="wrap">
-        <Box flex={1} minWidth={200}>
-          <RequiredLabel text="Assigned To" />
-          <TextField
-            sx={MuiSelectPadding}
-            select
-            fullWidth
-            name="assigned_to"
-            value={assignedValue}
-            onChange={(e) => onAssignedToChange(e.target.value)}
-            disabled={loadingMeta}
-            SelectProps={{
-              displayEmpty: true,
-              renderValue: (val) => {
-                if (!val && val !== 0) return "Select Employee";
-                const valStr = String(val).trim();
-                if (!valStr) return "Select Employee";
-                const selectedEmp = employeeList.find((emp) => {
-                  const empId = emp.id || emp.pk || emp.uuid;
-                  const userDetails = emp.user_details || emp.userDetails || emp.user;
-                  const empUserId =
-                    emp.user_id || emp.userId ||
-                    (userDetails && typeof userDetails === "object" &&
-                      (userDetails.id || userDetails.user_id || userDetails.userId));
-                  return (
-                    (empId && String(empId).trim() === valStr) ||
-                    (empUserId && String(empUserId).trim() === valStr)
-                  );
-                });
-                if (selectedEmp) {
-                  return getEmployeeDisplayName(selectedEmp);
-                }
-                return "Select Employee";
-              },
-            }}
-          >
-            {employeeList.map((emp) => {
-              const empId = emp.id || emp.pk || emp.uuid;
-              if (!empId) return null;
-              return (
-                <MenuItem key={empId} value={String(empId)}>
-                  {getEmployeeDisplayName(emp)}
-                </MenuItem>
-              );
-            })}
-          </TextField>
-        </Box>
+        {showAssignedTo && (
+      <Box flex={1} minWidth={200}>
+    <RequiredLabel text="Assigned To" />
+    <TextField
+      sx={MuiSelectPadding}
+      select
+      fullWidth
+      name="assigned_to"
+      value={assignedValue}
+      onChange={(e) => onAssignedToChange(e.target.value)}
+      disabled={loadingMeta}
+      SelectProps={{
+        displayEmpty: true,
+        renderValue: (val) => {
+          if (!val && val !== 0) return "Select Employee";
+          const valStr = String(val).trim();
+          if (!valStr) return "Select Employee";
+          const selectedEmp = employeeList.find((emp) => {
+            const empId = emp.id || emp.pk || emp.uuid;
+            const userDetails = emp.user_details || emp.userDetails || emp.user;
+            const empUserId =
+              emp.user_id || emp.userId ||
+              (userDetails && typeof userDetails === "object" && (userDetails.id || userDetails.user_id || userDetails.userId));
+            return (
+              (empId && String(empId).trim() === valStr) ||
+              (empUserId && String(empUserId).trim() === valStr)
+            );
+          });
+          if (selectedEmp) {
+            return getEmployeeDisplayName(selectedEmp);
+          }
+          return "Select Employee";
+        },
+      }}
+    >
+      {employeeList.map((emp) => (
+        <MenuItem key={emp.id} value={String(emp.id)}>
+          {getEmployeeDisplayName(emp)}
+        </MenuItem>
+      ))}
+    </TextField>
+  </Box>
+)}
+
 
         <Box flex={1} minWidth={200}>
           <Typography fontWeight="bold" sx={{ mb: 0.5 }}>

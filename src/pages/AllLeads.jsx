@@ -123,8 +123,6 @@ const DEFAULT_COLUMNS = [
 const tableHeaderCellStyles = {
   fontWeight: 600,
   whiteSpace: "normal",
-  overflowWrap: "anywhere",
-  backgroundColor: "#fff", // important for sticky header
   position: "sticky",
   top: 0,
   zIndex: 2,
@@ -611,10 +609,10 @@ export default function AllLeads() {
 
       // Update cache so Kanban board reflects changes
       addLeadToCache(updatedLead);
-      notifySuccess("Lead status updated successfully");
+      notifySuccess("Lead status updated successfully", { autoClose: 5000 });
     } catch (error) {
       console.error("Failed to update lead status:", error);
-      notifyError("Failed to update lead status");
+      notifyError("Failed to update lead status", { autoClose: 5000 });
     } finally {
       setStatusUpdatingLeadId(null);
     }
@@ -755,10 +753,10 @@ export default function AllLeads() {
         addLeadToCache(updatedLead);
       }
 
-      notifySuccess("Lead lifecycle updated successfully");
+      notifySuccess("Lead lifecycle updated successfully", { autoClose: 5000 });
     } catch (error) {
       console.error("Failed to update lead lifecycle:", error);
-      notifyError("Failed to update lead lifecycle");
+      notifyError("Failed to update lead lifecycle", { autoClose: 5000 });
     } finally {
       setLifecycleUpdatingLeadId(null);
     }
@@ -804,7 +802,7 @@ export default function AllLeads() {
         return prevLeads;
       });
 
-      notifySuccess("Follow-up status updated successfully");
+      notifySuccess("Follow-up status updated successfully", { autoClose: 5000 });
     } catch (error) {
       console.error("Failed to update follow-up status:", error);
       console.error("Error details:", {
@@ -815,7 +813,8 @@ export default function AllLeads() {
       });
       notifyError(
         `Failed to update follow-up status: ${error?.message || "Unknown error"
-        }`
+        }`,
+        { autoClose: 5000 },
       );
     } finally {
       setFollowUpUpdatingLeadId(null);
@@ -868,10 +867,10 @@ export default function AllLeads() {
         prevLeads.map((l) => (l.id === leadId ? { ...l, ...updatedLead } : l))
       );
 
-      notifySuccess("Lead assignment updated");
+      notifySuccess("Lead assignment updated", { autoClose: 5000 });
     } catch (error) {
       console.error("Failed to update assignment:", error);
-      notifyError("Failed to update assignment");
+      notifyError("Failed to update assignment", { autoClose: 5000 });
     } finally {
       setAssignedUpdatingLeadId(null);
     }
@@ -967,10 +966,10 @@ export default function AllLeads() {
       );
 
       addLeadToCache(updatedLead);
-      notifySuccess("Follow-up date updated");
+      notifySuccess("Follow-up date updated", { autoClose: 5000 });
     } catch (error) {
       console.error("Failed to update follow-up at:", error);
-      notifyError("Failed to update follow-up date");
+      notifyError("Failed to update follow-up date", { autoClose: 5000 });
     } finally {
       setFollowUpAtUpdatingLeadId(null);
     }
@@ -1181,10 +1180,10 @@ export default function AllLeads() {
       const updatedLead = { ...lead, is_always_active: newActiveStatus, always_active: newActiveStatus };
       addLeadToCache(updatedLead);
 
-      notifySuccess(`Lead ${newActiveStatus ? "activated" : "deactivated"} successfully`);
+      notifySuccess(`Lead ${newActiveStatus ? "activated" : "deactivated"} successfully, {autoClose: 5000}`);
     } catch (error) {
       console.error("Failed to toggle lead active status:", error);
-      notifyError("Failed to update lead status");
+      notifyError("Failed to update lead status", { autoClose: 5000 });
     } finally {
       setActiveTogglingLeadId(null);
     }
@@ -1437,10 +1436,10 @@ export default function AllLeads() {
       setLeads(leads.filter((l) => String(l.id) !== String(id)));
       removeLeadFromCache(id);
       setDeleteDialog({ open: false, lead: null });
-      notifySuccess("Lead deleted successfully");
+      notifySuccess("Lead deleted successfully", { autoClose: 5000 });
     } catch (err) {
       console.error("Failed to delete lead:", err);
-      notifyError("Failed to delete lead. Please try again.");
+      notifyError("Failed to delete lead. Please try again.", { autoClose: 5000 });
     } finally {
       setIsDeleting(false);
     }
@@ -1520,16 +1519,16 @@ export default function AllLeads() {
       setLeads((prev) => prev.filter((l) => String(resolveLeadId(l)) !== String(leadId)));
       removeLeadFromCache(lead);
 
-      notifySuccess("Lead converted to project successfully");
+      notifySuccess("Lead converted to project successfully", { autoClose: 5000 });
     } catch (err) {
       console.error("Convert to project failed:", err);
       const status = err?.status;
       if (status === 403) {
-        notifyError("You do not have permission to convert this lead");
+        notifyError("You do not have permission to convert this lead", { autoClose: 5000 });
       } else if (status === 400) {
-        notifyError(err.message || "Invalid request for conversion");
+        notifyError(err.message || "Invalid request for conversion", { autoClose: 5000 });
       } else {
-        notifyError(err.message || "Failed to convert lead to project");
+        notifyError(err.message || "Failed to convert lead to project", { autoClose: 5000 });
       }
     } finally {
       setActionLoading(false);
@@ -1896,12 +1895,11 @@ export default function AllLeads() {
         <TableContainer
           component={Paper}
           sx={{
-            borderRadius: "12px",
+            borderRadius: "5px",
             boxShadow: "none",
             width: "100%",
-            px: { xs: 2, md: 3 },
             overflowX: "auto",
-            maxHeight: "calc(100vh - 240px)",
+            maxHeight: "calc(100vh - 120px)",
           }}
         >
           <Table

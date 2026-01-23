@@ -165,7 +165,7 @@ export default function CreateLead() {
           employeesList = filtered;
         } else {
           const selfEntry = {
-            id: currentUserId,
+            id: userData?.employee_profile_id || userData?.profile_id || currentUserId,
             firstName: userData?.firstName || userData?.first_name || userData?.name,
             lastName: userData?.lastName || userData?.last_name || "",
             user_id: currentUserId,
@@ -245,7 +245,7 @@ export default function CreateLead() {
     }
 
     const fallbackEmployee = {
-      id: currentUserId,
+      id: userData?.employee_profile_id || userData?.profile_id || currentUserId,
       firstName: userData?.firstName || userData?.first_name || userData?.name,
       lastName: userData?.lastName || userData?.last_name || "",
       user_id: currentUserId,
@@ -682,359 +682,103 @@ export default function CreateLead() {
     return true;
   };
 
-  const handleSubmit = async (e) => {
-    // Prevent any default form submission behavior
-    if (e) {
-      e.preventDefault();
-      e.stopPropagation();
-    }
-    
-    console.log("=== CREATE LEAD BUTTON CLICKED ===");
-    console.log("Form data:", formData);
-    console.log("Is Admin:", isAdmin);
-    console.log("Edit ID:", editId);
-    
-    if (!validateForm()) {
-      console.log("❌ Form validation failed");
-      notifyError("Please fill all required fields !");
-      return;
-    }
-    
-    console.log("✅ Form validation passed");
 
-    // Prepare payload according to API structure
-    // Validation: If reminder is enabled, follow-up date must be selected
-    if (
-      !formData.send_reminder_email ||
-      !formData.follow_up_at ||
-      !formData.follow_up_time
-    ) {
-      console.log("⏭ Skipping follow-up scheduling");
-      return;
-    }
-    
-    
-    console.log("✅ All validations passed - proceeding to API call");
-
-    const payload = {
-      title: formData.title.trim(),
-      status: formData.status,
-      source: formData.source?.trim() || "",
-      lifecycle: formData.lifecycle?.trim() || "",
-      description: formData.description?.trim() || "",
-      company_name: formData.company_name?.trim() || "",
-      contact_first_name: formData.contact_first_name.trim(),
-      contact_last_name: formData.contact_last_name?.trim() || "",
-      contact_email: formData.contact_email.trim(),
-      contact_phone: formData.contact_phone?.trim() || "",
-      contact_position_title: formData.contact_position_title.trim(),
-      contact_linkedin_url: formData.contact_linkedin_url.trim(),
-      // Only include assigned_to for admins
-      // For employees (creating or editing), don't send assigned_to (backend will auto-assign)
-      ...(isAdmin &&
-        formData.assigned_to && { assigned_to: formData.assigned_to }),
-      // Combine follow_up_at (date) and follow_up_time (time) into a single datetime string
-      follow_up_at: (() => {
-        if (formData.follow_up_at && formData.follow_up_time) {
-          // Combine date and time into ISO datetime string with timezone
-          const date = dayjs(formData.follow_up_at);
-          const time = dayjs(formData.follow_up_time);
-          const combined = date
-            .hour(time.hour())
-            .minute(time.minute())
-            .second(0)
-            .millisecond(0);
-          // Format as ISO string with timezone (e.g., "2026-01-07T14:30:00+05:30")
-          return combined.format();
-        } else if (formData.follow_up_at) {
-          // Only date, set time to start of day
-          return dayjs(formData.follow_up_at).startOf("day").format();
-        }
-        return null;
-      })(),
-      follow_up_status: formData.follow_up_status?.trim() || "",
-    };
-
-    console.log("Submitting lead payload:", payload);
-    console.log(
-      "Is Admin:",
-      isAdmin,
-      "Is Edit:",
-      !!editId,
-      "Has assigned_to:",
-      !!formData.assigned_to
-    );
-
-    const callScheduleFollowUp = async (leadId) => {
-      // 🛑 2nd FIX — SAFETY GUARD (ADD THIS PART)
-      if (
-        !formData.send_reminder_email ||
-        !formData.follow_up_at ||
-        !formData.follow_up_time
-      ) {
-        console.log("⏭ Skipping follow-up scheduling");
-        return;
-      }
-    
-      // ⬇️ Your existing code stays the same
-      const followUpPayload = {
-        follow_up_at: (() => {
-          const date = dayjs(formData.follow_up_at);
-          const time = dayjs(formData.follow_up_time);
-          return date
-            .hour(time.hour())
-            .minute(time.minute())
-            .second(0)
-            .millisecond(0)
-            .format();
-        })(),
-        send_reminder_email: true,
-        reminder_time_offset: formData.reminder_time_offset,
-      };
-    
-      try {
-        await apiRequest(`/api/leads/${leadId}/schedule-follow-up/`, {
-          method: "POST",
-          body: JSON.stringify(followUpPayload),
-        });
-        console.log("✅ Schedule follow-up called successfully");
-      } catch (error) {
-        console.error("❌ Failed to schedule follow-up:", error);
-        notifyError("Lead saved, but failed to schedule follow-up.");
-      }
-    };
-    
-    
-
+  const callScheduleFollowUp = async (leadId) => {
     try {
-      if (editId) {
-        // 🔁 UPDATE LEAD (PATCH)
-        console.log("📝 Updating existing lead with ID:", editId);
-        const response = await apiRequest(`/api/leads/${editId}/`, {
-          method: "PATCH",
-          body: JSON.stringify(payload),
-        });
-        notifySuccess("Lead updated successfully!");
+      const followUpAt = dayjs(formData.follow_up_at)
+        .hour(dayjs(formData.follow_up_time).hour())
+        .minute(dayjs(formData.follow_up_time).minute())
+        .second(0)
+        .toISOString();
 
-        // Schedule follow-up
-        await callScheduleFollowUp(editId);
-
-        // Parse the response to get the updated lead
-        let updatedLead = null;
-        if (response) {
-          // Handle different response formats
-          if (response.lead) {
-            updatedLead = response.lead;
-          } else if (response.data) {
-            updatedLead = response.data.lead || response.data;
-          } else if (Array.isArray(response)) {
-            updatedLead = response[0];
-          } else {
-            updatedLead = response;
-          }
-        }
-
-        // If response doesn't have all fields, merge with form data
-        // Also ensure assigned_to is set for employees (backend auto-assigns)
-        if (updatedLead) {
-          // Get current user to set assigned_to for employees
-          const storedUser = localStorage.getItem("user");
-          let currentUserId = null;
-          if (storedUser && !isAdmin) {
-            const userData = JSON.parse(storedUser);
-            currentUserId = userData.id || userData.pk || userData.uuid;
-          }
-
-          // Merge form data with API response to ensure all fields are present
-          const mergedLead = {
-            ...updatedLead,
-
-            // Ensure all form fields are included
-            title: updatedLead.title || formData.title,
-            status: updatedLead.status || formData.status,
-            source: updatedLead.source || formData.source,
-            lifecycle: updatedLead.lifecycle || formData.lifecycle,
-            description: updatedLead.description || formData.description,
-            company_name: updatedLead.company_name || formData.company_name,
-            contact_first_name:
-              updatedLead.contact_first_name || formData.contact_first_name,
-            contact_last_name:
-              updatedLead.contact_last_name || formData.contact_last_name,
-            contact_email: updatedLead.contact_email || formData.contact_email,
-            contact_phone: updatedLead.contact_phone || formData.contact_phone,
-            contact_position_title:
-              updatedLead.contact_position_title ||
-              formData.contact_position_title,
-            contact_linkedin_url:
-              updatedLead.contact_linkedin_url || formData.contact_linkedin_url,
-
-            // follow_up_at now contains combined date and time as ISO datetime string
-            follow_up_at:
-              updatedLead.follow_up_at ||
-              (formData.follow_up_at && formData.follow_up_time
-                ? dayjs(formData.follow_up_at)
-                    .hour(dayjs(formData.follow_up_time).hour())
-                    .minute(dayjs(formData.follow_up_time).minute())
-                    .second(0)
-                    .millisecond(0)
-                    .format()
-                : formData.follow_up_at
-                ? dayjs(formData.follow_up_at).startOf("day").format()
-                : null),
-            follow_up_status:
-              updatedLead.follow_up_status || formData.follow_up_status,
-
-            // ✅ Ensure assignment (employee-safe)
-            assigned_to:
-              updatedLead.assigned_to ||
-              updatedLead.assignedTo ||
-              (currentUserId ? currentUserId : formData.assigned_to),
-            
-            send_reminder_email: formData.send_reminder_email,
-            reminder_time_offset: formData.reminder_time_offset,
-          };
-
-          // Update cache with the updated lead
-          addLeadToCache(mergedLead);
-          console.log(
-            "Updated lead added to cache, navigating to AllLeads",
-            mergedLead
-          );
-        } else {
-          console.warn("Could not parse updated lead from response:", response);
-          // Fallback: clear cache if we can't parse the response
-          clearLeadDataCache();
-        }
-      } else {
-        // ➕ CREATE NEW LEAD - POST /api/leads/
-        // This block executes when creating a new lead (no editId)
-        console.log("=== CREATING NEW LEAD ===");
-        console.log("✅ No editId found - This is a CREATE operation");
-        console.log("🚀 Calling POST /api/leads/");
-        console.log("Endpoint: POST /api/leads/");
-        console.log("Payload:", JSON.stringify(payload, null, 2));
-        
-        // ✅ REQUIRED: Call POST /api/leads/ to create new lead
-        // This API endpoint creates a new lead in the database
-        const response = await apiRequest("/api/leads/", {
-          method: "POST",
-          body: JSON.stringify(payload),
-        });
-        
-        console.log("✅ POST /api/leads/ SUCCESS - Response:", response);
-        notifySuccess("Lead created successfully!");
-
-        // Parse the response to get the created lead
-        let createdLead = null;
-        if (response) {
-          // Handle different response formats
-          if (response.lead) {
-            createdLead = response.lead;
-          } else if (response.data) {
-            createdLead = response.data.lead || response.data;
-          } else if (Array.isArray(response)) {
-            createdLead = response[0];
-          } else {
-            createdLead = response;
-          }
-        }
-
-        if (createdLead) {
-          const newLeadId = createdLead.id || createdLead.pk || createdLead.uuid;
-          if (
-            newLeadId &&
-            formData.send_reminder_email &&
-            formData.follow_up_at &&
-            formData.follow_up_time
-          ) {
-            await callScheduleFollowUp(newLeadId);
-          }
-          
-        }
-
-        // If response doesn't have all fields, merge with form data
-        // Also ensure assigned_to is set for employees (backend auto-assigns)
-        if (createdLead) {
-          // Get current user to set assigned_to for employees
-          const storedUser = localStorage.getItem("user");
-          let currentUserId = null;
-          if (storedUser && !isAdmin) {
-            const userData = JSON.parse(storedUser);
-            currentUserId = userData.id || userData.pk || userData.uuid;
-          }
-
-          // Merge form data with API response to ensure all fields are present
-          const mergedLead = {
-            ...createdLead,
-
-            // Ensure all form fields are included
-            title: createdLead.title || formData.title,
-            status: createdLead.status || formData.status,
-            source: createdLead.source || formData.source,
-            lifecycle: createdLead.lifecycle || formData.lifecycle,
-            description: createdLead.description || formData.description,
-            company_name: createdLead.company_name || formData.company_name,
-            contact_first_name:
-              createdLead.contact_first_name || formData.contact_first_name,
-            contact_last_name:
-              createdLead.contact_last_name || formData.contact_last_name,
-            contact_email: createdLead.contact_email || formData.contact_email,
-            contact_phone: createdLead.contact_phone || formData.contact_phone,
-            contact_position_title:
-              createdLead.contact_position_title ||
-              formData.contact_position_title,
-            contact_linkedin_url:
-              createdLead.contact_linkedin_url || formData.contact_linkedin_url,
-
-            // follow_up_at now contains combined date and time as ISO datetime string
-            follow_up_at:
-              createdLead.follow_up_at ||
-              (formData.follow_up_at && formData.follow_up_time
-                ? dayjs(formData.follow_up_at)
-                    .hour(dayjs(formData.follow_up_time).hour())
-                    .minute(dayjs(formData.follow_up_time).minute())
-                    .second(0)
-                    .millisecond(0)
-                    .format()
-                : formData.follow_up_at
-                ? dayjs(formData.follow_up_at).startOf("day").format()
-                : null),
-            follow_up_status:
-              createdLead.follow_up_status || formData.follow_up_status,
-
-            // ✅ CRITICAL FIX — ensure creator is ALWAYS present
-            created_by:
-              createdLead.created_by || createdLead.createdBy || currentUserId,
-
-            // ✅ Ensure assignment (employee-safe)
-            assigned_to:
-              createdLead.assigned_to ||
-              createdLead.assignedTo ||
-              (currentUserId ? currentUserId : formData.assigned_to),
-
-            send_reminder_email: formData.send_reminder_email,
-            reminder_time_offset: formData.reminder_time_offset,
-          };
-
-          addLeadToCache(mergedLead);
-          console.log(
-            "New lead added to cache, navigating to AllLeads",
-            mergedLead
-          );
-        } else {
-          console.warn("Could not parse created lead from response:", response);
-          // Fallback: clear cache if we can't parse the response
-          clearLeadDataCache();
-        }
-      }
-
-      navigate("/all-leads");
+      await apiRequest(`/api/leads/${leadId}/follow-up/`, {
+        method: "POST",
+        body: JSON.stringify({
+          follow_up_at: followUpAt,
+          send_reminder_email: formData.send_reminder_email,
+          reminder_time_offset: formData.reminder_time_offset,
+        }),
+      });
     } catch (error) {
-      console.error("Submit Lead Error:", error);
-      const message = error.message || "Failed to submit lead";
-      notifyError(message);
+      console.error("Failed to schedule follow-up:", error);
+      throw error;
     }
   };
+
+
+const handleSubmit = async (e) => {
+  e.preventDefault();
+
+  if (!validateForm()) {
+    notifyError("Please fill all required fields!");
+    return;
+  }
+
+  const payload = {
+    title: formData.title.trim(),
+    status: formData.status,
+    source: formData.source || "",
+    lifecycle: formData.lifecycle || "",
+    description: formData.description || "",
+    company_name: formData.company_name || "",
+    contact_first_name: formData.contact_first_name,
+    contact_last_name: formData.contact_last_name || "",
+    contact_email: formData.contact_email,
+    contact_phone: formData.contact_phone || "",
+    contact_position_title: formData.contact_position_title || "",
+    contact_linkedin_url: formData.contact_linkedin_url || "",
+  };
+
+  // Admin assigns explicitly
+  if (isAdmin && formData.assigned_to) {
+    payload.assigned_to = formData.assigned_to;
+  }
+
+
+  try {
+    // 1️⃣ Create lead
+    const response = await apiRequest("/api/leads/", {
+      method: "POST",
+      body: JSON.stringify(payload),
+    });
+
+    const leadId = response?.id || response?.lead?.id;
+    if (!leadId) {
+      throw new Error("Lead creation failed: no ID returned from API.");
+    }
+
+    // 2️⃣ Schedule follow-up if date/time selected
+    if (formData.follow_up_at && formData.follow_up_time) {
+      const followUpDateTime = formData.follow_up_at
+        .hour(formData.follow_up_time.hour())
+        .minute(formData.follow_up_time.minute())
+        .second(0)
+        .millisecond(0)
+        .toISOString();
+
+      await apiRequest(`/api/leads/${leadId}/schedule-follow-up/`, {
+        method: "POST",
+        body: JSON.stringify({
+          follow_up_at: followUpDateTime,
+          send_reminder_email: Boolean(formData.send_reminder_email),
+          reminder_time_offset: formData.reminder_time_offset || "exact",
+        }),
+      });
+    }
+
+    notifySuccess(
+      editId ? "Lead updated successfully!" : "Lead created successfully!",
+            { autoClose: 5000 }
+    );
+    navigate("/all-leads");
+  } catch (error) {
+    console.error("Lead creation error:", error);
+    notifyError(
+      `Failed to create lead.\n\nError: ${error.message || "Unknown error"}`
+    );
+  }
+};
+
 
   return (
     <>
@@ -1071,6 +815,7 @@ export default function CreateLead() {
                   );
                 }
               }}
+              showAssignedTo={isAdmin}
             />
 
               <Box display="flex" gap={2} flexWrap="wrap">
