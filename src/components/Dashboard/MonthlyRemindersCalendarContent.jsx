@@ -177,13 +177,26 @@ const normalizeLeads = (list = []) =>
   list
     .map((entry) => {
       const dueDate = extractDueDate(entry);
-      if (!dueDate) return null;
       const status = (entry.follow_up_status || entry.followupStatus || "")
         .toString()
         .toLowerCase();
+
       if (status === "done" || status === "completed") {
         return null;
       }
+
+      // If no due date, only keep if status is pending
+      if (!dueDate) {
+        if (status === "pending") {
+          return {
+            ...entry,
+            dueDate: null,
+            dueKey: "no-date",
+          };
+        }
+        return null;
+      }
+
       return {
         ...entry,
         dueDate,
@@ -191,7 +204,11 @@ const normalizeLeads = (list = []) =>
       };
     })
     .filter((entry) => entry && entry.dueKey)
-    .sort((a, b) => a.dueDate?.getTime() - b.dueDate?.getTime());
+    .sort((a, b) => {
+      if (!a.dueDate) return 1;
+      if (!b.dueDate) return -1;
+      return a.dueDate.getTime() - b.dueDate.getTime();
+    });
 
 const formatMonthLabel = (date) =>
   new Intl.DateTimeFormat("en-US", {
@@ -286,18 +303,24 @@ export default function MonthlyRemindersCalendarContent({ data }) {
       if (!acc[reminder.dueKey]) {
         acc[reminder.dueKey] = [];
       }
-      // Determine if lead is overdue, due today, or upcoming
-      const dueDateMidnight = reminder.dueDate 
-        ? new Date(reminder.dueDate.getFullYear(), reminder.dueDate.getMonth(), reminder.dueDate.getDate())
-        : null;
-      const todayMidnightTime = todayMidnight.getTime();
-      const dueDateMidnightTime = dueDateMidnight?.getTime() || 0;
       
       let category = 'upcoming'; // default
-      if (dueDateMidnightTime < todayMidnightTime) {
-        category = 'overdue';
-      } else if (dueDateMidnightTime === todayMidnightTime) {
-        category = 'due_today';
+
+      if (reminder.dueKey === "no-date") {
+        category = "pending";
+      } else {
+        // Determine if lead is overdue, due today, or upcoming
+        const dueDateMidnight = reminder.dueDate 
+          ? new Date(reminder.dueDate.getFullYear(), reminder.dueDate.getMonth(), reminder.dueDate.getDate())
+          : null;
+        const todayMidnightTime = todayMidnight.getTime();
+        const dueDateMidnightTime = dueDateMidnight?.getTime() || 0;
+        
+        if (dueDateMidnightTime < todayMidnightTime) {
+          category = 'overdue';
+        } else if (dueDateMidnightTime === todayMidnightTime) {
+          category = 'due_today';
+        }
       }
       
       acc[reminder.dueKey].push({
@@ -305,7 +328,11 @@ export default function MonthlyRemindersCalendarContent({ data }) {
         category, // Add category to each reminder
       });
       acc[reminder.dueKey].sort(
-        (a, b) => a.dueDate?.getTime() - b.dueDate?.getTime()
+        (a, b) => {
+          if (!a.dueDate) return 1;
+          if (!b.dueDate) return -1;
+          return a.dueDate.getTime() - b.dueDate.getTime();
+        }
       );
       return acc;
     }, {});
@@ -353,6 +380,8 @@ export default function MonthlyRemindersCalendarContent({ data }) {
   const selectedDayReminders = selectedKey
     ? remindersByDate[selectedKey] ?? []
     : [];
+
+  const undatedReminders = remindersByDate["no-date"] || [];
 
   const remindersThisMonth = useMemo(
     () =>
@@ -457,7 +486,7 @@ export default function MonthlyRemindersCalendarContent({ data }) {
         maxWidth: 500,
         borderRadius: 3,
         height: "390px",
-        overflowY: "none",
+        overflowY: "auto",
         backgroundColor: mode === "dark" ? colors.primary[600] : colors.bg[100],
         p: 3,
       }}
@@ -650,6 +679,55 @@ export default function MonthlyRemindersCalendarContent({ data }) {
               return cellBody;
             })}
           </Box>
+
+      {undatedReminders.length > 0 && (
+        <Box mt={3}>
+          <Divider sx={{ mb: 2, opacity: 0.2 }} />
+          <Typography
+            variant="subtitle2"
+            fontWeight="bold"
+            mb={1.5}
+            sx={{ color: isDark ? colors.grey[100] : colors.grey[800] }}
+          >
+            Pending (No Date) ({undatedReminders.length})
+          </Typography>
+          <Stack spacing={1}>
+            {undatedReminders.map((reminder) => {
+              const title = getReminderTitle(reminder);
+              const statusLabel = resolveLeadStatusLabel(reminder, statuses);
+              return (
+                <Box
+                  key={reminder.id || reminder.uuid || reminder.dueKey || Math.random()}
+                  sx={{
+                    p: 1.5,
+                    borderRadius: 2,
+                    bgcolor: isDark ? colors.primary[500] : colors.grey[200],
+                    display: "flex",
+                    flexDirection: "column",
+                    gap: 0.5,
+                  }}
+                >
+                  <Typography
+                    variant="body2"
+                    fontWeight={600}
+                    sx={{ color: isDark ? colors.grey[100] : colors.grey[900] }}
+                  >
+                    {title}
+                  </Typography>
+                  {statusLabel && (
+                    <Typography
+                      variant="caption"
+                      sx={{ color: isDark ? colors.grey[400] : colors.grey[600] }}
+                    >
+                      Status: {statusLabel}
+                    </Typography>
+                  )}
+                </Box>
+              );
+            })}
+          </Stack>
+        </Box>
+      )}
     </Paper>
   );
 }

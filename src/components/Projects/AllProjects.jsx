@@ -19,6 +19,7 @@ import {
   FormControl,
   InputLabel,
   CircularProgress,
+  useTheme,
 } from "@mui/material";
 import CloudDownloadIcon from "@mui/icons-material/CloudDownload";
 import AddIcon from "@mui/icons-material/Add";
@@ -63,7 +64,6 @@ export default function AllProjects() {
     { key: "assignedTo", label: "Assigned To" },
     { key: "followUpAt", label: "Follow-up At" },
     { key: "followupStatus", label: "Follow-up Status" },
-    { key: "isActive", label: "Active" },
     { key: "source", label: "Source" },
     { key: "lifecycle", label: "Lead Lifecycle" },
     { key: "description", label: "Description" },
@@ -84,27 +84,25 @@ export default function AllProjects() {
     "assignedTo",
     "followUpAt",
     "followupStatus",
-    "isActive",
   ];
 
+  const theme = useTheme();
+  const isDarkMode = theme.palette.mode === "dark";
   const tableHeaderCellStyles = {
     fontWeight: "bold",
     whiteSpace: "normal",
     position: "sticky",
     top: 0,
     zIndex: 2,
-    backgroundColor: colors.primary[400],
+    backgroundColor: isDarkMode ? "#000000" : colors.primary[400],
+    color: isDarkMode ? "#ffffff" : undefined,
   };
 
   const [colAnchorEl, setColAnchorEl] = useState(null);
   const [visibleColumns, setVisibleColumns] = useState(() => {
     try {
       const stored = JSON.parse(localStorage.getItem("projectColumns")) || null;
-      return Array.isArray(stored) && stored.length
-        ? stored.includes("isActive")
-          ? stored
-          : [...stored, "isActive"]
-        : DEFAULT_COLUMNS;
+      return Array.isArray(stored) && stored.length ? stored : DEFAULT_COLUMNS;
     } catch (e) {
       return DEFAULT_COLUMNS;
     }
@@ -375,8 +373,7 @@ export default function AllProjects() {
           return status.name || status.label || status.status || String(status.id || "");
         }
         return status ? String(status) : "";
-      case "isActive":
-        return proj.is_active ?? proj.isActive ?? false;
+
       case "source":
         return proj.source || "";
       case "lifecycle":
@@ -661,21 +658,21 @@ export default function AllProjects() {
         component={Paper}
         sx={{
           borderRadius: "12px",
-          boxShadow: "none",
-          width: "100%",
-          px: { xs: 2, md: 3 },
-          overflowX: "auto",
-          maxHeight: "calc(100vh - 240px)",
+            boxShadow: "none",
+            width: "100%",
+            overflowX: "auto",
+            maxHeight: "calc(100vh - 120px)",
         }}
       >
         <Table
           stickyHeader
-          sx={{
-            tableLayout: "fixed",
-            width: "100%",
-            minWidth: tableMinWidth,
-            "& td, & th": { whiteSpace: "normal", overflowWrap: "anywhere" },
-          }}
+            aria-label="basic table"
+            sx={{
+              tableLayout: "fixed",
+              width: "100%",
+              minWidth: tableMinWidth,
+              "& td, & th": { whiteSpace: "normal", overflowWrap: "anywhere" },
+            }}
         >
           <TableHead>
             <TableRow>
@@ -782,10 +779,7 @@ export default function AllProjects() {
                                 ? d.slice(0, 50) + "..."
                                 : d || "-";
                             })()
-                          : col.key === "isActive"
-                          ? getProjectFieldValue(proj, "isActive")
-                            ? "Yes"
-                            : "No"
+
                           : col.key === "followUpAt"
                           ? getProjectFieldValue(proj, "followUpAt") || "-"
                           : col.key === "followupStatus"

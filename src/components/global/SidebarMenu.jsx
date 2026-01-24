@@ -122,7 +122,11 @@ export default function SidebarMenu({ user, onItemClick, onClose, isMobile }) {
           }}
         >
           {sidebarMenu
-            .filter((item) => item.label !== "Management" || isAdminUser)
+            .filter(
+              (item) =>
+                (item.label !== "Management" && item.label !== "Projects") ||
+                isAdminUser
+            )
             .map((item, index) => {
               if (item.type === "divider")
                 return <Divider key={index} sx={{ my: 0.5 }} />;

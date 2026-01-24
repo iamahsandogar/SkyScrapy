@@ -678,6 +678,22 @@ export default function CreateLead() {
       return false;
     }
 
+    // Validate FollowUpStatus requirement
+    // If FollowUpAt is set (meaning a date is selected), then FollowUpStatus is required
+    // We check if follow_up_at is present, and if so, follow_up_status must not be empty
+    if (formData.follow_up_at) {
+      const statusValue = formData.follow_up_status;
+      if (
+        statusValue === undefined ||
+        statusValue === null ||
+        (typeof statusValue === "string" && statusValue.trim() === "")
+      ) {
+        console.log("❌ Validation failed: Follow Up Status is required when Follow Up Date is set");
+        notifyError("Follow Up Status is required when a Follow Up Date is selected.");
+        return false;
+      }
+    }
+
     console.log("✅ All validations passed");
     return true;
   };
@@ -727,6 +743,9 @@ const handleSubmit = async (e) => {
     contact_phone: formData.contact_phone || "",
     contact_position_title: formData.contact_position_title || "",
     contact_linkedin_url: formData.contact_linkedin_url || "",
+    // Include follow_up_status in initial payload if it's set (e.g. "done", "pending", or null/"")
+    // If it is "None" (empty string), send null or empty string depending on backend expectation.
+    follow_up_status: formData.follow_up_status || null, 
   };
 
   // Admin assigns explicitly
@@ -760,10 +779,23 @@ const handleSubmit = async (e) => {
         method: "POST",
         body: JSON.stringify({
           follow_up_at: followUpDateTime,
+          follow_up_status: formData.follow_up_status, // Include status in schedule request
           send_reminder_email: Boolean(formData.send_reminder_email),
           reminder_time_offset: formData.reminder_time_offset || "exact",
         }),
       });
+    } else if (formData.follow_up_status) {
+        // If no follow-up date but status is provided (should be "None" or empty if validated correctly, 
+        // but if user selected "done"/"pending" without date and we relax validation, handle it)
+        // However, per requirement "only required when followupAt is given", implies if date not given, 
+        // status is optional/can be None.
+        // We might want to save status even if no date is set, if the backend supports it.
+        // But typically follow-up status is tied to a scheduled item or the lead's general follow-up state.
+        // Let's assume we should update the lead's follow_up_status field directly if no schedule is made.
+        
+        // Check if we need to update status separately if it wasn't part of create payload
+        // The create payload didn't include follow_up_status. Let's add it there instead?
+        // Actually, let's just add it to the initial payload if it exists.
     }
 
     notifySuccess(

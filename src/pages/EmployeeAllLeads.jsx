@@ -56,42 +56,6 @@ import { LocalizationProvider, DatePicker } from "@mui/x-date-pickers";
 import { AdapterDayjs } from "@mui/x-date-pickers/AdapterDayjs";
 import dayjs from "dayjs";
 
-
-const getChipStyles = (status) => {
-  switch (status) {
-    case "Completed":
-      return {
-        backgroundColor: colors.greenAccent[800],
-        color: colors.greenAccent[400],
-        border: `1px solid ${colors.greenAccent[400]}`,
-      };
-    case "Pending":
-      return {
-        backgroundColor: colors.yellowAccent[800],
-        color: colors.yellowAccent[400],
-        border: `1px solid ${colors.yellowAccent[400]}`,
-      };
-    case "Rejected":
-      return {
-        backgroundColor: colors.redAccent[800],
-        color: colors.redAccent[400],
-        border: `1px solid ${colors.redAccent[400]}`,
-      };
-    case "In Progress":
-      return {
-        backgroundColor: colors.blueAccent[800],
-        color: colors.blueAccent[400],
-        border: `1px solid ${colors.blueAccent[400]}`,
-      };
-    default:
-      return {
-        backgroundColor: colors.grey[800],
-        color: colors.grey[400],
-        border: `1px solid ${colors.grey[400]}`,
-      };
-  }
-};
-
 const ALL_COLUMNS = [
   { key: "title", label: "Lead Title" },
   { key: "linkedIn", label: "LinkedIn" },
@@ -99,7 +63,6 @@ const ALL_COLUMNS = [
   { key: "assignedTo", label: "Assigned To" },
   { key: "followUpAt", label: "Follow-up At" },
   { key: "followupStatus", label: "Follow-up Status" },
-  { key: "isActive", label: "Active" },
   { key: "source", label: "Source" },
   { key: "lifecycle", label: "Lifecycle" },
   { key: "description", label: "Description" },
@@ -118,7 +81,6 @@ const DEFAULT_COLUMNS = [
   "assignedTo",
   "followUpAt",
   "followupStatus",
-  "isActive",
 ];
 
 const resolveLeadId = (lead) => {
@@ -152,7 +114,7 @@ export default function EmployeeAllLeads() {
   const [anchorEl, setAnchorEl] = useState(null);
   const [visibleColumns, setVisibleColumns] = useState(() => {
     const stored = JSON.parse(localStorage.getItem("leadColumns")) || DEFAULT_COLUMNS;
-    return stored.includes("isActive") ? stored : [...stored, "isActive"]; // ensure toggle column shows
+    return stored;
   });
   const tableMinWidth = Math.max(visibleColumns.length * 200, 1000);
   const [selectedLead, setSelectedLead] = useState(null);
@@ -699,9 +661,11 @@ export default function EmployeeAllLeads() {
 
       // Update cache so Kanban board reflects changes
       addLeadToCache(updatedLead);
+      const statusName = getStatusName(newStatusId);
+      notifySuccess(`Lead status updated to "${statusName}"`, { autoClose: 5000 });
     } catch (error) {
       console.error("Failed to update lead status:", error);
-      notifyError("Failed to update lead status");
+      notifyError("Failed to update lead status", { autoClose: 5000 });
     } finally {
       setStatusUpdatingLeadId(null);
     }
@@ -889,6 +853,7 @@ export default function EmployeeAllLeads() {
 
       // Update cache so Kanban board reflects changes
       addLeadToCache(updatedLead);
+      notifySuccess("Follow-up status updated", { autoClose: 5000 });
     } catch (error) {
       console.error("Failed to update follow-up status:", error);
       console.error("Error details:", {
@@ -900,12 +865,15 @@ export default function EmployeeAllLeads() {
       notifyError(
         `Failed to update follow-up status: ${
           error?.message || "Unknown error"
-        }`
+        }`,
+        { autoClose: 5000 }
       );
     } finally {
       setFollowUpStatusUpdatingLeadId(null);
     }
   };
+
+
 
   // Handler to toggle lead active status
   const handleToggleActive = async (lead) => {
@@ -1748,9 +1716,10 @@ export default function EmployeeAllLeads() {
 
       // Update cache / notify
       addLeadToCache(updatedLead);
+      notifySuccess("Lead assignment updated", { autoClose: 5000 });
     } catch (err) {
       console.error("Failed to assign lead:", err);
-      alert("Failed to assign lead. Please try a different user.");
+      notifyError("Failed to assign lead. Please try a different user.", { autoClose: 5000 });
     } finally {
       setAssignedUpdatingLeadId(null);
     }
@@ -1965,11 +1934,10 @@ export default function EmployeeAllLeads() {
         component={Paper}
         sx={{
           borderRadius: "12px",
-          boxShadow: "none",
-          width: "100%",
-          px: { xs: 2, md: 3 },
-          overflowX: "auto",
-          maxHeight: "calc(100vh - 240px)",
+            boxShadow: "none",
+            width: "100%",
+            overflowX: "auto",
+            maxHeight: "calc(100vh - 120px)",
         }}
       >
         <Table
@@ -2007,13 +1975,7 @@ export default function EmployeeAllLeads() {
                   Follow-up Status
                 </TableCell>
               )}
-              {visibleColumns.includes("isActive") && (
-                <TableCell
-                  sx={{ ...tableHeaderCellStyles, textAlign: "center" }}
-                >
-                  Active
-                </TableCell>
-              )}
+
               {visibleColumns.includes("source") && (
                 <TableCell sx={tableHeaderCellStyles}>Source</TableCell>
               )}
@@ -2438,9 +2400,6 @@ export default function EmployeeAllLeads() {
                               },
                             }}
                           >
-                            <MenuItem value="">
-                              <em>None</em>
-                            </MenuItem>
                             <MenuItem value="done">done</MenuItem>
                             <MenuItem value="pending">pending</MenuItem>
                           </Select>
@@ -2451,22 +2410,7 @@ export default function EmployeeAllLeads() {
                       </TableCell>
                     )}
 
-                    {visibleColumns.includes("isActive") && (
-                      <TableCell align="center">
-                        <Switch
-                          checked={
-                            lead.is_always_active || lead.always_active || false
-                          }
-                          onChange={() => handleToggleActive(lead)}
-                          disabled={
-                            activeTogglingLeadId ===
-                            (lead.id || lead.pk || lead.uuid)
-                          }
-                          size="small"
-                          color="primary"
-                        />
-                      </TableCell>
-                    )}
+
 
                     {visibleColumns.includes("source") && (
                       <TableCell>

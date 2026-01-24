@@ -512,6 +512,22 @@ export default function EditLeadModal({ open, leadId, lead: initialLead, onClose
       return false;
     }
 
+    // Validate FollowUpStatus requirement
+    // If FollowUpAt is set (meaning a date is selected), then FollowUpStatus is required
+    // We check if follow_up_at is present, and if so, follow_up_status must not be empty
+    if (formData.follow_up_at) {
+      const statusValue = formData.follow_up_status;
+      if (
+        statusValue === undefined ||
+        statusValue === null ||
+        (typeof statusValue === "string" && statusValue.trim() === "")
+      ) {
+        console.log("❌ Validation failed: Follow Up Status is required when Follow Up Date is set");
+        notifyError("Follow Up Status is required when a Follow Up Date is selected.");
+        return false;
+      }
+    }
+
     return true;
   };
 
@@ -598,11 +614,13 @@ export default function EditLeadModal({ open, leadId, lead: initialLead, onClose
         return null;
       })();
 
-      // Schedule follow-up - Only if reminder is enabled
-      if (formData.send_reminder_email) {
+      // Schedule follow-up - Only if reminder is enabled OR follow_up_at is set
+      // We want to update follow-up details even if reminder is not checked, if a date is set
+      if (followUpValue) {
         const followUpPayload = {
           follow_up_at: followUpValue,
-          send_reminder_email: true,
+          follow_up_status: formData.follow_up_status, // Include status
+          send_reminder_email: formData.send_reminder_email,
           reminder_time_offset: formData.reminder_time_offset || "exact",
         };
 

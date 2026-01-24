@@ -13,6 +13,7 @@ import { getColors } from "../../design-system/tokens";
 import { useTheme } from "../../contexts/ThemeContext";
 import { prefetchLeadData, getCachedLeadData } from "../../utils/prefetchData";
 import apiRequest from "../../components/services/api";
+import { isConvertedStatus } from "../../components/Dashboard/leadUtils";
 
 export default function EmployeeDashboard() {
   const navigate = useNavigate();
@@ -32,18 +33,24 @@ export default function EmployeeDashboard() {
         console.log("Employee Status API Response:", response);
         
         if (response) {
-          const statuses = (response.lead_statuses || []).map(s => ({
+          // Filter out converted statuses
+          const filteredLeadStatuses = (response.lead_statuses || []).filter(
+            (s) => !isConvertedStatus(s.status_name || s.name || "")
+          );
+
+          const statuses = filteredLeadStatuses.map((s) => ({
             id: s.status_id,
             name: s.status_name,
             count: s.count,
           }));
 
-          const totalLeadsCount = response.total_leads_count !== undefined 
-            ? response.total_leads_count 
-            : (response.lead_statuses || []).reduce((sum, s) => sum + s.count, 0);
+          const totalLeadsCount = filteredLeadStatuses.reduce(
+            (sum, s) => sum + s.count,
+            0
+          );
 
           setStatusData({
-            lead_statuses: response.lead_statuses || [],
+            lead_statuses: filteredLeadStatuses,
             employees: response.employees || [],
             statuses: statuses,
             total_leads_count: totalLeadsCount,
@@ -64,9 +71,38 @@ export default function EmployeeDashboard() {
       try {
         const response = await apiRequest("/api/common/dashboard/reminders/");
         console.log("Employee Reminders API Response:", response);
-        if (response) {
+        if (response && response.reminders) {
+          const rawReminders = response.reminders;
+
+          const filterRemindersCategory = (category) => {
+            if (!category || !Array.isArray(category.leads))
+              return { ...category, leads: [] };
+            return {
+              ...category,
+              leads: category.leads.filter((lead) => {
+                const statusVal =
+                  lead.status_label ||
+                  lead.statusName ||
+                  lead.status_name ||
+                  (lead.status && typeof lead.status === "object"
+                    ? lead.status.name
+                    : null);
+
+                if (statusVal) {
+                  return !isConvertedStatus(statusVal);
+                }
+                return true;
+              }),
+            };
+          };
+
           setRemindersData({
-            reminders: response.reminders || {},
+            reminders: {
+              overdue: filterRemindersCategory(rawReminders.overdue),
+              due_today: filterRemindersCategory(rawReminders.due_today),
+              upcoming: filterRemindersCategory(rawReminders.upcoming),
+              done: filterRemindersCategory(rawReminders.done),
+            },
           });
         }
       } catch (err) {
@@ -85,7 +121,7 @@ export default function EmployeeDashboard() {
         console.log("Employee Notes API Response:", response);
         if (response) {
           setNotesData({
-            unread_notes: response.unread_notes || { notes: [], unread_count: 0 },
+            unread_notes: response.unread_notes || response || { notes: [], unread_count: 0 },
           });
         }
       } catch (err) {

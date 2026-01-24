@@ -72,3 +72,16 @@ export const normalizeDateValue = (value) => {
   const parsed = new Date(value);
   return Number.isNaN(parsed.getTime()) ? null : parsed;
 };
+
+export const isConvertedStatus = (status) => {
+  if (!status) return false;
+  const statusName =
+    typeof status === "string"
+      ? status
+      : status.name || status.label || status.title || status.status_name || "";
+  
+  if (!statusName) return false;
+  
+  const normalized = String(statusName).toLowerCase();
+  return normalized.includes("converted") && normalized.includes("project");
+};

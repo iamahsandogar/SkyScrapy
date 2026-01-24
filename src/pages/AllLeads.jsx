@@ -26,6 +26,7 @@ import {
   DialogActions,
   CircularProgress,
   Switch,
+  useTheme,
 } from "@mui/material";
 import CloudDownloadIcon from "@mui/icons-material/CloudDownload";
 import AddIcon from "@mui/icons-material/Add";
@@ -97,7 +98,6 @@ const ALL_COLUMNS = [
   { key: "assignedTo", label: "Assigned To" },
   { key: "followUpAt", label: "Follow-up At" },
   { key: "followupStatus", label: "Follow-up Status" },
-  { key: "isActive", label: "Active" },
   { key: "source", label: "Source" },
   { key: "lifecycle", label: "Lead Lifecycle" },
   { key: "description", label: "Description" },
@@ -118,16 +118,7 @@ const DEFAULT_COLUMNS = [
   "assignedTo",
   "followUpAt",
   "followupStatus",
-  "isActive",
 ];
-const tableHeaderCellStyles = {
-  fontWeight: "bold",
-      whiteSpace: "normal",
-      position: "sticky",
-      top: 0,
-      zIndex: 2,
-      backgroundColor: colors.primary[400],
-};
 
 // const tableBodyCellStyles = {
 //   maxWidth: 150, // adjust based on preference
@@ -150,6 +141,18 @@ const resolveLeadId = (lead) => {
 };
 
 export default function AllLeads() {
+  const theme = useTheme();
+  const isDarkMode = theme.palette.mode === "dark";
+  const tableHeaderCellStyles = {
+    fontWeight: "bold",
+    whiteSpace: "normal",
+    position: "sticky",
+    top: 0,
+    zIndex: 2,
+    backgroundColor: isDarkMode ? "#000000" : colors.primary[400],
+    color: isDarkMode ? "#ffffff" : undefined,
+  };
+
   const location = useLocation();
   const [leads, setLeads] = useState([]);
   const [q, setQ] = useState("");
@@ -159,7 +162,7 @@ export default function AllLeads() {
   const [anchorEl, setAnchorEl] = useState(null);
   const [visibleColumns, setVisibleColumns] = useState(() => {
     const stored = JSON.parse(localStorage.getItem("leadColumns")) || DEFAULT_COLUMNS;
-    return stored.includes("isActive") ? stored : [...stored, "isActive"]; // ensure toggle column shows
+    return stored;
   });
   const tableMinWidth = Math.max(visibleColumns.length * 200, 1000);
   const [selectedLead, setSelectedLead] = useState(null);
@@ -754,12 +757,12 @@ export default function AllLeads() {
     setFollowUpUpdatingLeadId(leadId);
     try {
 
-      // Handle "None" - convert to null for API
+      // Handle "None" - convert to empty string for API
       const statusValue =
         newFollowUpStatus === "" ||
           newFollowUpStatus === null ||
           newFollowUpStatus === undefined
-          ? null
+          ? ""
           : newFollowUpStatus;
 
       // Always use the dedicated follow-up-status endpoint (even for "None"/null)
@@ -1881,7 +1884,7 @@ export default function AllLeads() {
         <TableContainer
           component={Paper}
           sx={{
-            borderRadius: "5px",
+            borderRadius: "12px",
             boxShadow: "none",
             width: "100%",
             overflowX: "auto",
@@ -1955,13 +1958,7 @@ export default function AllLeads() {
                     Position Title
                   </TableCell>
                 )}
-                {visibleColumns.includes("isActive") && (
-                  <TableCell
-                    sx={{ ...tableHeaderCellStyles, textAlign: "center" }}
-                  >
-                    Active
-                  </TableCell>
-                )}
+
                 <TableCell
                   sx={{ ...tableHeaderCellStyles, textAlign: "center" }}
                 >
@@ -2379,9 +2376,6 @@ export default function AllLeads() {
                                 },
                               }}
                             >
-                              <MenuItem value="">
-                                <em>None</em>
-                              </MenuItem>
                               <MenuItem value="done">done</MenuItem>
                               <MenuItem value="pending">pending</MenuItem>
                             </Select>
@@ -2445,24 +2439,7 @@ export default function AllLeads() {
                         </TableCell>
                       )}
 
-                      {visibleColumns.includes("isActive") && (
-                        <TableCell align="center">
-                          <Switch
-                            checked={
-                              lead.is_always_active ||
-                              lead.always_active ||
-                              false
-                            }
-                            onChange={() => handleToggleActive(lead)}
-                            disabled={
-                              activeTogglingLeadId ===
-                              (lead.id || lead.pk || lead.uuid)
-                            }
-                            size="small"
-                            color="primary"
-                          />
-                        </TableCell>
-                      )}
+
                       <TableCell align="center">
                         <IconButton
                           size="small"

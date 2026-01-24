@@ -27,13 +27,59 @@ const toArray = (maybeArray) => {
   return [];
 };
 
+const getAssignedToName = (lead) => {
+  if (!lead) return "";
+  
+  // 1. Check assigned_to object
+  const assigned = lead.assigned_to || lead.assignedTo;
+  if (assigned && typeof assigned === "object") {
+    // Check user_details for name (first_name + last_name)
+    if (assigned.user_details) {
+      const firstName = assigned.user_details.first_name || assigned.user_details.firstName || "";
+      const lastName = assigned.user_details.last_name || assigned.user_details.lastName || "";
+      const fullName = `${firstName} ${lastName}`.trim();
+      if (fullName) return fullName;
+    }
+    
+    // Check direct properties for name (first_name + last_name)
+    const firstName = assigned.first_name || assigned.firstName || "";
+    const lastName = assigned.last_name || assigned.lastName || "";
+    const fullName = `${firstName} ${lastName}`.trim();
+    if (fullName) return fullName;
+    
+    // Fallback to name or username (but NOT email)
+    if (assigned.name) return assigned.name;
+    if (assigned.username) return assigned.username;
+  }
+  
+  // 2. Check flat fields
+  if (lead.assigned_to_name) return lead.assigned_to_name;
+  if (lead.assignedToName) return lead.assignedToName;
+  
+  return "";
+};
+
 const buildLeadLabel = (lead = {}) => {
+  // 1. Prioritize Lead Title (as per user request - this is the main field)
   if (lead.title) return lead.title;
-  if (lead.name) return lead.name;
+  if (lead.lead_title) return lead.lead_title;
+  if (lead.leadTitle) return lead.leadTitle;
+
+  // 2. Try to construct full name from first/last name
+  const firstName = lead.first_name || lead.firstName || lead.contact_first_name;
+  const lastName = lead.last_name || lead.lastName || lead.contact_last_name;
+  const fullName = [firstName, lastName].filter(Boolean).join(" ");
+  if (fullName) return fullName;
+
+  // 3. Try company
   if (lead.company_name || lead.company)
     return lead.company_name || lead.company;
-  if (lead.email) return lead.email;
-  return "Untitled lead";
+
+  // 4. Try other name fields
+  if (lead.name) return lead.name;
+  
+  // 5. Don't use email - return "Untitled Lead" instead (as per user request)
+  return "Untitled Lead";
 };
 
 const normalizeNoteId = (noteOrId) => {
@@ -154,6 +200,7 @@ const buildAggregatedSummaryFromEntry = (entry, leadMap) => {
   if (!leadId) return null;
   const leadKey = String(leadId);
   const mappedLead = leadMap.get(leadKey);
+  
   const candidateTitle =
     entry.title ||
     entry.name ||
@@ -164,10 +211,27 @@ const buildAggregatedSummaryFromEntry = (entry, leadMap) => {
     entry.leadLabel ||
     entry.lead?.title ||
     entry.lead?.name;
-  const title =
-    candidateTitle ||
-    (mappedLead && buildLeadLabel(mappedLead)) ||
-    "Untitled lead";
+    
+  // Get lead name - prioritize title from candidate or mapped lead
+  let leadName = "Untitled Lead";
+  if (candidateTitle) {
+    leadName = candidateTitle;
+  } else if (mappedLead) {
+    // Use buildLeadLabel to get proper title from mapped lead
+    leadName = buildLeadLabel(mappedLead);
+  }
+  
+  // Get assigned to
+  let assignedTo = "";
+  if (mappedLead && mappedLead.assignedTo) {
+    assignedTo = mappedLead.assignedTo;
+  }
+  
+  // Format title
+  let title = leadName;
+  if (assignedTo) {
+    title = `${leadName} (Assigned to: ${assignedTo})`;
+  }
   const numericCount =
     entry.unread_count ??
     entry.unreadCount ??
@@ -232,12 +296,22 @@ export default function UnreadNotesSummaryContent({ data }) {
   const [markedAsReadLeadIds, setMarkedAsReadLeadIds] = useState(new Set());
 
   // Extract unread notes from props (from /api/common/dashboard/)
-  const unreadNotesData = data?.unread_notes || { notes: [], unread_count: 0 };
-  const rawNotes = isLoading ? [] : (unreadNotesData.notes || []);
+  const unreadNotesData = data?.unread_notes;
+  
+  const rawNotes = useMemo(() => {
+    if (isLoading || !unreadNotesData) return [];
+    
+    if (Array.isArray(unreadNotesData)) return unreadNotesData;
+    if (Array.isArray(unreadNotesData.notes)) return unreadNotesData.notes;
+    if (Array.isArray(unreadNotesData.results)) return unreadNotesData.results;
+    if (Array.isArray(unreadNotesData.data)) return unreadNotesData.data;
+    
+    return [];
+  }, [unreadNotesData, isLoading]);
   const remindersData = data?.reminders || {};
   
-  // Build a map of lead IDs to lead titles from reminders data
-  const leadTitleMap = useMemo(() => {
+  // Build a map of lead IDs to lead info from reminders data
+  const leadInfoMap = useMemo(() => {
     if (isLoading) return new Map();
     const map = new Map();
     const allLeads = [
@@ -248,7 +322,9 @@ export default function UnreadNotesSummaryContent({ data }) {
     ];
     allLeads.forEach(lead => {
       if (lead.id) {
-        map.set(String(lead.id), lead.title || lead.name || lead.company_name || "Untitled lead");
+        const name = buildLeadLabel(lead);
+        const assignedTo = getAssignedToName(lead);
+        map.set(String(lead.id), { name, assignedTo });
       }
     });
     return map;
@@ -266,14 +342,35 @@ export default function UnreadNotesSummaryContent({ data }) {
       
       const leadKey = String(leadId);
       if (!leadNotesMap.has(leadKey)) {
-        // Try to get title from leadTitleMap, then from note, then fallback
-        const leadTitle = leadTitleMap.get(leadKey) || 
-                         note.lead_title || 
-                         note.lead?.title || 
-                         "Untitled lead";
+        // Try to get info from leadInfoMap, then from note, then fallback
+        let leadName = "Untitled lead";
+        let assignedToName = "";
+        
+        // 1. Check if note has full lead object
+        if (note.lead && typeof note.lead === 'object') {
+           leadName = buildLeadLabel(note.lead);
+           assignedToName = getAssignedToName(note.lead);
+        } else {
+           // 2. Fallback to map
+           const info = leadInfoMap.get(leadKey);
+           if (info) {
+             leadName = info.name;
+             assignedToName = info.assignedTo;
+           } else {
+             // 3. Fallback to flat fields
+             leadName = note.lead_title || note.lead?.title || "Untitled lead";
+           }
+        }
+        
+        // Format final title: "Lead Name (Assigned to: Name)" or just "Lead Name"
+        let finalTitle = leadName;
+        if (assignedToName) {
+           finalTitle = `${leadName} (Assigned to: ${assignedToName})`;
+        }
+        
         leadNotesMap.set(leadKey, {
           id: leadKey,
-          title: leadTitle,
+          title: finalTitle,
           unreadCount: 0,
           lastNote: null,
           notes: [],
@@ -294,7 +391,7 @@ export default function UnreadNotesSummaryContent({ data }) {
     return Array.from(leadNotesMap.values())
       .filter(s => s.unreadCount > 0)
       .filter(s => !markedAsReadLeadIds.has(s.id));
-  }, [rawNotes, leadTitleMap, markedAsReadLeadIds, isLoading]);
+  }, [rawNotes, leadInfoMap, markedAsReadLeadIds, isLoading]);
 
   const totalUnread = useMemo(() => {
     if (isLoading) return 0;
@@ -555,7 +652,7 @@ export default function UnreadNotesSummaryContent({ data }) {
             onClick={handleGoToLead}
             disabled={!isCurrentSummaryReadable || dialogLoading}
           >
-            Open lead
+            All Leads
           </Button>
         </DialogActions>
       </Dialog>

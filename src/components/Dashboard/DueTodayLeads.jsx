@@ -1,4 +1,5 @@
 import React, { useMemo, useState } from "react";
+import { useNavigate } from "react-router-dom";
 import {
   Box,
   Typography,
@@ -97,6 +98,7 @@ const resolveLeadStatusLabel = (lead, statuses) => {
 };
 
 function DueTodayLeads({ data }) {
+  const navigate = useNavigate();
   const { mode } = useTheme();
   const themeColors = tokens(mode);
   const [dialogOpen, setDialogOpen] = useState(false);
@@ -298,6 +300,18 @@ function DueTodayLeads({ data }) {
           )}
         </DialogContent>
         <DialogActions>
+          <Button
+            onClick={() => navigate("/all-leads")}
+            sx={{
+              backgroundColor: themeColors.blueAccent[500],
+              color: "white",
+              "&:hover": {
+                backgroundColor: themeColors.blueAccent[600],
+              },
+            }}
+          >
+            All Leads
+          </Button>
           <Button onClick={handleCloseDialog}>Close</Button>
         </DialogActions>
       </Dialog>

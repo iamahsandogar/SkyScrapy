@@ -403,6 +403,7 @@ const LeadFormFields = ({
               renderValue: (val) => (val === "" ? "None" : val),
             }}
           >
+            <MenuItem value="">None</MenuItem>
             <MenuItem value="done">done</MenuItem>
             <MenuItem value="pending">pending</MenuItem>
           </TextField>

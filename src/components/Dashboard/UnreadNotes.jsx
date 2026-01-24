@@ -44,12 +44,22 @@ const resolveNoteDate = (note) => {
 };
 
 const resolveLeadLabel = (lead = {}) => {
+  // Prioritize Lead Title (as per user request)
   if (lead.title) return lead.title;
+  if (lead.lead_title) return lead.lead_title;
+  if (lead.leadTitle) return lead.leadTitle;
+  
+  // Try to construct full name from first/last name
+  const firstName = lead.first_name || lead.firstName || lead.contact_first_name;
+  const lastName = lead.last_name || lead.lastName || lead.contact_last_name;
+  const fullName = [firstName, lastName].filter(Boolean).join(" ");
+  if (fullName) return fullName;
+  
   if (lead.name) return lead.name;
   if (lead.company_name || lead.company)
     return lead.company_name || lead.company;
-  if (lead.email) return lead.email;
-  return "Untitled lead";
+  // Don't use email - return "Untitled Lead" instead (as per user request)
+  return "Untitled Lead";
 };
 
 const extractSummaryInfo = (entry) => {

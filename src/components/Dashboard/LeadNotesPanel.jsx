@@ -34,27 +34,45 @@ const getAssignedName = (lead) => {
     lead?.assigned_to || lead?.assignedTo || lead?.owner || lead?.employee;
   if (!assignee) return "";
   if (typeof assignee === "string") return assignee;
-  const nameParts = [
-    assignee.name,
-    `${assignee.first_name || ""} ${assignee.last_name || ""}`.trim(),
-    assignee.username,
-    assignee.email,
-  ];
-  return nameParts.find(Boolean) || "";
+  
+  // Check user_details for name (first_name + last_name) - don't use email
+  if (assignee.user_details) {
+    const firstName = assignee.user_details.first_name || assignee.user_details.firstName || "";
+    const lastName = assignee.user_details.last_name || assignee.user_details.lastName || "";
+    const fullName = `${firstName} ${lastName}`.trim();
+    if (fullName) return fullName;
+  }
+  
+  // Check direct properties for name (first_name + last_name) - don't use email
+  const firstName = assignee.first_name || assignee.firstName || "";
+  const lastName = assignee.last_name || assignee.lastName || "";
+  const fullName = `${firstName} ${lastName}`.trim();
+  if (fullName) return fullName;
+  
+  // Fallback to name or username (but NOT email)
+  if (assignee.name) return assignee.name;
+  if (assignee.username) return assignee.username;
+  
+  return "";
 };
 
 const formatLeadLabel = (lead) => {
-  if (!lead) return "Untitled lead";
+  if (!lead) return "Untitled Lead";
+  // Prioritize Lead Title (as per user request)
   if (lead.title) return lead.title;
+  if (lead.lead_title) return lead.lead_title;
+  if (lead.leadTitle) return lead.leadTitle;
+  
+  // Try to construct full name from first/last name
+  const firstName = lead.first_name || lead.firstName || lead.contact_first_name;
+  const lastName = lead.last_name || lead.lastName || lead.contact_last_name;
+  const fullName = [firstName, lastName].filter(Boolean).join(" ");
+  if (fullName) return fullName;
+  
   if (lead.name) return lead.name;
-  if (lead.company) return lead.company;
-  if (lead.email) return lead.email;
-  const firstName = lead.first_name || lead.firstName;
-  const lastName = lead.last_name || lead.lastName;
-  if (firstName || lastName) {
-    return `${firstName || ""} ${lastName || ""}`.trim();
-  }
-  return "Lead";
+  if (lead.company_name || lead.company) return lead.company_name || lead.company;
+  // Don't use email - return "Untitled Lead" instead (as per user request)
+  return "Untitled Lead";
 };
 
 const formatLeadDate = (value) => {

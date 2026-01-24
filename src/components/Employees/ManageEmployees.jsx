@@ -127,7 +127,8 @@ export default function ManageEmployees() {
     position: "sticky",
     top: 0,
     zIndex: 2,
-    backgroundColor: colors.primary[400],
+    backgroundColor: isDarkMode ? "#000000" : colors.primary[400],
+    color: isDarkMode ? "#ffffff" : undefined,
   };
 
   const tableCellStyle = {};
