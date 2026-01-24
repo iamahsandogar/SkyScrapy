@@ -15,6 +15,8 @@ import {
 import NotificationsActiveIcon from "@mui/icons-material/NotificationsActive";
 import apiRequest from "../services/api";
 import dayjs from "dayjs";
+import { LocalizationProvider, DateTimePicker } from "@mui/x-date-pickers";
+import { AdapterDayjs } from "@mui/x-date-pickers/AdapterDayjs";
 
 const FollowUpCell = ({ lead, onUpdate, notifySuccess, notifyError }) => {
   const [anchorEl, setAnchorEl] = useState(null);
@@ -22,7 +24,7 @@ const FollowUpCell = ({ lead, onUpdate, notifySuccess, notifyError }) => {
   
   // Local state for the popover form
   const [formData, setFormData] = useState({
-    follow_up_at: "",
+    follow_up_at: null,
     send_reminder_email: false,
     reminder_time_offset: "exact",
   });
@@ -45,8 +47,8 @@ const FollowUpCell = ({ lead, onUpdate, notifySuccess, notifyError }) => {
 
     setFormData({
       follow_up_at: (currentLead.follow_up_at || currentLead.followUpAt) 
-        ? dayjs(currentLead.follow_up_at || currentLead.followUpAt).format("YYYY-MM-DDTHH:mm") 
-        : "",
+        ? dayjs(currentLead.follow_up_at || currentLead.followUpAt) 
+        : null,
       send_reminder_email: currentLead.send_reminder_email || false,
       reminder_time_offset: currentLead.reminder_time_offset || "exact",
     });
@@ -68,7 +70,7 @@ const FollowUpCell = ({ lead, onUpdate, notifySuccess, notifyError }) => {
                  // Preserve local edit of date if user was super fast? Unlikely.
                  // But let's sync date too if it wasn't edited yet.
                  follow_up_at: (leadData.follow_up_at) 
-                    ? dayjs(leadData.follow_up_at).format("YYYY-MM-DDTHH:mm") 
+                    ? dayjs(leadData.follow_up_at) 
                     : prev.follow_up_at
              }));
         } catch (e) {
@@ -212,15 +214,15 @@ const FollowUpCell = ({ lead, onUpdate, notifySuccess, notifyError }) => {
       >
         <Box sx={{ p: 2, width: 300, display: "flex", flexDirection: "column", gap: 2 }}>
             <Typography variant="subtitle2" fontWeight="bold">Schedule Follow-up</Typography>
-            <TextField
-                label="Follow-up Date & Time"
-                type="datetime-local"
-                value={formData.follow_up_at}
-                onChange={(e) => setFormData({ ...formData, follow_up_at: e.target.value })}
-                fullWidth
-                InputLabelProps={{ shrink: true }}
-                size="small"
-            />
+            <LocalizationProvider dateAdapter={AdapterDayjs}>
+                <DateTimePicker
+                    label="Follow-up Date & Time"
+                    value={formData.follow_up_at}
+                    onChange={(newValue) => setFormData({ ...formData, follow_up_at: newValue })}
+                    slotProps={{ textField: { fullWidth: true, size: "small" } }}
+                    timeSteps={{ minutes: 1 }}
+                />
+            </LocalizationProvider>
             
             <FormControlLabel
                 control={

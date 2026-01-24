@@ -155,18 +155,6 @@ export default function AllProjects() {
         console.log("=== PARSED PROJECTS LIST ===", list);
         console.log("=== PROJECTS COUNT ===", Array.isArray(list) ? list.length : 0);
         
-        // Debug: Log first project's follow-up fields to see what the API returns
-        if (list.length > 0) {
-          const firstProject = list[0];
-          console.log("=== FIRST PROJECT FOLLOW-UP FIELDS ===", {
-            follow_up_at: firstProject.follow_up_at,
-            followUpAt: firstProject.followUpAt,
-            follow_up_status: firstProject.follow_up_status,
-            followupStatus: firstProject.followupStatus,
-            allKeys: Object.keys(firstProject).filter(k => k.toLowerCase().includes('follow'))
-          });
-        }
-        
         setProjects(Array.isArray(list) ? list : []);
 
         // Extract statuses and employees from the API response
@@ -380,9 +368,12 @@ export default function AllProjects() {
       case "assignedTo":
         return getEmployeeName(proj.assigned_to || proj.assignedTo);
       case "followUpAt":
-        return formatDateTime(proj.follow_up_at || proj.followUpAt || proj.followup_at) || "";
+        return formatDateTime(proj.follow_up_at || proj.followUpAt || proj.followup_at || proj.followupAt) || "";
       case "followupStatus":
         const status = proj.follow_up_status || proj.followupStatus || proj.followup_status;
+        if (typeof status === "object" && status !== null) {
+          return status.name || status.label || status.status || String(status.id || "");
+        }
         return status ? String(status) : "";
       case "isActive":
         return proj.is_active ?? proj.isActive ?? false;

@@ -662,21 +662,6 @@ export default function AllLeads() {
         contact_position_title: currentLead.contact_position_title || "",
         contact_linkedin_url: currentLead.contact_linkedin_url || "",
         lifecycle: lifecycleIdValue || null,
-        ...((currentLead.follow_up_at || currentLead.followUpAt) &&
-          (currentLead.follow_up_at || currentLead.followUpAt) !== null &&
-          (currentLead.follow_up_at || currentLead.followUpAt) !== ""
-          ? {
-            follow_up_at: currentLead.follow_up_at || currentLead.followUpAt,
-          }
-          : {}),
-        ...((currentLead.follow_up_status || currentLead.followupStatus) &&
-          (currentLead.follow_up_status || currentLead.followupStatus) !== null &&
-          (currentLead.follow_up_status || currentLead.followupStatus) !== ""
-          ? {
-            follow_up_status:
-              currentLead.follow_up_status || currentLead.followupStatus,
-          }
-          : {}),
       };
 
       // Update via API
