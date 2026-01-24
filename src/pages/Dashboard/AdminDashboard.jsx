@@ -14,6 +14,7 @@ import MonthlyRemindersCalendar from "../../components/Dashboard/MonthlyReminder
 import { getColors } from "../../design-system/tokens";
 import { useTheme } from "../../contexts/ThemeContext";
 import apiRequest from "../../components/services/api";
+import { parseEmployeesPayload } from "../../components/Leads/leadFormUtils";
 
 export default function AdminDashboard() {
   const navigate = useNavigate();
@@ -30,27 +31,40 @@ export default function AdminDashboard() {
   useEffect(() => {
     const fetchStatusData = async () => {
       try {
-        const response = await apiRequest("/api/common/dashboard/lead-statuses-employees/");
-        console.log("Status API Response:", response);
-        setEmployeeCount(response?.employee_count || 0);
+        const [dashboardResponse, allEmployeesResponse] = await Promise.all([
+          apiRequest("/api/common/dashboard/lead-statuses-employees/"),
+          apiRequest("/ui/employees/")
+        ]);
 
-        if (response) {
-          const statuses = (response.lead_statuses || []).map(s => ({
+        console.log("Status API Response:", dashboardResponse);
+
+        // Use the count from all employees (Active + Deactivated)
+        let totalEmployeeCount = 0;
+        if (allEmployeesResponse && allEmployeesResponse.counts && allEmployeesResponse.counts.total !== undefined) {
+           totalEmployeeCount = allEmployeesResponse.counts.total;
+        } else {
+           const allEmployees = parseEmployeesPayload(allEmployeesResponse);
+           totalEmployeeCount = allEmployees.length;
+        }
+        setEmployeeCount(totalEmployeeCount);
+
+        if (dashboardResponse) {
+          const statuses = (dashboardResponse.lead_statuses || []).map(s => ({
             id: s.status_id,
             name: s.status_name,
             count: s.count,
           }));
 
-          const totalLeadsCount = response.total_leads_count !== undefined 
-            ? response.total_leads_count 
-            : (response.lead_statuses || []).reduce((sum, s) => sum + s.count, 0);
+          const totalLeadsCount = dashboardResponse.total_leads_count !== undefined 
+            ? dashboardResponse.total_leads_count 
+            : (dashboardResponse.lead_statuses || []).reduce((sum, s) => sum + s.count, 0);
 
           setStatusData({
-            lead_statuses: response.lead_statuses || [],
-            employees: response.employees || [],
+            lead_statuses: dashboardResponse.lead_statuses || [],
+            employees: dashboardResponse.employees || [],
             statuses: statuses,
             total_leads_count: totalLeadsCount,
-            always_active: response.always_active || { count: 0 },
+            always_active: dashboardResponse.always_active || { count: 0 },
           });
         }
       } catch (err) {

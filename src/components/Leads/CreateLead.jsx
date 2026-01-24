@@ -707,12 +707,12 @@ export default function CreateLead() {
 
 
 const handleSubmit = async (e) => {
-  e.preventDefault();
+    e.preventDefault();
 
-  if (!validateForm()) {
-    notifyError("Please fill all required fields!");
-    return;
-  }
+    if (!validateForm()) {
+      notifyError("Please enter all required details",  );
+      return;
+    }
 
   const payload = {
     title: formData.title.trim(),
@@ -772,11 +772,25 @@ const handleSubmit = async (e) => {
     );
     navigate("/all-leads");
   } catch (error) {
-    console.error("Lead creation error:", error);
-    notifyError(
-      `Failed to create lead.\n\nError: ${error.message || "Unknown error"}`
-    );
-  }
+      console.error("Lead creation error:", error);
+      
+      let errorMessage = error.message || "Unknown error";
+      
+      // Check for duplicate lead title error
+      if (
+        errorMessage.toLowerCase().includes("already exists") ||
+        errorMessage.toLowerCase().includes("unique constraint") ||
+        errorMessage.toLowerCase().includes("unique") ||
+        (error.data?.title && Array.isArray(error.data.title) && error.data.title.some(msg => msg.toLowerCase().includes("exists") || msg.toLowerCase().includes("unique")))
+      ) {
+        notifyError("Lead already exists with this title");
+        return;
+      }
+
+      notifyError(
+        `Failed to create lead.\n\nError: ${errorMessage}`
+      );
+    }
 };
 
 

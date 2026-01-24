@@ -133,6 +133,7 @@ export default function EditLeadModal({ open, leadId, lead: initialLead, onClose
         status: cachedData?.statuses || [],
         source: cachedData?.sources || [],
         lifecycle: cachedData?.lifecycles || [],
+        assigned_to: cachedData?.assigned_to || null,
       });
 
       const employeePayload = parseEmployeesPayload(cachedData?.employees);
@@ -327,31 +328,50 @@ export default function EditLeadModal({ open, leadId, lead: initialLead, onClose
 
       // Ensure assigned user shows in dropdown even if not in cached employees
       if (finalAssignedTo) {
-        setEmployees((prev) => {
-          const has = prev.some((emp) => {
-            const empId = emp.id || emp.pk || emp.uuid;
-            const userDetails = emp.user_details || emp.userDetails || emp.user;
-            const empUserId =
-              emp.user_id ||
-              emp.userId ||
-              (userDetails && typeof userDetails === "object" && (userDetails.id || userDetails.user_id || userDetails.userId));
-            return (
-              (empId && String(empId) === String(finalAssignedTo)) ||
-              (empUserId && String(empUserId) === String(finalAssignedTo))
-            );
-          });
-          if (has) return prev;
+        // Use setTimeout to ensure this runs after the main employee state update
+        setTimeout(() => {
+          setEmployees((prev) => {
+            const has = prev.some((emp) => {
+              const empId = emp.id || emp.pk || emp.uuid;
+              const userDetails = emp.user_details || emp.userDetails || emp.user;
+              const empUserId =
+                emp.user_id ||
+                emp.userId ||
+                (userDetails && typeof userDetails === "object" && (userDetails.id || userDetails.user_id || userDetails.userId));
+              return (
+                (empId && String(empId) === String(finalAssignedTo)) ||
+                (empUserId && String(empUserId) === String(finalAssignedTo))
+              );
+            });
+            if (has) return prev;
 
-          const { firstName, lastName } = extractNameParts(originalAssigned || {});
-          const synthetic = {
-            id: String(finalAssignedTo),
-            firstName,
-            lastName,
-            user_id: String(finalAssignedTo),
-            user_details: originalAssigned?.user_details,
-          };
-          return [...prev, synthetic];
-        });
+            let { firstName, lastName } = extractNameParts(originalAssigned || {});
+            
+            // If name missing in originalAssigned (e.g. it was just an ID), try to find in availableEmployees
+            if (!firstName && !lastName && availableEmployees.length > 0) {
+                 const found = availableEmployees.find(e => {
+                     const eId = e.id || e.pk || e.uuid;
+                     return String(eId) === String(finalAssignedTo);
+                 });
+                 if (found) {
+                     const parts = extractNameParts(found);
+                     firstName = parts.firstName;
+                     lastName = parts.lastName;
+                 }
+            }
+
+            const synthetic = {
+              id: String(finalAssignedTo),
+              firstName: firstName || "Unknown",
+              lastName: lastName || "",
+              user_id: String(finalAssignedTo),
+              user_details: originalAssigned?.user_details,
+              // Add dummy role to prevent filtering issues if any
+              role: "employee" 
+            };
+            return [...prev, synthetic];
+          });
+        }, 0);
       }
 
       const preparedForm = {
@@ -439,6 +459,8 @@ export default function EditLeadModal({ open, leadId, lead: initialLead, onClose
         if (apiLifecycles) {
           setMeta((prev) => ({ ...prev, lifecycle: apiLifecycles }));
         }
+        let employeesForResolution = cachedEmployees;
+
         if (apiEmployeesRaw) {
           const parsedEmployees = parseEmployeesPayload(apiEmployeesRaw);
           const filteredEmployees = filterAssignableEmployees(
@@ -447,9 +469,10 @@ export default function EditLeadModal({ open, leadId, lead: initialLead, onClose
             userIsAdmin
           );
           setEmployees(filteredEmployees);
+          employeesForResolution = parsedEmployees;
         }
 
-        populateFormWithLeadData(apiLead, userIsAdmin, currentUserId, cachedEmployees);
+        populateFormWithLeadData(apiLead, userIsAdmin, currentUserId, employeesForResolution);
         // Ensure latest API lead is reflected even if cache was shown first
         setIsDataLoaded(true);
       } catch (error) {
@@ -670,7 +693,19 @@ export default function EditLeadModal({ open, leadId, lead: initialLead, onClose
       onClose?.();
     } catch (error) {
       console.error("Edit Lead Error:", error);
-      const message = error.message || "Failed to update lead";
+      let message = error.message || "Failed to update lead";
+
+      // Check for duplicate lead title error
+      if (
+        message.toLowerCase().includes("already exists") ||
+        message.toLowerCase().includes("unique constraint") ||
+        message.toLowerCase().includes("unique") ||
+        (error.data?.title && Array.isArray(error.data.title) && error.data.title.some(msg => msg.toLowerCase().includes("exists") || msg.toLowerCase().includes("unique")))
+      ) {
+        notifyError("Lead already exists with this title");
+        return;
+      }
+
       notifyError(message);
     } finally {
       setIsSubmitting(false);

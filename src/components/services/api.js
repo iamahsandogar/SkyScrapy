@@ -1,11 +1,58 @@
 const API_BASE_URL = import.meta.env.VITE_API_BASE_URL;
 
-const createApiError = (message, status) => {
+const createApiError = (message, status, data) => {
   const error = new Error(message);
   if (typeof status === "number") {
     error.status = status;
   }
+  if (data) {
+    error.data = data;
+  }
   return error;
+};
+
+const extractErrorMessage = (data, status) => {
+  let errorMessage = null;
+
+  // 1. Try standard string properties
+  if (data?.error && typeof data.error === 'string') errorMessage = data.error;
+  else if (data?.detail && typeof data.detail === 'string') errorMessage = data.detail;
+  else if (data?.message && typeof data.message === 'string') errorMessage = data.message;
+  else if (data?.msg && typeof data.msg === 'string') errorMessage = data.msg;
+
+  // 2. Scan object for field errors (skipping flags)
+  if (!errorMessage && data && typeof data === 'object') {
+    const keys = Object.keys(data);
+    for (const key of keys) {
+      if (['error', 'success', 'status', 'code', 'ok', 'is_active', 'is_staff'].includes(key)) continue;
+
+      const value = data[key];
+      // Case A: Array of strings (Django style: { title: ["Error msg"] })
+      if (Array.isArray(value) && value.length > 0 && typeof value[0] === 'string') {
+        errorMessage = value[0];
+        break;
+      } 
+      // Case B: Simple string (e.g. { error_msg: "Error" })
+      else if (typeof value === 'string') {
+        errorMessage = value;
+        break;
+      }
+      // Case C: Nested object (e.g. { data: { title: ["Error"] } })
+      else if (typeof value === 'object' && value !== null) {
+        // Recursive check (shallow)
+        if (value.title && Array.isArray(value.title)) errorMessage = value.title[0];
+        else if (value.error) errorMessage = value.error;
+        if (errorMessage) break;
+      }
+    }
+  }
+
+  // 3. Fallback: Log the full structure to console for debugging if still generic
+  if (!errorMessage) {
+    console.warn("API Error extraction failed. Raw data:", data);
+  }
+
+  return errorMessage || `HTTP error! status: ${status}`;
 };
 
 /**
@@ -106,8 +153,9 @@ async function apiRequest(endpoint, options = {}) {
         const retryData = await retryResponse.json();
         if (!retryResponse.ok) {
           throw createApiError(
-            retryData.error || `HTTP error! status: ${retryResponse.status}`,
-            retryResponse.status
+            extractErrorMessage(retryData, retryResponse.status),
+            retryResponse.status,
+            retryData
           );
         }
 
@@ -138,8 +186,9 @@ async function apiRequest(endpoint, options = {}) {
 
   if (!response.ok) {
     throw createApiError(
-      data.error || `HTTP error! status: ${response.status}`,
-      response.status
+      extractErrorMessage(data, response.status),
+      response.status,
+      data
     );
   }
 

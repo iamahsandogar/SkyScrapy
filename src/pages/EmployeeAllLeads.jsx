@@ -127,9 +127,12 @@ const resolveLeadId = (lead) => {
 };
 
 const tableHeaderCellStyles = {
-  whiteSpace: "normal",
-  overflowWrap: "anywhere",
-  fontWeight: 700,
+  fontWeight: "bold",
+      whiteSpace: "normal",
+      position: "sticky",
+      top: 0,
+      zIndex: 2,
+      backgroundColor: colors.primary[400],
 };
 
 const tableBodyCellStyles = {
@@ -628,8 +631,7 @@ export default function EmployeeAllLeads() {
 
   // Handler to update lead status
   const handleStatusChange = async (lead, newStatusId) => {
-    setActionLoading(true);
-    setActionMessage("Updating status...");
+    setStatusUpdatingLeadId(lead.id);
     try {
       const leadId = lead.id;
 
@@ -930,8 +932,8 @@ export default function EmployeeAllLeads() {
     const nextActive = !currentActive;
 
     setActiveTogglingLeadId(leadId);
-    setActionLoading(true);
-    setActionMessage("Updating active status...");
+    // setActionLoading(true);
+    // setActionMessage("Updating active status...");
     try {
       const response = await apiRequest(`/api/leads/${leadId}/always-active/`, {
         method: "PATCH",
@@ -961,8 +963,8 @@ export default function EmployeeAllLeads() {
       alert("Failed to update lead status");
     } finally {
       setActiveTogglingLeadId(null);
-      setActionLoading(false);
-      setActionMessage("");
+      // setActionLoading(false);
+      // setActionMessage("");
     }
   };
 
@@ -1987,13 +1989,13 @@ export default function EmployeeAllLeads() {
       >
         <Table
           stickyHeader
-          aria-label="basic table"
-          sx={{
-            tableLayout: "fixed",
-            width: "100%",
-            minWidth: tableMinWidth,
-            "& td, & th": { whiteSpace: "normal", overflowWrap: "anywhere" },
-          }}
+            aria-label="basic table"
+            sx={{
+              tableLayout: "fixed",
+              width: "100%",
+              minWidth: tableMinWidth,
+              "& td, & th": { whiteSpace: "normal", overflowWrap: "anywhere" },
+            }}
         >
           <TableHead>
             <TableRow>
@@ -2319,47 +2321,58 @@ export default function EmployeeAllLeads() {
 
                     {visibleColumns.includes("assignedTo") && (
                       <TableCell>
-                        <Select
-                          value={(() => {
-                            const id = getEmployeeIdValue(
-                              lead.assigned_to || lead.assignedTo
-                            );
-                            return id === null || id === undefined
-                              ? ""
-                              : String(id);
-                          })()}
-                          onChange={(e) =>
-                            handleAssignedChange(lead, e.target.value)
-                          }
-                          size="small"
-                          disabled={
-                            assignedUpdatingLeadId === resolveLeadId(lead)
-                          }
+                        <Box
                           sx={{
-                            minWidth: 160,
-                            height: 32,
-                            "& .MuiSelect-select": {
-                              padding: "4px 8px",
-                              fontSize: "0.875rem",
-                            },
-                          }}
-                          MenuProps={{
-                            PaperProps: {
-                              style: {
-                                maxHeight: 300,
-                              },
-                            },
+                            position: "relative",
+                            display: "inline-flex",
+                            alignItems: "center",
                           }}
                         >
-                          {assignedSelectOptions.map((option) => (
-                            <MenuItem
-                              key={option.value || "none"}
-                              value={option.value}
-                            >
-                              {option.label}
-                            </MenuItem>
-                          ))}
-                        </Select>
+                          <Select
+                            value={(() => {
+                              const id = getEmployeeIdValue(
+                                lead.assigned_to || lead.assignedTo
+                              );
+                              return id === null || id === undefined
+                                ? ""
+                                : String(id);
+                            })()}
+                            onChange={(e) =>
+                              handleAssignedChange(lead, e.target.value)
+                            }
+                            size="small"
+                            disabled={
+                              assignedUpdatingLeadId === resolveLeadId(lead)
+                            }
+                            sx={{
+                              minWidth: 160,
+                              height: 32,
+                              "& .MuiSelect-select": {
+                                padding: "4px 8px",
+                                fontSize: "0.875rem",
+                              },
+                            }}
+                            MenuProps={{
+                              PaperProps: {
+                                style: {
+                                  maxHeight: 300,
+                                },
+                              },
+                            }}
+                          >
+                            {assignedSelectOptions.map((option) => (
+                              <MenuItem
+                                key={option.value || "none"}
+                                value={option.value}
+                              >
+                                {option.label}
+                              </MenuItem>
+                            ))}
+                          </Select>
+                          {assignedUpdatingLeadId === resolveLeadId(lead) && (
+                            <CircularProgress size={16} sx={{ ml: 1 }} />
+                          )}
+                        </Box>
                       </TableCell>
                     )}
 

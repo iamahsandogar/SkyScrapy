@@ -3,11 +3,29 @@ import { Typography } from "@mui/material";
 
 export const parseEmployeesPayload = (payload) => {
   if (!payload) return [];
-  if (Array.isArray(payload)) return payload;
-  if (Array.isArray(payload.employees)) return payload.employees;
-  if (Array.isArray(payload.data)) return payload.data;
-  if (Array.isArray(payload.data?.employees)) return payload.data.employees;
-  return [];
+  
+  let employees = [];
+  
+  // Extract main employees array
+  if (Array.isArray(payload)) {
+    employees = payload;
+  } else if (Array.isArray(payload.employees)) {
+    employees = payload.employees;
+  } else if (Array.isArray(payload.data)) {
+    employees = payload.data;
+  } else if (Array.isArray(payload.data?.employees)) {
+    employees = payload.data.employees;
+  }
+
+  // If payload contains managers, append them to the list
+  if (payload.managers && Array.isArray(payload.managers)) {
+    // Avoid duplicates by checking IDs
+    const existingIds = new Set(employees.map(e => e.id));
+    const newManagers = payload.managers.filter(m => !existingIds.has(m.id));
+    employees = [...employees, ...newManagers];
+  }
+
+  return employees;
 };
 
 export const getEmployeeDisplayName = (employee = {}) => {

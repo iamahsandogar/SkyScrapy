@@ -22,13 +22,16 @@ import WarningAmberRoundedIcon from '@mui/icons-material/WarningAmberRounded';
 import CheckCircleOutlineRoundedIcon from '@mui/icons-material/CheckCircleOutlineRounded';
 import ErrorOutlineRoundedIcon from '@mui/icons-material/ErrorOutlineRounded';
 import BlockIcon from '@mui/icons-material/Block';
+import AddIcon from '@mui/icons-material/Add';
 import { useEffect, useState } from "react";
+import { useNavigate } from "react-router-dom";
 import { useTheme } from "@mui/material/styles";
 import Topbar from "../global/Topbar";
 import { colors, getColors } from "../../design-system/tokens";
 import apiRequest from "../services/api";
 import { getCachedLeadData } from "../../utils/prefetchData";
 import DotLoader from "../global/DotLoader";
+
 
 const parseLeadPayload = (payload) => {
   if (!payload) return [];
@@ -105,6 +108,7 @@ const getActionButtonStyles = (action) => {
 
 export default function ManageEmployees() {
   const theme = useTheme();
+  const navigate = useNavigate();
   const isDarkMode = theme.palette.mode === 'dark';
   const [employees, setEmployees] = useState([]);
   const [loading, setLoading] = useState(false);
@@ -116,7 +120,17 @@ export default function ManageEmployees() {
     employee: null,
     leadCount: 0,
   });
-  const tableCellStyle = { whiteSpace: "nowrap" };
+
+  const tableHeaderCellStyles = {
+    fontWeight: "bold",
+    whiteSpace: "normal",
+    position: "sticky",
+    top: 0,
+    zIndex: 2,
+    backgroundColor: colors.primary[400],
+  };
+
+  const tableCellStyle = {};
 
   /* ------------------------------------
      FETCH EMPLOYEES FROM BACKEND
@@ -216,7 +230,7 @@ export default function ManageEmployees() {
     }
 
     try {
-      const response = await apiRequest("/api/leads/?page_size=200");
+      const response = await apiRequest("/api/leads/");
       return parseLeadPayload(response);
     } catch (error) {
       console.error("Failed to load leads for logging", error);
@@ -361,13 +375,15 @@ export default function ManageEmployees() {
     const pk = employee.id;
     if (!pk) return;
     try {
+      setLoadingAction({ id: employee.id, type: 'toggle' });
       await apiRequest(`/ui/employees/${pk}/toggle-active/`, {
         method: "POST",
       });
-      setConfirmDialog({ open: false, action: null, employee: null, leadCount: 0 });
       fetchEmployees(); // Refresh list
     } catch (error) {
       console.error("Toggle failed", error);
+    } finally {
+      setLoadingAction({ id: null, type: null });
       setConfirmDialog({ open: false, action: null, employee: null, leadCount: 0 });
     }
   };
@@ -380,6 +396,8 @@ export default function ManageEmployees() {
     if (!pk) return;
     const count = leadCounts[pk] || 0;
     
+    
+
     // Always show beautiful confirmation dialog instead of window.confirm
     // If leads > 0, the dialog will show "Deletion Blocked" state
     // If leads == 0, the dialog will show "Confirm Delete" state
@@ -395,171 +413,198 @@ export default function ManageEmployees() {
     const pk = employee.id;
     if (!pk) return;
     try {
+      setLoadingAction({ id: employee.id, type: 'delete' });
       await apiRequest(`/ui/employees/${pk}/delete/`, {
         method: "POST",
         body: JSON.stringify({ email: employee.email }),
       });
-      setConfirmDialog({ open: false, action: null, employee: null, leadCount: 0 });
       fetchEmployees();
     } catch (error) {
       console.error("Delete failed", error);
+    } finally {
+      setLoadingAction({ id: null, type: null });
+      setConfirmDialog({ open: false, action: null, employee: null, leadCount: 0 });
     }
   };
 
+  /* ------------------------------------ 
+     RENDER
+  -------------------------------------*/
   return (
-    <>
+    <Box>
       <Topbar>
-        <Box
-          display="flex"
-          justifyContent="space-between"
-          alignItems="center"
-          width="100%"
-        >
+        <Box display="flex" justifyContent="space-between" alignItems="center" width="100%">
           <Typography variant="h5" fontWeight="bold">
-            Employee Management
+            Manage Employees
           </Typography>
+          <Button
+            variant="contained"
+            startIcon={<AddIcon />}
+            onClick={() => navigate("/create-employee")}
+          >
+            Create Employee
+          </Button>
         </Box>
       </Topbar>
 
-      <Paper sx={{ p: 2, borderRadius: 3, mt: 2, boxShadow: "none" }}>
-        {loading ? (
-          <Box
-            display="flex"
-            flexDirection="column"
-            alignItems="center"
-            justifyContent="center"
-            gap={1}
-            py={4}
-          >
-            <DotLoader size={48} color={colors.blueAccent[500]} />
-            <Typography color="text.secondary">Loading employees...</Typography>
-          </Box>
-        ) : employees.length === 0 ? (
-          <Typography color="text.secondary" sx={{ p: 2 }}>
-            No employees found.
-          </Typography>
-        ) : (
-            <Box sx={{ width: "100%", overflowX: "auto" }}>
-            <TableContainer sx={{ width: "100%", overflowX: "auto" }}>
-              <Table sx={{ width: "100%" }}>
-                <TableHead>
-                  <TableRow>
-                    <TableCell sx={tableCellStyle}>
-                      <b>Employee Details</b>
-                    </TableCell>
-                    <TableCell sx={tableCellStyle}>
-                      <b>Email Address</b>
-                    </TableCell>
-                    <TableCell sx={tableCellStyle}>
-                      <b>Status</b>
-                    </TableCell>
-                    <TableCell sx={tableCellStyle}>
-                      <b>Actions</b>
-                    </TableCell>
-                  </TableRow>
-                </TableHead>
-                <TableBody>
-                  {employees.map((emp) => (
-                    <TableRow key={emp.id || emp.pk || emp.uuid}>
-                      <TableCell sx={tableCellStyle}>
-                        <Box display="flex" alignItems="center" gap={1}>
-                          <Avatar sx={getAvatarStyles(emp)}>
-                            {emp.firstName?.[0] || emp.first_name?.[0] || "?"}
-                          </Avatar>
-                          {emp.firstName || emp.first_name}{" "}
-                          {emp.lastName || emp.last_name}
-                        </Box>
-                      </TableCell>
+      <TableContainer
+        component={Paper}
+        sx={{
+          borderRadius: "5px",
+          boxShadow: "none",
+          width: "100%",
+          overflow: "auto",
+          maxHeight: "calc(100vh - 120px)",
+          mt: 2,
+        }}
+      >
+        <Table stickyHeader
+            aria-label="basic table"
+            sx={{
+              tableLayout: "fixed",
+              width: "100%",
+              minWidth: 1000,
+              "& td, & th": { whiteSpace: "normal", overflowWrap: "anywhere" },
+            }}>
+          <TableHead>
+            <TableRow>
+              <TableCell sx={tableHeaderCellStyles}>
+                Employee Details
+              </TableCell>
+              <TableCell sx={tableHeaderCellStyles}>
+                Email Address
+              </TableCell>
+              <TableCell sx={tableHeaderCellStyles}>
+                Status
+              </TableCell>
+              <TableCell sx={tableHeaderCellStyles}>
+                Actions
+              </TableCell>
+            </TableRow>
+          </TableHead>
+          <TableBody>
+            {loading ? (
+              <TableRow>
+                <TableCell colSpan={4} align="center" sx={{ py: 4 }}>
+                  <Box
+                    display="flex"
+                    flexDirection="column"
+                    alignItems="center"
+                    justifyContent="center"
+                    gap={1}
+                  >
+                    <DotLoader size={48} color={colors.blueAccent[500]} />
+                    <Typography color="text.secondary">Loading employees...</Typography>
+                  </Box>
+                </TableCell>
+              </TableRow>
+            ) : employees.length === 0 ? (
+              <TableRow>
+                <TableCell colSpan={4} align="center" sx={{ py: 4 }}>
+                  <Typography color="text.secondary">
+                    No employees found.
+                  </Typography>
+                </TableCell>
+              </TableRow>
+            ) : (
+              employees.map((emp) => (
+                <TableRow key={emp.id || emp.pk || emp.uuid}>
+                  <TableCell sx={tableCellStyle}>
+                    <Box display="flex" alignItems="center" gap={1}>
+                      <Avatar sx={getAvatarStyles(emp)}>
+                        {emp.firstName?.[0] || emp.first_name?.[0] || "?"}
+                      </Avatar>
+                      {emp.firstName || emp.first_name}{" "}
+                      {emp.lastName || emp.last_name}
+                    </Box>
+                  </TableCell>
 
-                      <TableCell sx={tableCellStyle}>{emp.email}</TableCell>
+                  <TableCell sx={tableCellStyle}>{emp.email}</TableCell>
 
-                      <TableCell sx={tableCellStyle}>
-                        <Chip
-                          label={
-                            emp.status ||
-                            (emp.is_active ? "Active" : "Deactivated")
-                          }
-                          sx={{
-                            backgroundColor:
-                              emp.status === "Active" || emp.is_active
-                                ? colors.greenAccent[900]
-                                : colors.grey[900],
-                            color:
-                              emp.status === "Active" || emp.is_active
-                                ? colors.greenAccent[400]
-                                : colors.grey[500],
-                            border: `1px solid ${
-                              emp.status === "Active" || emp.is_active
-                                ? colors.greenAccent[400]
-                                : colors.grey[500]
-                            }`,
-                            fontWeight: "bold",
-                          }}
-                        />
-                      </TableCell>
+                  <TableCell sx={tableCellStyle}>
+                    <Chip
+                      label={
+                        emp.status ||
+                        (emp.is_active ? "Active" : "Deactivated")
+                      }
+                      sx={{
+                        backgroundColor:
+                          emp.status === "Active" || emp.is_active
+                            ? colors.greenAccent[900]
+                            : colors.grey[900],
+                        color:
+                          emp.status === "Active" || emp.is_active
+                            ? colors.greenAccent[400]
+                            : colors.grey[500],
+                        border: `1px solid ${
+                          emp.status === "Active" || emp.is_active
+                            ? colors.greenAccent[400]
+                            : colors.grey[500]
+                        }`,
+                        fontWeight: "bold",
+                      }}
+                    />
+                  </TableCell>
 
-                      <TableCell sx={tableCellStyle}>
-                        <Box display="flex" gap={1}>
-                          <Button
-                            size="small"
-                            variant="contained"
-                            onClick={() => toggleStatus(emp)}
-                            disabled={loading || (loadingAction.id === (emp.id || emp.pk) && loadingAction.type === 'toggle')}
-                            sx={{
-                              ...getActionButtonStyles(
-                                emp.status === "Active" || emp.is_active
-                                  ? "deactivate"
-                                  : "activate"
-                              ),
-                              textTransform: "none",
-                              fontWeight: "bold",
-                              borderRadius: 1,
-                              boxShadow: "none",
-                              minWidth: 90,
-                            }}
-                          >
-                            {loadingAction.id === (emp.id || emp.pk) && loadingAction.type === 'toggle' ? (
-                              <CircularProgress size={20} color="inherit" />
-                            ) : (
-                              emp.status === "Active" || emp.is_active ? "Deactivate" : "Activate"
-                            )}
-                          </Button>
+                  <TableCell sx={tableCellStyle}>
+                    <Box display="flex" gap={1}>
+                      <Button
+                        size="small"
+                        variant="contained"
+                        onClick={() => toggleStatus(emp)}
+                        disabled={loading || (loadingAction.id === (emp.id || emp.pk) && loadingAction.type === 'toggle')}
+                        sx={{
+                          ...getActionButtonStyles(
+                            emp.status === "Active" || emp.is_active
+                              ? "deactivate"
+                              : "activate"
+                          ),
+                          textTransform: "none",
+                          fontWeight: "bold",
+                          borderRadius: 1,
+                          boxShadow: "none",
+                          minWidth: 90,
+                        }}
+                      >
+                        {emp.status === "Active" || emp.is_active ? "Deactivate" : "Activate"}
+                      </Button>
 
-                          <Button
-                            size="small"
-                            variant="contained"
-                            onClick={() => handleDelete(emp)}
-                            disabled={loading || (loadingAction.id === (emp.id || emp.pk) && loadingAction.type === 'delete')}
-                            sx={{
-                              ...getActionButtonStyles("delete"),
-                              textTransform: "none",
-                              fontWeight: "bold",
-                              borderRadius: 1,
-                              boxShadow: "none",
-                              minWidth: 80,
-                            }}
-                          >
-                            {loadingAction.id === (emp.id || emp.pk) && loadingAction.type === 'delete' ? (
-                              <CircularProgress size={20} color="inherit" />
-                            ) : (
-                              "Delete"
-                            )}
-                          </Button>
-                        </Box>
-                      </TableCell>
-                    </TableRow>
-                  ))}
-                </TableBody>
-              </Table>
-            </TableContainer>
-          </Box>
-        )}
-      </Paper>
+                      <Button
+                        size="small"
+                        variant="contained"
+                        onClick={() => handleDelete(emp)}
+                        disabled={loading || (loadingAction.id === (emp.id || emp.pk) && loadingAction.type === 'delete')}
+                        sx={{
+                          ...getActionButtonStyles("delete"),
+                          textTransform: "none",
+                          fontWeight: "bold",
+                          borderRadius: 1,
+                          boxShadow: "none",
+                          minWidth: 80,
+                        }}
+                      >
+                        {loadingAction.id === (emp.id || emp.pk) && loadingAction.type === 'delete' ? (
+                          "Delete"
+                        ) : (
+                          "Delete"
+                        )}
+                      </Button>
+                    </Box>
+                  </TableCell>
+                </TableRow>
+              ))
+            )}
+          </TableBody>
+        </Table>
+      </TableContainer>
 
       {/* Unified Confirmation Dialog */}
       <Dialog
         open={confirmDialog.open}
-        onClose={() => setConfirmDialog({ open: false, action: null, employee: null, leadCount: 0 })}
+        onClose={() => {
+            if (loadingAction.id) return; // Prevent closing while loading
+            setConfirmDialog({ open: false, action: null, employee: null, leadCount: 0 });
+        }}
         aria-labelledby="confirm-dialog-title"
         maxWidth="xs"
         fullWidth
@@ -685,6 +730,7 @@ export default function ManageEmployees() {
               <Button 
                 onClick={() => setConfirmDialog({ open: false, action: null, employee: null, leadCount: 0 })} 
                 variant="outlined"
+                disabled={!!loadingAction.id}
                 sx={{ 
                     borderRadius: 2, 
                     textTransform: 'none', 
@@ -704,17 +750,12 @@ export default function ManageEmployees() {
                 onClick={async () => {
                   const { action, employee } = confirmDialog;
                   if (action === 'deactivate' || action === 'activate') {
-                    setLoadingAction({ id: employee.id, type: 'toggle' });
-                    setConfirmDialog({ open: false, action: null, employee: null, leadCount: 0 });
                     await performToggle(employee);
-                    setLoadingAction({ id: null, type: null });
                   } else if (action === 'delete') {
-                    setLoadingAction({ id: employee.id, type: 'delete' });
-                    setConfirmDialog({ open: false, action: null, employee: null, leadCount: 0 });
                     await performDelete(employee);
-                    setLoadingAction({ id: null, type: null });
                   }
                 }}
+                disabled={!!loadingAction.id}
                 variant="contained"
                 sx={{ 
                     borderRadius: 2, 
@@ -730,12 +771,16 @@ export default function ManageEmployees() {
                     }
                 }}
               >
-                Confirm {confirmDialog.action === "delete" ? "Delete" : confirmDialog.action === "deactivate" ? "Deactivation" : "Activation"}
+                {loadingAction.id ? (
+                  <CircularProgress size={24} color="inherit" />
+                ) : (
+                  `Confirm ${confirmDialog.action === "delete" ? "Delete" : confirmDialog.action === "deactivate" ? "Deactivation" : "Activation"}`
+                )}
               </Button>
             </>
           )}
         </DialogActions>
       </Dialog>
-    </>
+    </Box>
   );
 }

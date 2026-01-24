@@ -44,40 +44,6 @@ import { LocalizationProvider, DatePicker } from "@mui/x-date-pickers";
 import { AdapterDayjs } from "@mui/x-date-pickers/AdapterDayjs";
 import dayjs from "dayjs";
 
-const getChipStyles = (status) => {
-  switch (status) {
-    case "Completed":
-      return {
-        backgroundColor: colors.greenAccent[700],
-        color: colors.greenAccent[300],
-        border: `1px solid ${colors.greenAccent[400]}`,
-      };
-    case "Pending":
-      return {
-        backgroundColor: colors.yellowAccent[700],
-        color: colors.yellowAccent[300],
-        border: `1px solid ${colors.yellowAccent[400]}`,
-      };
-    case "Rejected":
-      return {
-        backgroundColor: colors.redAccent[700],
-        color: colors.redAccent[300],
-        border: `1px solid ${colors.redAccent[400]}`,
-      };
-    case "In Progress":
-      return {
-        backgroundColor: colors.blueAccent[700],
-        color: colors.blueAccent[300],
-        border: `1px solid ${colors.blueAccent[400]}`,
-      };
-    default:
-      return {
-        backgroundColor: colors.grey[700],
-        color: colors.grey[300],
-        border: `1px solid ${colors.grey[400]}`,
-      };
-  }
-};
 
 export default function AllProjects() {
   const [projects, setProjects] = useState([]);
@@ -120,6 +86,15 @@ export default function AllProjects() {
     "followupStatus",
     "isActive",
   ];
+
+  const tableHeaderCellStyles = {
+    fontWeight: "bold",
+    whiteSpace: "normal",
+    position: "sticky",
+    top: 0,
+    zIndex: 2,
+    backgroundColor: colors.primary[400],
+  };
 
   const [colAnchorEl, setColAnchorEl] = useState(null);
   const [visibleColumns, setVisibleColumns] = useState(() => {
@@ -179,6 +154,19 @@ export default function AllProjects() {
         const list = data?.projects || data?.results || data || [];
         console.log("=== PARSED PROJECTS LIST ===", list);
         console.log("=== PROJECTS COUNT ===", Array.isArray(list) ? list.length : 0);
+        
+        // Debug: Log first project's follow-up fields to see what the API returns
+        if (list.length > 0) {
+          const firstProject = list[0];
+          console.log("=== FIRST PROJECT FOLLOW-UP FIELDS ===", {
+            follow_up_at: firstProject.follow_up_at,
+            followUpAt: firstProject.followUpAt,
+            follow_up_status: firstProject.follow_up_status,
+            followupStatus: firstProject.followupStatus,
+            allKeys: Object.keys(firstProject).filter(k => k.toLowerCase().includes('follow'))
+          });
+        }
+        
         setProjects(Array.isArray(list) ? list : []);
 
         // Extract statuses and employees from the API response
@@ -371,11 +359,9 @@ export default function AllProjects() {
     const formatDateTime = (value) => {
       if (!value) return "";
       try {
-        const d = new Date(value);
-        if (Number.isNaN(d.getTime())) return String(value);
-        const dateStr = d.toLocaleDateString("en-US", { year: "numeric", month: "numeric", day: "numeric" });
-        const timeStr = d.toLocaleTimeString("en-US", { hour: "2-digit", minute: "2-digit", hour12: true });
-        return `${dateStr}, ${timeStr}`;
+        const d = dayjs(value);
+        if (!d.isValid()) return String(value);
+        return d.format("MMM D, YYYY h:mm A");
       } catch (e) {
         return String(value);
       }
@@ -394,9 +380,10 @@ export default function AllProjects() {
       case "assignedTo":
         return getEmployeeName(proj.assigned_to || proj.assignedTo);
       case "followUpAt":
-        return formatDateTime(proj.follow_up_at || proj.followUpAt) || "";
+        return formatDateTime(proj.follow_up_at || proj.followUpAt || proj.followup_at) || "";
       case "followupStatus":
-        return proj.follow_up_status || proj.followupStatus || "";
+        const status = proj.follow_up_status || proj.followupStatus || proj.followup_status;
+        return status ? String(status) : "";
       case "isActive":
         return proj.is_active ?? proj.isActive ?? false;
       case "source":
@@ -706,7 +693,7 @@ export default function AllProjects() {
                   <TableCell
                     key={col.key}
                     sx={{
-                      fontWeight: 700,
+                      ...tableHeaderCellStyles,
                       ...(col.key === "assignedTo"
                         ? { minWidth: 220, pr: 2 }
                         : {}),
@@ -717,12 +704,12 @@ export default function AllProjects() {
                   </TableCell>
                 ) : null
               )}
-              <TableCell sx={{ fontWeight: 700, textAlign: "center" }}>
+              <TableCell sx={{ ...tableHeaderCellStyles, textAlign: "center" }}>
                 Notes
               </TableCell>
               <TableCell
                 sx={{
-                  fontWeight: 700,
+                  ...tableHeaderCellStyles,
                   textAlign: "center",
                   width: 72,
                   whiteSpace: "nowrap",
@@ -808,6 +795,10 @@ export default function AllProjects() {
                           ? getProjectFieldValue(proj, "isActive")
                             ? "Yes"
                             : "No"
+                          : col.key === "followUpAt"
+                          ? getProjectFieldValue(proj, "followUpAt") || "-"
+                          : col.key === "followupStatus"
+                          ? getProjectFieldValue(proj, "followupStatus") || "-"
                           : getProjectFieldValue(proj, col.key) || "-"}
                       </TableCell>
                     ) : null

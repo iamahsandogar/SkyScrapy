@@ -121,11 +121,12 @@ const DEFAULT_COLUMNS = [
   "isActive",
 ];
 const tableHeaderCellStyles = {
-  fontWeight: 600,
-  whiteSpace: "normal",
-  position: "sticky",
-  top: 0,
-  zIndex: 2,
+  fontWeight: "bold",
+      whiteSpace: "normal",
+      position: "sticky",
+      top: 0,
+      zIndex: 2,
+      backgroundColor: colors.primary[400],
 };
 
 // const tableBodyCellStyles = {

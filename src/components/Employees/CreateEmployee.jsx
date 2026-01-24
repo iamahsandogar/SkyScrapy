@@ -13,6 +13,8 @@ import Visibility from "@mui/icons-material/Visibility";
 import VisibilityOff from "@mui/icons-material/VisibilityOff";
 import Topbar from "../global/Topbar";
 import apiRequest from "../services/api";
+import { useNotification } from "../../contexts/NotificationContext.jsx";
+
 const MuiTextFieldPadding = {
   "& .MuiOutlinedInput-root": {
     padding: 0,
@@ -26,6 +28,7 @@ const MuiTextFieldPadding = {
 export default function CreateEmployee() {
   // const [showPassword, setShowPassword] = useState(false);
   const [loading, setLoading] = useState(false);
+  const { notifyError, notifySuccess } = useNotification();
   const navigate = useNavigate();
 
   const [formData, setFormData] = useState({
@@ -47,7 +50,8 @@ export default function CreateEmployee() {
       !formData.last_name ||
       !formData.email
     ) {
-      alert("Please fill all required fields");
+      notifyError("Please fill all required fields!");
+    return;
       return;
     }
 
@@ -77,7 +81,9 @@ export default function CreateEmployee() {
         body: JSON.stringify(payload),
       });
 
-      alert("Employee Created Successfully");
+      notifySuccess("Employee updated successfully!",
+        { autoClose: 5000 }
+      );
       navigate("/management/manage-employees");
 
       setFormData({
@@ -90,7 +96,9 @@ export default function CreateEmployee() {
       });
     } catch (error) {
       console.error("Failed to create employee", error);
-      alert(error.message || "Failed to create employee. Please try again.");
+      notifyError("A user with this email already exists.",
+        { autoClose: 5000 }
+      );
     } finally {
       setLoading(false);
     }
@@ -194,7 +202,13 @@ export default function CreateEmployee() {
             <Box display="flex" justifyContent="flex-end">
               <Button
                 variant="contained"
-                sx={{ minWidth: 160, fontWeight: 600, fontSize: "1rem" }}
+                sx={{
+                  borderRadius: 2,
+                  textTransform: "none",
+                  fontWeight: "bold",
+                  px: 3,
+                  py: 1,
+                }}
                 onClick={handleSubmit}
                 disabled={loading}
                 type="submit"
