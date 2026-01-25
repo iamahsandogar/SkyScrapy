@@ -764,8 +764,6 @@ export default function EmployeeAllLeads() {
     const leadId = lead.id;
     setFollowUpStatusUpdatingLeadId(leadId);
     try {
-      const leadId = lead.id;
-
       // Handle "None" - try null instead of empty string if API doesn't accept empty strings
       const statusValue =
         newFollowUpStatus === "" ||
@@ -773,6 +771,16 @@ export default function EmployeeAllLeads() {
         newFollowUpStatus === undefined
           ? null
           : newFollowUpStatus;
+
+      // Validate: If Follow_up_status is provided, Follow_up_at must be present
+      const hasStatus = statusValue !== null && statusValue !== "" && statusValue !== undefined;
+      const hasFollowUpAt = lead.follow_up_at || lead.followUpAt;
+      
+      if (hasStatus && !hasFollowUpAt) {
+        notifyError("Follow_up_at is required when Follow_up_status is provided.");
+        setFollowUpStatusUpdatingLeadId(null);
+        return;
+      }
 
       // If setting to "None" (null), use PATCH endpoint with only follow_up_status
       // Otherwise use PATCH endpoint for follow-up-status

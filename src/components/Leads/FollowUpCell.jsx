@@ -95,6 +95,16 @@ const FollowUpCell = ({ lead, onUpdate, notifySuccess, notifyError }) => {
         return;
     }
 
+    // Validation: Follow-up date/time should not be in the past
+    if (formData.follow_up_at) {
+        const followUpDateTime = dayjs(formData.follow_up_at);
+        if (followUpDateTime.isBefore(dayjs(), 'minute')) {
+            if (notifyError) notifyError("Followupat should not be in past.");
+            setLoading(false);
+            return;
+        }
+    }
+
     const leadId = lead.id || lead.pk || lead.uuid;
     
     try {

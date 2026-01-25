@@ -3,6 +3,7 @@ import {
   Button,
   Paper,
   Typography,
+  CircularProgress,
 } from "@mui/material";
 import { useState, useEffect } from "react";
 import Topbar from "../global/Topbar";
@@ -31,6 +32,7 @@ export default function CreateLead() {
   const [loadingLead, setLoadingLead] = useState(false);
   const [isAdmin, setIsAdmin] = useState(false);
   const [isDataLoaded, setIsDataLoaded] = useState(false);
+  const [isSubmitting, setIsSubmitting] = useState(false);
 
   const [formData, setFormData] = useState({
     title: "",
@@ -662,6 +664,45 @@ export default function CreateLead() {
       }
     }
 
+    // Validate FollowUpAt requirement
+    // If FollowUpStatus is provided, then FollowUpAt is required
+    const statusValue = formData.follow_up_status;
+    const hasStatus = statusValue !== undefined && 
+                      statusValue !== null && 
+                      (typeof statusValue !== "string" || statusValue.trim() !== "");
+    
+    if (hasStatus && !formData.follow_up_at) {
+      console.log("❌ Validation failed: Follow_up_at is required when Follow_up_status is provided");
+      notifyError("Follow_up_at is required when Follow_up_status is provided.");
+      return false;
+    }
+
+    // Validate FollowUpAt is not in the past
+    if (formData.follow_up_at) {
+      const followUpDateTime = dayjs(formData.follow_up_at);
+      if (formData.follow_up_time) {
+        // Combine date and time
+        const combinedDateTime = followUpDateTime
+          .hour(dayjs(formData.follow_up_time).hour())
+          .minute(dayjs(formData.follow_up_time).minute())
+          .second(0)
+          .millisecond(0);
+        
+        if (combinedDateTime.isBefore(dayjs(), 'minute')) {
+          console.log("❌ Validation failed: Followupat should not be in past");
+          notifyError("Followupat should not be in past.");
+          return false;
+        }
+      } else {
+        // If only date is set, check if it's before today
+        if (followUpDateTime.isBefore(dayjs(), 'day')) {
+          console.log("❌ Validation failed: Followupat should not be in past");
+          notifyError("Followupat should not be in past.");
+          return false;
+        }
+      }
+    }
+
     console.log("✅ All validations passed");
     return true;
   };
@@ -698,6 +739,41 @@ const handleSubmit = async (e) => {
       return;
     }
 
+    setIsSubmitting(true);
+
+  // Build follow_up_at value if date/time is provided
+  const followUpAtValue = (() => {
+    if (formData.follow_up_at && formData.follow_up_time) {
+      const date = dayjs(formData.follow_up_at);
+      const time = dayjs(formData.follow_up_time);
+      if (!date.isValid() || !time.isValid()) {
+        console.warn("Invalid follow-up date or time:", { date: formData.follow_up_at, time: formData.follow_up_time });
+        return null;
+      }
+      const combined = date
+        .hour(time.hour())
+        .minute(time.minute())
+        .second(0)
+        .millisecond(0);
+      return combined.isValid() ? combined.toISOString() : null;
+    } else if (formData.follow_up_at) {
+      const date = dayjs(formData.follow_up_at);
+      if (!date.isValid()) {
+        console.warn("Invalid follow-up date:", formData.follow_up_at);
+        return null;
+      }
+      return date.startOf("day").toISOString();
+    }
+    return null;
+  })();
+
+  console.log("Follow-up values:", {
+    follow_up_at: formData.follow_up_at,
+    follow_up_time: formData.follow_up_time,
+    follow_up_status: formData.follow_up_status,
+    followUpAtValue: followUpAtValue
+  });
+
   const payload = {
     title: formData.title.trim(),
     status: formData.status,
@@ -711,10 +787,35 @@ const handleSubmit = async (e) => {
     contact_phone: formData.contact_phone || "",
     contact_position_title: formData.contact_position_title || "",
     contact_linkedin_url: formData.contact_linkedin_url || "",
-    // Include follow_up_status in initial payload if it's set (e.g. "done", "pending", or null/"")
-    // If it is "None" (empty string), send null or empty string depending on backend expectation.
-    follow_up_status: formData.follow_up_status || null, 
   };
+
+  // Include follow_up_at and follow_up_status if they are provided
+  // Backend requires follow_up_at when follow_up_status is provided
+  // Always include both together - never include status without date
+  if (followUpAtValue) {
+    payload.follow_up_at = followUpAtValue;
+    // If follow_up_at is set, include follow_up_status (use provided status or default to "pending")
+    payload.follow_up_status = formData.follow_up_status || "pending";
+  } else if (formData.follow_up_status && formData.follow_up_at) {
+    // Fallback: If status is set and date exists but followUpAtValue is null, try to recalculate
+    // This handles edge cases where date/time might not have been parsed correctly
+    console.warn("followUpAtValue is null but follow_up_at exists, attempting to recalculate");
+    try {
+      const date = dayjs(formData.follow_up_at);
+      const time = formData.follow_up_time ? dayjs(formData.follow_up_time) : null;
+      if (date.isValid()) {
+        const calculatedValue = time && time.isValid()
+          ? date.hour(time.hour()).minute(time.minute()).second(0).millisecond(0).toISOString()
+          : date.startOf("day").toISOString();
+        payload.follow_up_at = calculatedValue;
+        payload.follow_up_status = formData.follow_up_status;
+      }
+    } catch (e) {
+      console.error("Failed to calculate follow_up_at:", e);
+      // Don't include status without date - validation should have caught this
+    }
+  }
+  // Don't include follow_up_status if follow_up_at is not set (validation should prevent this case)
 
   // Admin assigns explicitly
   if (isAdmin && formData.assigned_to) {
@@ -734,36 +835,17 @@ const handleSubmit = async (e) => {
       throw new Error("Lead creation failed: no ID returned from API.");
     }
 
-    // 2️⃣ Schedule follow-up if date/time selected
-    if (formData.follow_up_at && formData.follow_up_time) {
-      const followUpDateTime = formData.follow_up_at
-        .hour(formData.follow_up_time.hour())
-        .minute(formData.follow_up_time.minute())
-        .second(0)
-        .millisecond(0)
-        .toISOString();
-
+    // 2️⃣ Schedule follow-up if date/time selected and reminder is enabled
+    if (followUpAtValue && formData.send_reminder_email) {
       await apiRequest(`/api/leads/${leadId}/schedule-follow-up/`, {
         method: "POST",
         body: JSON.stringify({
-          follow_up_at: followUpDateTime,
-          follow_up_status: formData.follow_up_status, // Include status in schedule request
+          follow_up_at: followUpAtValue,
+          follow_up_status: formData.follow_up_status || "pending",
           send_reminder_email: Boolean(formData.send_reminder_email),
           reminder_time_offset: formData.reminder_time_offset || "exact",
         }),
       });
-    } else if (formData.follow_up_status) {
-        // If no follow-up date but status is provided (should be "None" or empty if validated correctly, 
-        // but if user selected "done"/"pending" without date and we relax validation, handle it)
-        // However, per requirement "only required when followupAt is given", implies if date not given, 
-        // status is optional/can be None.
-        // We might want to save status even if no date is set, if the backend supports it.
-        // But typically follow-up status is tied to a scheduled item or the lead's general follow-up state.
-        // Let's assume we should update the lead's follow_up_status field directly if no schedule is made.
-        
-        // Check if we need to update status separately if it wasn't part of create payload
-        // The create payload didn't include follow_up_status. Let's add it there instead?
-        // Actually, let's just add it to the initial payload if it exists.
     }
 
     notifySuccess(
@@ -790,6 +872,8 @@ const handleSubmit = async (e) => {
       notifyError(
         `Failed to create lead.\n\nError: ${errorMessage}`
       );
+    } finally {
+      setIsSubmitting(false);
     }
 };
 
@@ -861,8 +945,16 @@ const handleSubmit = async (e) => {
                     console.log("🔘 Create Lead button clicked");
                     handleSubmit(e);
                   }}
+                  disabled={isSubmitting}
                 >
-                  {editId ? "Update Lead" : "Create Lead"}
+                  {isSubmitting ? (
+                    <Box sx={{ display: "flex", alignItems: "center", gap: 1 }}>
+                      <CircularProgress size={20} color="inherit" />
+                      {editId ? "Updating..." : "Creating..."}
+                    </Box>
+                  ) : (
+                    editId ? "Update Lead" : "Create Lead"
+                  )}
                 </Button>
               </Box>
             </Box>

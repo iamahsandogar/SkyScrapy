@@ -323,6 +323,9 @@ const LeadFormFields = ({
                   fullWidth: true,
                   sx: MuiDatePickerPadding,
                 },
+                actionBar: {
+                  actions: ['clear', 'cancel', 'accept'],
+                },
               }}
             />
           </LocalizationProvider>
@@ -341,6 +344,9 @@ const LeadFormFields = ({
                 textField: {
                   fullWidth: true,
                   sx: MuiDatePickerPadding,
+                },
+                actionBar: {
+                  actions: ['clear', 'cancel', 'accept'],
                 },
               }}
             />

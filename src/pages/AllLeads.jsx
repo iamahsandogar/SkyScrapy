@@ -748,6 +748,16 @@ export default function AllLeads() {
           ? ""
           : newFollowUpStatus;
 
+      // Validate: If Follow_up_status is provided, Follow_up_at must be present
+      const hasStatus = statusValue !== "" && statusValue !== null && statusValue !== undefined;
+      const hasFollowUpAt = lead.follow_up_at || lead.followUpAt;
+      
+      if (hasStatus && !hasFollowUpAt) {
+        notifyError("Follow_up_at is required when Follow_up_status is provided.");
+        setFollowUpUpdatingLeadId(null);
+        return;
+      }
+
       // Always use the dedicated follow-up-status endpoint (even for "None"/null)
       await apiRequest(`/api/leads/${leadId}/follow-up-status/`, {
         method: "PATCH",
@@ -865,6 +875,16 @@ export default function AllLeads() {
           currentLead = { ...currentLead, ...leadData };
         } catch (e) {
           console.warn("Failed to fetch fresh lead details for reminder check", e);
+        }
+      }
+
+      // Validate: Follow-up date/time should not be in the past
+      if (newDateTime && newDateTime !== "" && newDateTime !== null && newDateTime !== undefined) {
+        const followUpDateTime = dayjs(newDateTime);
+        if (followUpDateTime.isBefore(dayjs(), 'minute')) {
+          notifyError("Followupat should not be in past.");
+          setFollowUpAtUpdatingLeadId(null);
+          return;
         }
       }
 

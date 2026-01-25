@@ -7,6 +7,7 @@ import {
   Button,
   Box,
   Typography,
+  CircularProgress,
 } from "@mui/material";
 import dayjs from "dayjs";
 import apiRequest from "../services/api";
@@ -498,6 +499,45 @@ export default function EditLeadModal({ open, leadId, lead: initialLead, onClose
       }
     }
 
+    // Validate FollowUpAt requirement
+    // If FollowUpStatus is provided, then FollowUpAt is required
+    const statusValue = formData.follow_up_status;
+    const hasStatus = statusValue !== undefined && 
+                      statusValue !== null && 
+                      (typeof statusValue !== "string" || statusValue.trim() !== "");
+    
+    if (hasStatus && !formData.follow_up_at) {
+      console.log("❌ Validation failed: Follow_up_at is required when Follow_up_status is provided");
+      notifyError("Follow_up_at is required when Follow_up_status is provided.");
+      return false;
+    }
+
+    // Validate FollowUpAt is not in the past
+    if (formData.follow_up_at) {
+      const followUpDateTime = dayjs(formData.follow_up_at);
+      if (formData.follow_up_time) {
+        // Combine date and time
+        const combinedDateTime = followUpDateTime
+          .hour(dayjs(formData.follow_up_time).hour())
+          .minute(dayjs(formData.follow_up_time).minute())
+          .second(0)
+          .millisecond(0);
+        
+        if (combinedDateTime.isBefore(dayjs(), 'minute')) {
+          console.log("❌ Validation failed: Followupat should not be in past");
+          notifyError("Followupat should not be in past.");
+          return false;
+        }
+      } else {
+        // If only date is set, check if it's before today
+        if (followUpDateTime.isBefore(dayjs(), 'day')) {
+          console.log("❌ Validation failed: Followupat should not be in past");
+          notifyError("Followupat should not be in past.");
+          return false;
+        }
+      }
+    }
+
     return true;
   };
 
@@ -782,7 +822,14 @@ export default function EditLeadModal({ open, leadId, lead: initialLead, onClose
           onClick={handleSubmit}
           disabled={loadingLead || isSubmitting}
         >
-          Update Lead
+          {isSubmitting ? (
+            <Box sx={{ display: "flex", alignItems: "center", gap: 1 }}>
+              <CircularProgress size={20} color="inherit" />
+              Updating...
+            </Box>
+          ) : (
+            "Update Lead"
+          )}
         </Button>
       </DialogActions>
     </Dialog>
