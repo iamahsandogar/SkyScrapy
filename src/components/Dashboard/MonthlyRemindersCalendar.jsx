@@ -24,7 +24,6 @@ function MonthlyRemindersCalendarFallback() {
         backgroundColor: mode === "dark" ? colors.primary[600] : colors.bg[100],
         p: 3,
         display: "flex",
-        flexDirection: "column",
         alignItems: "center",
         justifyContent: "center",
       }}

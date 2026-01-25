@@ -28,7 +28,7 @@ export default function EmployeeDashboard() {
   useEffect(() => {
     const fetchStatusData = async () => {
       try {
-        const response = await apiRequest("/api/common/dashboard/lead-statuses/");
+        const response = await apiRequest("/api/common/dashboard/lead-statuses-employees/");
         console.log("Employee Status API Response:", response);
         
         if (response) {
