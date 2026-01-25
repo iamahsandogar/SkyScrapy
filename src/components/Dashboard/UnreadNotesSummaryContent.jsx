@@ -33,23 +33,15 @@ const getAssignedToName = (lead) => {
   // 1. Check assigned_to object
   const assigned = lead.assigned_to || lead.assignedTo;
   if (assigned && typeof assigned === "object") {
-    // Check user_details for name (first_name + last_name)
-    if (assigned.user_details) {
-      const firstName = assigned.user_details.first_name || assigned.user_details.firstName || "";
-      const lastName = assigned.user_details.last_name || assigned.user_details.lastName || "";
-      const fullName = `${firstName} ${lastName}`.trim();
-      if (fullName) return fullName;
-    }
+    // Check user_details
+    if (assigned.user_details?.name) return assigned.user_details.name;
+    if (assigned.user_details?.username) return assigned.user_details.username;
+    // Removed email fallback as per user request
     
-    // Check direct properties for name (first_name + last_name)
-    const firstName = assigned.first_name || assigned.firstName || "";
-    const lastName = assigned.last_name || assigned.lastName || "";
-    const fullName = `${firstName} ${lastName}`.trim();
-    if (fullName) return fullName;
-    
-    // Fallback to name or username (but NOT email)
+    // Check direct properties
     if (assigned.name) return assigned.name;
     if (assigned.username) return assigned.username;
+    // Removed email fallback as per user request
   }
   
   // 2. Check flat fields
@@ -60,14 +52,12 @@ const getAssignedToName = (lead) => {
 };
 
 const buildLeadLabel = (lead = {}) => {
-  // 1. Prioritize Lead Title (as per user request - this is the main field)
+  // 1. Prioritize Lead Title (as per user request)
   if (lead.title) return lead.title;
-  if (lead.lead_title) return lead.lead_title;
-  if (lead.leadTitle) return lead.leadTitle;
 
   // 2. Try to construct full name from first/last name
-  const firstName = lead.first_name || lead.firstName || lead.contact_first_name;
-  const lastName = lead.last_name || lead.lastName || lead.contact_last_name;
+  const firstName = lead.first_name || lead.firstName;
+  const lastName = lead.last_name || lead.lastName;
   const fullName = [firstName, lastName].filter(Boolean).join(" ");
   if (fullName) return fullName;
 
@@ -78,8 +68,10 @@ const buildLeadLabel = (lead = {}) => {
   // 4. Try other name fields
   if (lead.name) return lead.name;
   
-  // 5. Don't use email - return "Untitled Lead" instead (as per user request)
-  return "Untitled Lead";
+  // 5. Fallback to email if nothing else exists (better than "Untitled lead")
+  if (lead.email) return lead.email;
+  
+  return "Untitled lead";
 };
 
 const normalizeNoteId = (noteOrId) => {
@@ -212,13 +204,12 @@ const buildAggregatedSummaryFromEntry = (entry, leadMap) => {
     entry.lead?.title ||
     entry.lead?.name;
     
-  // Get lead name - prioritize title from candidate or mapped lead
-  let leadName = "Untitled Lead";
+  // Get lead name
+  let leadName = "Untitled lead";
   if (candidateTitle) {
     leadName = candidateTitle;
-  } else if (mappedLead) {
-    // Use buildLeadLabel to get proper title from mapped lead
-    leadName = buildLeadLabel(mappedLead);
+  } else if (mappedLead && mappedLead.name) {
+    leadName = mappedLead.name;
   }
   
   // Get assigned to
@@ -652,7 +643,7 @@ export default function UnreadNotesSummaryContent({ data }) {
             onClick={handleGoToLead}
             disabled={!isCurrentSummaryReadable || dialogLoading}
           >
-            All Leads
+            Open lead
           </Button>
         </DialogActions>
       </Dialog>

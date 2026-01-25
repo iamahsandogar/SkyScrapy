@@ -87,55 +87,10 @@ export default function ProjectDetailsModal({ open, onClose, project, getEmploye
             {getEmployeeName ? getEmployeeName(project.assigned_to || project.assignedTo) : "-"}
           </Typography>
           <Typography>
-            <strong>Follow-up At:</strong>{" "}
-            {(() => {
-              // Check all possible field name variations and nested structures
-              let followUpValue = 
-                project.follow_up_at || 
-                project.followUpAt || 
-                project.followup_at ||
-                project.followUp_at ||
-                project.scheduled_follow_up_at ||
-                project.scheduledFollowUpAt;
-              
-              // Check nested structures
-              if (!followUpValue && project.follow_up) {
-                followUpValue = project.follow_up.follow_up_at || project.follow_up.at || project.follow_up.date;
-              }
-              if (!followUpValue && project.followup) {
-                followUpValue = project.followup.follow_up_at || project.followup.at || project.followup.date;
-              }
-              if (!followUpValue && project.schedule) {
-                followUpValue = project.schedule.follow_up_at || project.schedule.at || project.schedule.date;
-              }
-              
-              return followUpValue ? formatDateTime(followUpValue) : "-";
-            })()}
+            <strong>Follow-up At:</strong> {formatDateTime(project.follow_up_at || project.followUpAt)}
           </Typography>
           <Typography>
-            <strong>Follow-up Status:</strong>{" "}
-            {(() => {
-              // Check all possible field name variations and nested structures
-              let statusValue = 
-                project.follow_up_status || 
-                project.followupStatus ||
-                project.followup_status ||
-                project.followUpStatus ||
-                project.follow_upStatus;
-              
-              // Check nested structures
-              if (!statusValue && project.follow_up) {
-                statusValue = project.follow_up.follow_up_status || project.follow_up.status;
-              }
-              if (!statusValue && project.followup) {
-                statusValue = project.followup.follow_up_status || project.followup.status;
-              }
-              if (!statusValue && project.schedule) {
-                statusValue = project.schedule.follow_up_status || project.schedule.status;
-              }
-              
-              return statusValue && statusValue !== "" ? String(statusValue) : "-";
-            })()}
+            <strong>Follow-up Status:</strong> {getField("followupStatus", "follow_up_status")}
           </Typography>
           <Typography>
             <strong>Source:</strong> {getField("source", "source")}

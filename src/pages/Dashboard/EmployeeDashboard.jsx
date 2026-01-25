@@ -11,7 +11,6 @@ import OverdueLeads from "../../components/Dashboard/OverdueLeads";
 import DueTodayLeads from "../../components/Dashboard/DueTodayLeads";
 import { getColors } from "../../design-system/tokens";
 import { useTheme } from "../../contexts/ThemeContext";
-import { prefetchLeadData, getCachedLeadData } from "../../utils/prefetchData";
 import apiRequest from "../../components/services/api";
 import { isConvertedStatus } from "../../components/Dashboard/leadUtils";
 
@@ -29,7 +28,7 @@ export default function EmployeeDashboard() {
   useEffect(() => {
     const fetchStatusData = async () => {
       try {
-        const response = await apiRequest("/api/common/dashboard/lead-statuses-employees/");
+        const response = await apiRequest("/api/common/dashboard/lead-statuses/");
         console.log("Employee Status API Response:", response);
         
         if (response) {
@@ -51,7 +50,7 @@ export default function EmployeeDashboard() {
 
           setStatusData({
             lead_statuses: filteredLeadStatuses,
-            employees: response.employees || [],
+            employees: [],
             statuses: statuses,
             total_leads_count: totalLeadsCount,
             always_active: response.always_active || { count: 0 },
@@ -132,14 +131,9 @@ export default function EmployeeDashboard() {
     fetchNotesData();
   }, []);
 
-  const warmUpLeadForm = useCallback(() => {
-    prefetchLeadData({ includeLeads: false });
-  }, []);
-
   const handleOpenCreateLead = useCallback(() => {
-    warmUpLeadForm();
     navigate("/create-lead");
-  }, [navigate, warmUpLeadForm]);
+  }, [navigate]);
 
   return (
     <Box>

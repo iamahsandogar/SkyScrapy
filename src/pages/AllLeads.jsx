@@ -570,23 +570,6 @@ export default function AllLeads() {
         contact_phone: currentLead.contact_phone || "",
         contact_position_title: currentLead.contact_position_title || "",
         contact_linkedin_url: currentLead.contact_linkedin_url || "",
-        // Only include follow_up_at and follow_up_status if they have valid values
-        // Status is independent of follow_up_at and follow_up_status, so we only include them if they exist
-        ...((currentLead.follow_up_at || currentLead.followUpAt) &&
-          (currentLead.follow_up_at || currentLead.followUpAt) !== null &&
-          (currentLead.follow_up_at || currentLead.followUpAt) !== ""
-          ? {
-            follow_up_at: currentLead.follow_up_at || currentLead.followUpAt,
-          }
-          : {}),
-        ...((currentLead.follow_up_status || currentLead.followupStatus) &&
-          (currentLead.follow_up_status || currentLead.followupStatus) !== null &&
-          (currentLead.follow_up_status || currentLead.followupStatus) !== ""
-          ? {
-            follow_up_status:
-              currentLead.follow_up_status || currentLead.followupStatus,
-          }
-          : {}),
       };
 
       // Update via API
@@ -893,7 +876,6 @@ export default function AllLeads() {
       // Prepare payload with all required lead fields, updating only follow_up_at
       const payload = {
         title: currentLead.title || "",
-        status: currentLead.status || null,
         source: currentLead.source || "",
         description: currentLead.description || "",
         company_name: currentLead.company_name || "",
@@ -1378,10 +1360,23 @@ export default function AllLeads() {
   const assignedSelectOptions = useMemo(() => {
     const opts = [];
     const seenIds = new Set();
+    const deactivatedIds = new Set();
 
     employees.forEach((emp, idx) => {
       // Extract ID - could be nested in user_details
       const id = getEmployeeIdValue(emp);
+
+      // Check if employee is deactivated
+      // We assume active if fields are missing, but if explicit inactive status/flag exists, we skip
+      const status = emp.status || (emp.user_details && emp.user_details.status);
+      const isActive = emp.is_active !== undefined ? emp.is_active : (emp.user_details && emp.user_details.is_active);
+      const isDeactivated = (status && status !== "Active") || isActive === false;
+
+      if (isDeactivated) {
+        if (id) deactivatedIds.add(String(id));
+        return;
+      }
+
       if (!id || seenIds.has(String(id))) return;
       seenIds.add(String(id));
 
@@ -1408,10 +1403,26 @@ export default function AllLeads() {
 
     // Ensure currently assigned IDs that may not be in employees array are present
     leads.forEach((lead) => {
-      const id = getEmployeeIdValue(lead.assigned_to || lead.assignedTo);
+      const assignedTo = lead.assigned_to || lead.assignedTo;
+      const id = getEmployeeIdValue(assignedTo);
+      
+      // If we know this ID belongs to a deactivated user, do not add it to options
+      if (id && deactivatedIds.has(String(id))) return;
+
+      // Check if the assigned object itself indicates deactivation
+      if (assignedTo && typeof assignedTo === 'object') {
+        const status = assignedTo.status || (assignedTo.user_details && assignedTo.user_details.status);
+        const isActive = assignedTo.is_active !== undefined ? assignedTo.is_active : (assignedTo.user_details && assignedTo.user_details.is_active);
+        
+        if ((status && status !== "Active") || isActive === false) {
+            if (id) deactivatedIds.add(String(id));
+            return;
+        }
+      }
+
       if (id && !seenIds.has(String(id))) {
         seenIds.add(String(id));
-        opts.push({ value: id, label: getEmployeeName(lead.assigned_to || lead.assignedTo) });
+        opts.push({ value: id, label: getEmployeeName(assignedTo) });
       }
     });
 
@@ -1549,6 +1560,7 @@ export default function AllLeads() {
     const assignedFilterOptions = useMemo(() => {
       const options = new Map();
       options.set("All", { value: "All", label: "All" });
+      const deactivatedNames = new Set();
 
       // Add employees from the employees array
       if (employees && employees.length > 0) {
@@ -1556,6 +1568,15 @@ export default function AllLeads() {
           const firstName = emp.firstName || emp.first_name || "";
           const lastName = emp.lastName || emp.last_name || "";
           const name = `${firstName} ${lastName}`.trim();
+
+          const status = emp.status || (emp.user_details && emp.user_details.status);
+          const isActive = emp.is_active !== undefined ? emp.is_active : (emp.user_details && emp.user_details.is_active);
+          const isDeactivated = (status && status !== "Active") || isActive === false;
+          if (isDeactivated) {
+             if (name) deactivatedNames.add(name);
+             return;
+          }
+
           if (name) {
             options.set(name, { value: name, label: name });
           }
@@ -1564,7 +1585,22 @@ export default function AllLeads() {
 
       // Also add from leads (in case some employees are not in the employees array)
       leads.forEach((lead) => {
-        const name = getEmployeeName(lead.assigned_to || lead.assignedTo);
+        const assignedTo = lead.assigned_to || lead.assignedTo;
+        const name = getEmployeeName(assignedTo);
+
+        if (name && deactivatedNames.has(name)) return;
+
+        // Check for deactivation on the assigned object
+        if (assignedTo && typeof assignedTo === 'object') {
+             const status = assignedTo.status || (assignedTo.user_details && assignedTo.user_details.status);
+             const isActive = assignedTo.is_active !== undefined ? assignedTo.is_active : (assignedTo.user_details && assignedTo.user_details.is_active);
+             
+             if ((status && status !== "Active") || isActive === false) {
+                if (name) deactivatedNames.add(name);
+                return;
+             }
+        }
+
         if (name && name !== "None") {
           options.set(name, { value: name, label: name });
         }

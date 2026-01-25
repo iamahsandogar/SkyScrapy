@@ -18,39 +18,7 @@ import apiRequest from "../services/api";
 import { clearLeadDataCache, addLeadToCache, getCachedLeadData } from "../../utils/prefetchData";
 import { useNotification } from "../../contexts/NotificationContext.jsx";
 import LeadFormFields from "./LeadFormFields";
-import { parseEmployeesPayload, isValidLinkedInURL } from "./leadFormUtils";
-
-const filterAssignableEmployees = (allEmployees = [], currentUserId = null, allowAll = false) => {
-  if (allowAll) return allEmployees;
-
-  const isAdminUser = (emp) => {
-    if (!emp || typeof emp !== "object") return false;
-    return (
-      emp.is_admin ||
-      emp.is_staff ||
-      emp.is_superuser ||
-      emp.isAdmin ||
-      emp.isStaff ||
-      emp.isSuperuser ||
-      emp.role === 0 ||
-      emp.role === "0" ||
-      emp.role === "admin" ||
-      emp.role === "Admin"
-    );
-  };
-
-  return (allEmployees || []).filter((emp) => {
-    const empId = emp.id || emp.pk || emp.uuid;
-    const userDetails = emp.user_details || emp.userDetails || emp.user;
-    const userId =
-      emp.user_id ||
-      emp.userId ||
-      (userDetails && typeof userDetails === "object" && (userDetails.id || userDetails.user_id || userDetails.userId));
-
-    const isSelf = currentUserId && (String(empId) === String(currentUserId) || String(userId) === String(currentUserId));
-    return isSelf || isAdminUser(emp);
-  });
-};
+import { parseEmployeesPayload, isValidLinkedInURL, filterAssignableEmployees } from "./leadFormUtils";
 
 export default function CreateLead() {
   const { editId } = useParams();
@@ -688,8 +656,8 @@ export default function CreateLead() {
         statusValue === null ||
         (typeof statusValue === "string" && statusValue.trim() === "")
       ) {
-        console.log("❌ Validation failed: Follow Up Status is required when Follow Up Date is set");
-        notifyError("Follow Up Status is required when a Follow Up Date is selected.");
+        console.log("❌ Validation failed: Follow-up-status is required when followUpAt is given");
+        notifyError("Follow-up-status is required when followUpAt is given");
         return false;
       }
     }
@@ -726,7 +694,7 @@ const handleSubmit = async (e) => {
     e.preventDefault();
 
     if (!validateForm()) {
-      notifyError("Please enter all required details",  );
+      // notifyError("Please enter all required details"); // Handled in validateForm
       return;
     }
 

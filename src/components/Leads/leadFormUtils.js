@@ -122,3 +122,42 @@ export const isValidLinkedInURL = (url) => {
     /^https:\/\/([a-z]{2,3}\.)?linkedin\.com\/(in|company)\/[A-Za-z0-9._-]+\/?$/i;
   return regex.test(url);
 };
+
+export const filterAssignableEmployees = (allEmployees = [], currentUserId = null, allowAll = false) => {
+  const activeEmployees = (allEmployees || []).filter((emp) => {
+     const status = emp.status || (emp.user_details && emp.user_details.status);
+     const isActive = emp.is_active !== undefined ? emp.is_active : (emp.user_details && emp.user_details.is_active);
+     const isDeactivated = (status && status !== "Active") || isActive === false;
+     return !isDeactivated;
+  });
+
+  if (allowAll) return activeEmployees;
+
+  const isAdminUser = (emp) => {
+    if (!emp || typeof emp !== "object") return false;
+    return (
+      emp.is_admin ||
+      emp.is_staff ||
+      emp.is_superuser ||
+      emp.isAdmin ||
+      emp.isStaff ||
+      emp.isSuperuser ||
+      emp.role === 0 ||
+      emp.role === "0" ||
+      emp.role === "admin" ||
+      emp.role === "Admin"
+    );
+  };
+
+  return activeEmployees.filter((emp) => {
+    const empId = emp.id || emp.pk || emp.uuid;
+    const userDetails = emp.user_details || emp.userDetails || emp.user;
+    const userId =
+      emp.user_id ||
+      emp.userId ||
+      (userDetails && typeof userDetails === "object" && (userDetails.id || userDetails.user_id || userDetails.userId));
+
+    const isSelf = currentUserId && (String(empId) === String(currentUserId) || String(userId) === String(currentUserId));
+    return isSelf || isAdminUser(emp);
+  });
+};

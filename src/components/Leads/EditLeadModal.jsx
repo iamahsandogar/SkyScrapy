@@ -18,7 +18,7 @@ import {
 import DotLoader from "../global/DotLoader";
 import { useNotification } from "../../contexts/NotificationContext.jsx";
 import LeadFormFields from "./LeadFormFields";
-import { parseEmployeesPayload, isValidLinkedInURL } from "./leadFormUtils";
+import { parseEmployeesPayload, isValidLinkedInURL, filterAssignableEmployees } from "./leadFormUtils";
 
 const EMPTY_FORM = {
   title: "",
@@ -69,37 +69,7 @@ const extractNameParts = (assignedObj = {}) => {
   return { firstName, lastName };
 };
 
-const filterAssignableEmployees = (allEmployees = [], currentUserId = null, allowAll = false) => {
-  if (allowAll) return allEmployees;
 
-  const isAdminUser = (emp) => {
-    if (!emp || typeof emp !== "object") return false;
-    return (
-      emp.is_admin ||
-      emp.is_staff ||
-      emp.is_superuser ||
-      emp.isAdmin ||
-      emp.isStaff ||
-      emp.isSuperuser ||
-      emp.role === 0 ||
-      emp.role === "0" ||
-      emp.role === "admin" ||
-      emp.role === "Admin"
-    );
-  };
-
-  return (allEmployees || []).filter((emp) => {
-    const empId = emp.id || emp.pk || emp.uuid;
-    const userDetails = emp.user_details || emp.userDetails || emp.user;
-    const userId =
-      emp.user_id ||
-      emp.userId ||
-      (userDetails && typeof userDetails === "object" && (userDetails.id || userDetails.user_id || userDetails.userId));
-
-    const isSelf = currentUserId && (String(empId) === String(currentUserId) || String(userId) === String(currentUserId));
-    return isSelf || isAdminUser(emp);
-  });
-};
 
 export default function EditLeadModal({ open, leadId, lead: initialLead, onClose, onSuccess }) {
   const [formData, setFormData] = useState(EMPTY_FORM);
@@ -522,8 +492,8 @@ export default function EditLeadModal({ open, leadId, lead: initialLead, onClose
         statusValue === null ||
         (typeof statusValue === "string" && statusValue.trim() === "")
       ) {
-        console.log("❌ Validation failed: Follow Up Status is required when Follow Up Date is set");
-        notifyError("Follow Up Status is required when a Follow Up Date is selected.");
+        console.log("❌ Validation failed: Follow-up-status is required when followUpAt is given");
+        notifyError("Follow-up-status is required when followUpAt is given");
         return false;
       }
     }
@@ -574,7 +544,7 @@ export default function EditLeadModal({ open, leadId, lead: initialLead, onClose
 
   const handleSubmit = async () => {
     if (!validateForm()) {
-      notifyError("Please fill all required fields !");
+      // notifyError("Please fill all required fields !"); // Handled in validateForm
       return;
     }
 
@@ -633,7 +603,7 @@ export default function EditLeadModal({ open, leadId, lead: initialLead, onClose
         } catch (error) {
           console.error("Failed to schedule follow-up:", error);
           notifyError(
-            "Lead updated, but you cannot schedule reminders for leads not assigned to you.",
+            "Lead updated, but you cannot schedule reminders for leads in past",
             { autoClose: 5000 }
           );
         }

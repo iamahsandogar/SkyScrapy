@@ -618,23 +618,6 @@ export default function EmployeeAllLeads() {
         contact_phone: currentLead.contact_phone || "",
         contact_position_title: currentLead.contact_position_title || "",
         contact_linkedin_url: currentLead.contact_linkedin_url || "",
-        // Only include follow_up_at and follow_up_status if they have valid values
-        // Status is independent of follow_up_at and follow_up_status, so we only include them if they exist
-        ...((currentLead.follow_up_at || currentLead.followUpAt) &&
-        (currentLead.follow_up_at || currentLead.followUpAt) !== null &&
-        (currentLead.follow_up_at || currentLead.followUpAt) !== ""
-          ? {
-              follow_up_at: currentLead.follow_up_at || currentLead.followUpAt,
-            }
-          : {}),
-        ...((currentLead.follow_up_status || currentLead.followupStatus) &&
-        (currentLead.follow_up_status || currentLead.followupStatus) !== null &&
-        (currentLead.follow_up_status || currentLead.followupStatus) !== ""
-          ? {
-              follow_up_status:
-                currentLead.follow_up_status || currentLead.followupStatus,
-            }
-          : {}),
       };
 
       // Update via API
@@ -791,37 +774,14 @@ export default function EmployeeAllLeads() {
           ? null
           : newFollowUpStatus;
 
-      // If setting to "None" (null), use PUT endpoint with full lead data
+      // If setting to "None" (null), use PATCH endpoint with only follow_up_status
       // Otherwise use PATCH endpoint for follow-up-status
       if (statusValue === null) {
-        // Get the current lead data to preserve all fields
-        const currentLead = leads.find((l) => l.id === leadId);
-        if (!currentLead) {
-          console.error("Lead not found:", leadId);
-          return;
-        }
-
-        // Use PUT endpoint to update the lead with null follow_up_status
-        const payload = {
-          title: currentLead.title || "",
-          status: currentLead.status || null,
-          source: currentLead.source || "",
-          description: currentLead.description || "",
-          company_name: currentLead.company_name || "",
-          contact_first_name: currentLead.contact_first_name || "",
-          contact_last_name: currentLead.contact_last_name || "",
-          contact_email: currentLead.contact_email || "",
-          contact_phone: currentLead.contact_phone || "",
-          contact_position_title: currentLead.contact_position_title || "",
-          contact_linkedin_url: currentLead.contact_linkedin_url || "",
-          follow_up_at:
-            currentLead.follow_up_at || currentLead.followUpAt || null,
-          follow_up_status: null, // Explicitly set to null for "None"
-        };
-
         await apiRequest(`/api/leads/${leadId}/`, {
-          method: "PUT",
-          body: JSON.stringify(payload),
+          method: "PATCH",
+          body: JSON.stringify({
+            follow_up_status: null,
+          }),
         });
       } else {
         // Use the dedicated follow-up-status endpoint for non-null values
@@ -1517,9 +1477,27 @@ export default function EmployeeAllLeads() {
   const assignedFilterOptions = useMemo(() => {
     const options = new Map();
     options.set("All", { value: "All", label: "All" });
+    const deactivatedNames = new Set();
+
+    // Helper to check deactivation
+    const isDeactivated = (emp) => {
+        if (!emp || typeof emp !== 'object') return false;
+        const status = emp.status || (emp.user_details && emp.user_details.status);
+        const isActive = emp.is_active !== undefined ? emp.is_active : (emp.user_details && emp.user_details.is_active);
+        return (status && status !== "Active") || isActive === false;
+    };
 
     leads.forEach((lead) => {
-      const name = getEmployeeName(lead.assigned_to || lead.assignedTo);
+      const assignedTo = lead.assigned_to || lead.assignedTo;
+      const name = getEmployeeName(assignedTo);
+      
+      if (name && deactivatedNames.has(name)) return;
+
+      if (isDeactivated(assignedTo)) {
+          if (name) deactivatedNames.add(name);
+          return;
+      }
+      
       if (name && name !== "None") {
         options.set(name, { value: name, label: name });
       }
@@ -1532,7 +1510,13 @@ export default function EmployeeAllLeads() {
       const firstName = emp.firstName || emp.first_name || "";
       const lastName = emp.lastName || emp.last_name || "";
       const name = `${firstName} ${lastName}`.trim();
-      if (name) {
+
+      if (isDeactivated(emp)) {
+         if (name) deactivatedNames.add(name);
+         return;
+      }
+
+      if (name && !deactivatedNames.has(name)) {
         options.set(name, { value: name, label: name });
       }
     });
@@ -1544,10 +1528,25 @@ export default function EmployeeAllLeads() {
   const assignedSelectOptions = useMemo(() => {
     const opts = [];
     const seenIds = new Set();
+    const deactivatedIds = new Set();
+
+    // Helper to check deactivation
+    const isDeactivated = (emp) => {
+        if (!emp || typeof emp !== 'object') return false;
+        const status = emp.status || (emp.user_details && emp.user_details.status);
+        const isActive = emp.is_active !== undefined ? emp.is_active : (emp.user_details && emp.user_details.is_active);
+        return (status && status !== "Active") || isActive === false;
+    };
 
     // First, include all users from API response (this includes both role 0 and role 1 users)
     users.forEach((user) => {
       const id = getEmployeeIdValue(user);
+      
+      if (isDeactivated(user)) {
+          if (id) deactivatedIds.add(String(id));
+          return;
+      }
+
       if (!id || seenIds.has(String(id))) return;
       seenIds.add(String(id));
       opts.push({ value: String(id), label: buildEmployeeLabel(user) });
@@ -1559,6 +1558,12 @@ export default function EmployeeAllLeads() {
       const employeesFromCache = cachedData?.employees || [];
       employeesFromCache.forEach((emp) => {
         const id = getEmployeeIdValue(emp);
+        
+        if (isDeactivated(emp)) {
+            if (id) deactivatedIds.add(String(id));
+            return;
+        }
+
         if (!id || seenIds.has(String(id))) return;
         seenIds.add(String(id));
         opts.push({ value: String(id), label: buildEmployeeLabel(emp) });
@@ -1569,6 +1574,14 @@ export default function EmployeeAllLeads() {
     leads.forEach((lead) => {
       const emp = lead.assigned_to || lead.assignedTo;
       const id = getEmployeeIdValue(emp);
+      
+      if (id && deactivatedIds.has(String(id))) return;
+
+      if (isDeactivated(emp)) {
+          if (id) deactivatedIds.add(String(id));
+          return;
+      }
+
       if (!id || seenIds.has(String(id))) return;
       seenIds.add(String(id));
       opts.push({ value: String(id), label: buildEmployeeLabel(emp) });
