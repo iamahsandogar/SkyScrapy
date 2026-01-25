@@ -154,3 +154,66 @@ export const isProject = (lead, projectIds = null) => {
   
   return false;
 };
+
+export const getAssignedToName = (lead, employees = []) => {
+  if (!lead) return "";
+  const assignedTo = lead.assigned_to || lead.assignedTo;
+  if (!assignedTo && assignedTo !== 0) return "";
+  
+  // If it's a string (name)
+  if (typeof assignedTo === "string" && isNaN(assignedTo)) return assignedTo;
+
+  // If it's an object
+  if (typeof assignedTo === "object" && assignedTo !== null) {
+    // Try user_details first
+    if (assignedTo.user_details) {
+      const { first_name, last_name, firstName, lastName } = assignedTo.user_details;
+      const f = first_name || firstName || "";
+      const l = last_name || lastName || "";
+      const name = `${f} ${l}`.trim();
+      if (name) return name;
+    }
+    
+    // Try direct fields
+    if (assignedTo.name) return assignedTo.name;
+    if (assignedTo.full_name) return assignedTo.full_name;
+    
+    // Try constructing from first/last
+    const f = assignedTo.first_name || assignedTo.firstName || "";
+    const l = assignedTo.last_name || assignedTo.lastName || "";
+    const name = `${f} ${l}`.trim();
+    if (name) return name;
+  }
+
+  // If we have employees list and assignedTo might be an ID
+  if (employees && employees.length > 0) {
+    let idToFind = null;
+    if (typeof assignedTo === 'object' && assignedTo !== null) {
+      idToFind = assignedTo.id || assignedTo.pk || assignedTo.uuid;
+    } else {
+      idToFind = assignedTo;
+    }
+
+    if (idToFind) {
+      const idStr = String(idToFind);
+      const emp = employees.find(e => String(e.id || e.pk || e.uuid) === idStr);
+      if (emp) {
+        // construct name
+        const f = emp.first_name || emp.firstName || "";
+        const l = emp.last_name || emp.lastName || "";
+        const name = `${f} ${l}`.trim();
+        if (name) return name;
+      }
+    }
+  }
+  
+  // Return ID as fallback if nothing else found
+  if (typeof assignedTo !== 'object') return String(assignedTo);
+  
+  // If it's an object but we couldn't find a name or look it up, try to return the ID
+  if (typeof assignedTo === 'object' && assignedTo !== null) {
+    return String(assignedTo.id || assignedTo.pk || assignedTo.uuid || "");
+  }
+
+  return "";
+};

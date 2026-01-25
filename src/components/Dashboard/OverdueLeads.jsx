@@ -22,6 +22,7 @@ import {
   resolveTextValue,
   formatFollowUpLabel,
   isProject,
+  getAssignedToName,
 } from "./leadUtils";
 
 const formatDateLabel = (value) => {
@@ -126,6 +127,7 @@ function OverdueLeads({ data }) {
   // Extract data from props (from /api/common/dashboard/)
   const statuses = useMemo(() => data?.statuses || [], [data?.statuses]);
   const remindersData = useMemo(() => data?.reminders || {}, [data?.reminders]);
+  const employees = useMemo(() => data?.employees || [], [data?.employees]);
 
   // Get overdue leads (excluding projects)
   const overdueLeads = useMemo(() => {
@@ -326,6 +328,16 @@ function OverdueLeads({ data }) {
                     primary={
                       <Typography fontWeight={600}>
                         {getLeadTitle(lead)}
+                        {getAssignedToName(lead, employees) && (
+                          <Typography
+                            component="span"
+                            variant="body2"
+                            color="text.secondary"
+                            sx={{ ml: 1, fontWeight: "normal" }}
+                          >
+                            (Assigned: {getAssignedToName(lead, employees)})
+                          </Typography>
+                        )}
                       </Typography>
                     }
                     secondary={

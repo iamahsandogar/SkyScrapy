@@ -392,10 +392,10 @@ export default function AdminDashboard() {
         }}
       >
         <OverdueLeads 
-          data={remindersData ? { ...remindersData, statuses: statusData?.statuses } : null} 
+          data={remindersData ? { ...remindersData, statuses: statusData?.statuses, employees: statusData?.employees } : null} 
         />
         <DueTodayLeads 
-          data={remindersData ? { ...remindersData, statuses: statusData?.statuses } : null} 
+          data={remindersData ? { ...remindersData, statuses: statusData?.statuses, employees: statusData?.employees } : null} 
         />
         <UnreadNotesSummary 
           data={notesData ? { ...notesData, reminders: remindersData?.reminders } : null} 

@@ -23,6 +23,7 @@ import {
   formatFollowUpLabel,
   normalizeDateValue,
   isProject,
+  getAssignedToName,
 } from "./leadUtils";
 
 const extractStatusName = (statusObj) => {
@@ -110,6 +111,7 @@ function DueTodayLeads({ data }) {
   // Extract data from props (from /api/common/dashboard/)
   const remindersData = data?.reminders || {};
   const statuses = data?.statuses || [];
+  const employees = data?.employees || [];
 
   // Get due today leads (excluding projects)
   const dueTodayLeads = useMemo(() => {
@@ -279,6 +281,16 @@ function DueTodayLeads({ data }) {
                         primary={
                           <Typography fontWeight={600} color={titleColor}>
                             {getLeadTitle(lead)}
+                            {getAssignedToName(lead, employees) && (
+                              <Typography
+                                component="span"
+                                variant="body2"
+                                color="text.secondary"
+                                sx={{ ml: 1, fontWeight: "normal" }}
+                              >
+                                (Assigned: {getAssignedToName(lead, employees)})
+                              </Typography>
+                            )}
                           </Typography>
                         }
                         secondary={
