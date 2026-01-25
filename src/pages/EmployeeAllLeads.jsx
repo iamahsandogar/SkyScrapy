@@ -25,6 +25,7 @@ import {
   DialogActions,
   Switch,
   CircularProgress,
+  useTheme,
 } from "@mui/material";
 
 import CloudDownloadIcon from "@mui/icons-material/CloudDownload";
@@ -88,15 +89,6 @@ const resolveLeadId = (lead) => {
   return lead.id ?? lead.pk ?? lead.uuid ?? lead.lead_id ?? lead.leadId ?? null;
 };
 
-const tableHeaderCellStyles = {
-  fontWeight: "bold",
-      whiteSpace: "normal",
-      position: "sticky",
-      top: 0,
-      zIndex: 2,
-      backgroundColor: colors.primary[400],
-};
-
 const tableBodyCellStyles = {
   maxWidth: 150,
   overflow: "hidden",
@@ -106,6 +98,19 @@ const tableBodyCellStyles = {
 
 export default function EmployeeAllLeads() {
   const location = useLocation();
+  const theme = useTheme();
+  const isDarkMode = theme.palette.mode === "dark";
+  
+  const tableHeaderCellStyles = {
+    fontWeight: "bold",
+    whiteSpace: "normal",
+    position: "sticky",
+    top: 0,
+    zIndex: 2,
+    backgroundColor: isDarkMode ? "#000000" : colors.primary[400],
+    color: isDarkMode ? "#ffffff" : undefined,
+  };
+  
   const [leads, setLeads] = useState([]);
   const [q, setQ] = useState("");
   const [statusFilter, setStatusFilter] = useState("ALL");
@@ -1963,13 +1968,13 @@ export default function EmployeeAllLeads() {
       >
         <Table
           stickyHeader
-            aria-label="basic table"
-            sx={{
-              tableLayout: "fixed",
-              width: "100%",
-              minWidth: tableMinWidth,
-              "& td, & th": { whiteSpace: "normal", overflowWrap: "anywhere" },
-            }}
+          aria-label="basic table"
+          sx={{
+            tableLayout: "fixed",
+            width: "100%",
+            minWidth: tableMinWidth,
+            "& td, & th": { whiteSpace: "normal", overflowWrap: "anywhere" },
+          }}
         >
           <TableHead>
             <TableRow>

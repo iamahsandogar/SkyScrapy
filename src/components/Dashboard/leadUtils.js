@@ -82,6 +82,27 @@ export const isConvertedStatus = (status) => {
   
   if (!statusName) return false;
   
-  const normalized = String(statusName).toLowerCase();
-  return normalized.includes("converted") && normalized.includes("project");
+  const normalized = String(statusName).toLowerCase().trim();
+  
+  // Check for various patterns that indicate a lead has been converted to a project
+  // Patterns: "converted to project", "converted project", "project converted", etc.
+  const convertedPatterns = [
+    "converted to project",
+    "converted project",
+    "project converted",
+    "converted-to-project",
+    "converted_to_project",
+    "project-converted",
+    "project_converted",
+  ];
+  
+  // Check if the status matches any converted pattern
+  const matchesConvertedPattern = convertedPatterns.some(pattern => 
+    normalized.includes(pattern)
+  );
+  
+  // Also check if it contains both "converted" and "project" (more flexible)
+  const hasConvertedAndProject = normalized.includes("converted") && normalized.includes("project");
+  
+  return matchesConvertedPattern || hasConvertedAndProject;
 };

@@ -24,6 +24,153 @@ export default function EmployeeDashboard() {
   const [remindersData, setRemindersData] = useState(null);
   const [notesData, setNotesData] = useState(null);
 
+  // Fetch leads to get accurate count (excluding projects)
+  // This runs independently to get the actual lead count
+  useEffect(() => {
+    const fetchLeadsCount = async () => {
+      try {
+        console.log("=== FETCHING LEADS FROM API FOR ACCURATE COUNT ===");
+        
+        // Fetch projects and leads in parallel
+        const [projectsData, leadsData] = await Promise.all([
+          apiRequest("/api/leads/projects/").catch(err => {
+            console.warn("Could not fetch projects list, will rely on is_project field only:", err);
+            return null;
+          }),
+          apiRequest("/api/leads/")
+        ]);
+        
+        // Get project IDs for exclusion
+        let projectIds = new Set();
+        if (projectsData) {
+          const projectsList = projectsData?.projects || projectsData?.results || projectsData || [];
+          if (Array.isArray(projectsList)) {
+            projectsList.forEach(project => {
+              const projectId = project.id || project.pk || project.uuid;
+              if (projectId) {
+                projectIds.add(String(projectId));
+              }
+            });
+            console.log(`Found ${projectIds.size} projects to exclude from lead count`);
+          }
+        }
+        
+        // Handle different response formats for leads
+        let leadsList = [];
+        if (leadsData && Array.isArray(leadsData.leads)) {
+          leadsList = leadsData.leads;
+        } else if (leadsData && Array.isArray(leadsData)) {
+          leadsList = leadsData;
+        } else if (leadsData?.data) {
+          if (Array.isArray(leadsData.data)) {
+            leadsList = leadsData.data;
+          } else if (leadsData.data?.leads && Array.isArray(leadsData.data.leads)) {
+            leadsList = leadsData.data.leads;
+          }
+        }
+
+        console.log(`Initial leads fetched: ${leadsList.length}`);
+
+        // Handle pagination if needed
+        const totalCount = leadsData?.count || null;
+        if (totalCount !== null && leadsList.length < totalCount) {
+          console.log(`API is paginating: Got ${leadsList.length} of ${totalCount} leads. Fetching remaining...`);
+          let allLeads = [...leadsList];
+          let currentOffset = leadsList.length;
+          const fetchLimit = 1000;
+          
+          while (allLeads.length < totalCount) {
+            try {
+              const nextPageData = await apiRequest(`/api/leads/?limit=${fetchLimit}&offset=${currentOffset}`);
+              let nextPageLeads = [];
+              if (nextPageData && Array.isArray(nextPageData.leads)) {
+                nextPageLeads = nextPageData.leads;
+              } else if (nextPageData?.data?.leads && Array.isArray(nextPageData.data.leads)) {
+                nextPageLeads = nextPageData.data.leads;
+              } else if (nextPageData?.leads && Array.isArray(nextPageData.leads)) {
+                nextPageLeads = nextPageData.leads;
+              }
+              
+              if (nextPageLeads.length === 0) break;
+              
+              allLeads = [...allLeads, ...nextPageLeads];
+              currentOffset += nextPageLeads.length;
+              
+              if (allLeads.length >= totalCount) break;
+            } catch (e) {
+              console.error("Error fetching next page:", e);
+              break;
+            }
+          }
+          
+          leadsList = allLeads;
+          console.log(`Total leads after pagination: ${leadsList.length}`);
+        }
+
+        // Filter out projects (leads that have been converted to projects)
+        // Check multiple possible field names and values, plus project IDs
+        const nonProjectLeads = leadsList.filter(lead => {
+          const leadId = String(lead.id || lead.pk || lead.uuid || "");
+          
+          // Check if this lead ID is in the projects list
+          const isInProjectsList = projectIds.size > 0 && projectIds.has(leadId);
+          
+          // Check various field names for is_project flag
+          const hasProjectFlag = 
+            lead.is_project === true || 
+            lead.is_project === 1 ||
+            lead.is_project === "true" ||
+            lead.is_project === "1" ||
+            lead.isProject === true ||
+            lead.isProject === 1 ||
+            lead.isProject === "true" ||
+            lead.isProject === "1" ||
+            lead.is_project === "True" ||
+            lead.isProject === "True";
+          
+          const isProject = isInProjectsList || hasProjectFlag;
+          
+          if (isProject) {
+            console.log(`Filtering out project: Lead ID ${leadId}, is_project: ${lead.is_project || lead.isProject}, in projects list: ${isInProjectsList}`);
+          }
+          
+          return !isProject;
+        });
+
+        const actualLeadCount = nonProjectLeads.length;
+        console.log(`=== FINAL LEAD COUNT CALCULATION ===`);
+        console.log(`Total items from API: ${leadsList.length}`);
+        console.log(`Projects excluded: ${leadsList.length - nonProjectLeads.length}`);
+        console.log(`✅ Actual leads count (excluding projects): ${actualLeadCount}`);
+
+        // Update statusData with the accurate count
+        setStatusData(prev => {
+          if (prev) {
+            return {
+              ...prev,
+              total_leads_count: actualLeadCount,
+            };
+          } else {
+            // If statusData doesn't exist yet, create it with just the count
+            // The status data will be set by the other useEffect
+            return {
+              lead_statuses: [],
+              employees: [],
+              statuses: [],
+              total_leads_count: actualLeadCount,
+              always_active: { count: 0 },
+            };
+          }
+        });
+      } catch (err) {
+        console.error("Failed to fetch leads count:", err);
+        // Don't update if there's an error, keep existing data
+      }
+    };
+
+    fetchLeadsCount();
+  }, []); // Run once on mount
+
   // Fetch lead statuses and employees
   useEffect(() => {
     const fetchStatusData = async () => {
@@ -32,9 +179,16 @@ export default function EmployeeDashboard() {
         console.log("Employee Status API Response:", response);
         
         if (response) {
-          // Filter out converted statuses
+          // Filter out converted statuses (leads that have been converted to projects)
           const filteredLeadStatuses = (response.lead_statuses || []).filter(
-            (s) => !isConvertedStatus(s.status_name || s.name || "")
+            (s) => {
+              const statusName = s.status_name || s.name || "";
+              const isConverted = isConvertedStatus(statusName);
+              if (isConverted) {
+                console.log(`Filtering out converted status: "${statusName}" with count: ${s.count}`);
+              }
+              return !isConverted;
+            }
           );
 
           const statuses = filteredLeadStatuses.map((s) => ({
@@ -43,16 +197,25 @@ export default function EmployeeDashboard() {
             count: s.count,
           }));
 
+          // Calculate total leads count from filtered statuses (excluding converted leads)
+          // This is a temporary count until we fetch actual leads from /api/leads/
           const totalLeadsCount = filteredLeadStatuses.reduce(
-            (sum, s) => sum + s.count,
+            (sum, s) => sum + (Number(s.count) || 0),
             0
           );
+
+          // Log for debugging
+          const apiTotalCount = response.total_leads_count;
+          console.log("=== INITIAL LEAD COUNT CALCULATION (from statuses) ===");
+          console.log(`API total_leads_count: ${apiTotalCount}`);
+          console.log(`Sum of filtered status counts: ${totalLeadsCount}`);
+          console.log(`Note: Will fetch actual leads count from /api/leads/ to get accurate count`);
 
           setStatusData({
             lead_statuses: filteredLeadStatuses,
             employees: [],
             statuses: statuses,
-            total_leads_count: totalLeadsCount,
+            total_leads_count: totalLeadsCount, // Initial count, will be updated by leads API call
             always_active: response.always_active || { count: 0 },
           });
         }
