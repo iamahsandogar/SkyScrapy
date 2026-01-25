@@ -145,7 +145,7 @@ function OverdueLeads({ data }) {
 
   const cardStyles = {
     flex: 1,
-    minWidth: "280px",
+    minWidth: "200px",
     borderRadius: "12px",
     padding: 3,
     backgroundColor:
@@ -350,7 +350,7 @@ function OverdueLeads({ data }) {
                             ) ||
                             "N/A"}
                         </Typography>
-                        <Typography variant="caption" color={mutedText}>
+                        <Typography variant="caption" color={{mutedText}}>
                           {formatDateLabel(followUp)} · {formatTimeLabel(followUp)}
                         </Typography>
                       </>
@@ -375,7 +375,13 @@ function OverdueLeads({ data }) {
           >
             All Leads
           </Button>
-          <Button onClick={handleCloseDialog}>Close</Button>
+          <Button onClick={handleCloseDialog} sx={{
+              backgroundColor: themeColors.blueAccent[500],
+              color: "white",
+              "&:hover": {
+                backgroundColor: themeColors.blueAccent[600],
+              },
+            }}>Close</Button>
         </DialogActions>
       </Dialog>
     </>

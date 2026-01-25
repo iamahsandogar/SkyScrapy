@@ -494,7 +494,7 @@ export default function UnreadNotesSummaryContent({ data }) {
     <Box
       sx={{
         flex: 1,
-        minWidth: "320px",
+        minWidth: "200px",
         maxHeight: 190,
         borderRadius: "12px",
         padding: 3,

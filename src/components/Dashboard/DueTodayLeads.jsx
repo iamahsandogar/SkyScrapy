@@ -138,7 +138,7 @@ function DueTodayLeads({ data }) {
 
   const cardStyles = {
     flex: 1,
-    minWidth: "280px",
+    minWidth: "200px",
     borderRadius: "12px",
     padding: 3,
     backgroundColor:
@@ -150,7 +150,7 @@ function DueTodayLeads({ data }) {
   const titleColor = themeColors.grey[100];
   const accentColor = themeColors.grey[100];
   const mutedText =
-    mode === "dark" ? themeColors.grey[200] : themeColors.grey[600];
+    mode === "dark" ? themeColors.grey[100] : themeColors.grey[600];
 
   const handleOpenDialog = () => {
     setDialogOpen(true);
@@ -212,7 +212,7 @@ function DueTodayLeads({ data }) {
               height: 32,
               borderRadius: "3px",
               backgroundColor:
-                mode === "dark" ? themeColors.grey[100] : themeColors.grey[900],
+                mode === "dark" ? themeColors.primary[100] : themeColors.grey[900],
               display: "flex",
               alignItems: "center",
               justifyContent: "center",
@@ -295,11 +295,10 @@ function DueTodayLeads({ data }) {
                         }
                         secondary={
                           <>
-                            <Typography variant="body2" color={mutedText}>
-                              Status: {statusText || "N/A"} · Follow-up:{" "}
-                              {followUpText || "N/A"}
+                            <Typography variant="body2" color={titleColor}>
+                              Status: {statusText || "N/A"} 
                             </Typography>
-                            <Typography variant="caption" color={mutedText}>
+                            <Typography variant="caption" color={titleColor}>
                               {followUpDate}
                             </Typography>
                           </>
@@ -326,7 +325,13 @@ function DueTodayLeads({ data }) {
           >
             All Leads
           </Button>
-          <Button onClick={handleCloseDialog}>Close</Button>
+          <Button onClick={handleCloseDialog} sx={{
+              backgroundColor: themeColors.blueAccent[500],
+              color: "white",
+              "&:hover": {
+                backgroundColor: themeColors.blueAccent[600],
+              },
+            }}>Close</Button>
         </DialogActions>
       </Dialog>
     </>

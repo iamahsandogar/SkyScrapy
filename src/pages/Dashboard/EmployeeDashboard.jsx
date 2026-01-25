@@ -319,20 +319,18 @@ export default function EmployeeDashboard() {
 
       <Cards mode="employee" data={statusData} />
 
-      <Box
-        display="grid"
-        gap={2}
-        mt={2}
-        sx={{
-          gridTemplateColumns: {
-            xs: "1fr",
-            sm: "1fr",
-            md: "2fr 1fr",
-          },
-        }}
-      >
-        <ChartBox data={statusData} />
-        <MonthlyRemindersCalendar data={remindersData} />
+      <Box display="flex" flexDirection={{ xs: "column", md: "row" }} gap={2} mt={2}>
+        {/* Left Column */}
+        <Box flex={2} display="flex" flexDirection="column" gap={2}>
+          <ChartBox data={statusData} />
+        </Box>
+
+        {/* Right Column - Sticky Calendar */}
+        <Box flex={1}>
+          <Box sx={{ position: "sticky", top: 20 }}>
+            <MonthlyRemindersCalendar data={remindersData} />
+          </Box>
+        </Box>
       </Box>
 
       <Box
