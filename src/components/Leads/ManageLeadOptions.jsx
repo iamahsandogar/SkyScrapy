@@ -1,5 +1,4 @@
 import {
-  Backdrop,
   Box,
   Typography,
   TextField,
@@ -13,6 +12,7 @@ import {
   DialogContent,
   DialogContentText,
   DialogActions,
+  CircularProgress,
 } from "@mui/material";
 import EditIcon from "@mui/icons-material/Edit";
 import DeleteIcon from "@mui/icons-material/Delete";
@@ -39,6 +39,8 @@ export default function ManageLeadOptions() {
   const [editIndex, setEditIndex] = useState(null);
   const [editValue, setEditValue] = useState("");
   const [loading, setLoading] = useState(false);
+  const [addLoading, setAddLoading] = useState(false);
+  const [deleteLoading, setDeleteLoading] = useState(false);
   const [optionsLoaderOpen, setOptionsLoaderOpen] = useState(true);
   const [toast, setToast] = useState({
     open: false,
@@ -221,6 +223,7 @@ export default function ManageLeadOptions() {
     if (!trimmedValue) return;
 
     try {
+      setAddLoading(true);
       let endpoint = "/ui/options/sources/create/";
       if (type === "status") {
         endpoint = "/ui/options/statuses/create/";
@@ -242,6 +245,8 @@ export default function ManageLeadOptions() {
     } catch (error) {
       console.error("Add failed", error);
       notifyError(error.message || "Failed to add");
+    } finally {
+      setAddLoading(false);
     }
   };
 
@@ -285,8 +290,13 @@ export default function ManageLeadOptions() {
 
   const handleDeleteConfirmed = async () => {
     if (!deleteDialog.item) return;
-    await deleteItem(deleteDialog.item);
-    setDeleteDialog({ open: false, item: null, label: "" });
+    try {
+      setDeleteLoading(true);
+      await deleteItem(deleteDialog.item);
+      setDeleteDialog({ open: false, item: null, label: "" });
+    } finally {
+      setDeleteLoading(false);
+    }
   };
 
   const handleDeleteDialogClose = () => {
@@ -311,86 +321,100 @@ export default function ManageLeadOptions() {
   -------------------------------------*/
   return (
     <>
-      <Backdrop
-        open={optionsLoaderOpen}
-        sx={{
-          color: "#fff",
-          zIndex: (theme) => theme.zIndex.drawer,
-          flexDirection: "column",
-          gap: 1,
-        }}
-      >
-        <DotLoader size={48} color="#0A66C2" />
-        <Typography variant="body2">Loading statuses, sources & lifecycles...</Typography>
-      </Backdrop>
-      <Paper sx={{ p: 3, borderRadius: 3, boxShadow: "none" }}>
+      <Paper sx={{ p: 3, borderRadius: 3, boxShadow: "none", minHeight: 400 }}>
         <Typography variant="h6" fontWeight="bold" mb={2}>
           Lead Status, Source & Lifecycle Settings
         </Typography>
 
-        {/* SWITCH */}
-        <Box display="flex" gap={2} mb={2}>
-          <Button
-            variant={type === "status" ? "contained" : "outlined"}
-            onClick={() => {
-              setType("status");
-              cancelEdit();
+        {optionsLoaderOpen ? (
+          <Box
+            sx={{
+              display: "flex",
+              flexDirection: "column",
+              alignItems: "center",
+              justifyContent: "center",
+              height: 300,
+              gap: 2,
             }}
           >
-            Status
-          </Button>
-          <Button
-            variant={type === "source" ? "contained" : "outlined"}
-            onClick={() => {
-              setType("source");
-              cancelEdit();
-            }}
-          >
-            Source
-          </Button>
-          <Button
-            variant={type === "lifecycle" ? "contained" : "outlined"}
-            onClick={() => {
-              setType("lifecycle");
-              cancelEdit();
-            }}
-          >
-            Lifecycle
-          </Button>
-        </Box>
-
-        {/* ADD */}
-        <Box display="flex" gap={2} mb={3}>
-          <TextField
-            fullWidth
-            label={`Add ${type}`}
-            value={newValue}
-            onChange={(e) => setNewValue(e.target.value)}
-          />
-          <Button variant="contained" onClick={addItem}>
-            Add
-          </Button>
-        </Box>
-
-        {/* LOADING */}
-        {loading && <Typography color="text.secondary">Loading...</Typography>}
-
-        {/* LIST */}
-        {data[type].map((item, index) => (
-          <Box key={index} display="flex" alignItems="center" gap={2} mb={1}>
-            <Typography flex={1}>
-              {typeof item === "string" ? item : item.name}
+            <DotLoader size={48} color="#0A66C2" />
+            <Typography variant="body2" color="text.secondary">
+              Loading statuses, sources & lifecycles...
             </Typography>
-
-            <IconButton
-              onClick={() => openDeleteConfirmation(item)}
-              color="error"
-              disabled={loading}
-            >
-              <DeleteIcon />
-            </IconButton>
           </Box>
-        ))}
+        ) : (
+          <>
+            {/* SWITCH */}
+            <Box display="flex" gap={2} mb={2}>
+              <Button
+                variant={type === "status" ? "contained" : "outlined"}
+                onClick={() => {
+                  setType("status");
+                  cancelEdit();
+                }}
+              >
+                Status
+              </Button>
+              <Button
+                variant={type === "source" ? "contained" : "outlined"}
+                onClick={() => {
+                  setType("source");
+                  cancelEdit();
+                }}
+              >
+                Source
+              </Button>
+              <Button
+                variant={type === "lifecycle" ? "contained" : "outlined"}
+                onClick={() => {
+                  setType("lifecycle");
+                  cancelEdit();
+                }}
+              >
+                Lifecycle
+              </Button>
+            </Box>
+
+            {/* ADD */}
+            <Box display="flex" gap={2} mb={3}>
+              <TextField
+                fullWidth
+                label={`Add ${type}`}
+                value={newValue}
+                onChange={(e) => setNewValue(e.target.value)}
+                disabled={addLoading}
+              />
+              <Button
+                variant="contained"
+                onClick={addItem}
+                disabled={addLoading || !newValue.trim()}
+                startIcon={addLoading ? <CircularProgress size={20} color="inherit" /> : null}
+              >
+                {addLoading ? "Adding..." : "Add"}
+              </Button>
+            </Box>
+
+            {/* LOADING */}
+            {loading && <Typography color="text.secondary">Loading...</Typography>}
+
+            {/* LIST */}
+            {data[type].map((item, index) => (
+              <Box key={index} display="flex" alignItems="center" gap={2} mb={1}>
+                <Typography flex={1}>
+                  {typeof item === "string" ? item : item.name}
+                </Typography>
+
+                <IconButton
+                  onClick={() => openDeleteConfirmation(item)}
+                  color="error"
+                  disabled={loading}
+                >
+                  <DeleteIcon />
+                </IconButton>
+              </Box>
+            ))}
+          </>
+        )}
       </Paper>
       <Dialog open={deleteDialog.open} onClose={handleDeleteDialogClose}>
         <DialogTitle>Confirm Deletion</DialogTitle>
@@ -400,9 +424,17 @@ export default function ManageLeadOptions() {
           </DialogContentText>
         </DialogContent>
         <DialogActions>
-          <Button onClick={handleDeleteDialogClose}>Cancel</Button>
-          <Button onClick={handleDeleteConfirmed} color="error" variant="contained">
-            Delete
+          <Button onClick={handleDeleteDialogClose} disabled={deleteLoading}>
+            Cancel
+          </Button>
+          <Button
+            onClick={handleDeleteConfirmed}
+            color="error"
+            variant="contained"
+            disabled={deleteLoading}
+            startIcon={deleteLoading ? <CircularProgress size={20} color="inherit" /> : null}
+          >
+            {deleteLoading ? "Deleting..." : "Delete"}
           </Button>
         </DialogActions>
       </Dialog>
