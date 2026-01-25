@@ -14,6 +14,8 @@ import VisibilityOff from "@mui/icons-material/VisibilityOff";
 import Topbar from "../global/Topbar";
 import apiRequest from "../services/api";
 import { useNotification } from "../../contexts/NotificationContext.jsx";
+import { tokens } from "../../design-system/tokens/colors.js";
+import { useTheme } from "../../contexts/ThemeContext";
 
 const MuiTextFieldPadding = {
   "& .MuiOutlinedInput-root": {
@@ -30,6 +32,8 @@ export default function CreateEmployee() {
   const [loading, setLoading] = useState(false);
   const { notifyError, notifySuccess } = useNotification();
   const navigate = useNavigate();
+  const { mode } = useTheme();
+  const colors = tokens(mode);
 
   const [formData, setFormData] = useState({
     first_name: "",
@@ -199,7 +203,27 @@ export default function CreateEmployee() {
               </Box>
             </Box>
 
-            <Box display="flex" justifyContent="flex-end">
+            <Box display="flex" justifyContent="flex-end" gap={2}>
+              <Button
+                variant="outlined"
+                sx={{
+                  borderRadius: 2,
+                  textTransform: "none",
+                  fontWeight: "bold",
+                  px: 3,
+                  py: 1,
+                  color: colors.grey[100],
+                  borderColor: colors.grey[400],
+                  "&:hover": {
+                    borderColor: colors.grey[100],
+                    backgroundColor: colors.primary[100],
+                  },
+                }}
+                onClick={() => navigate("/manage-employees")}
+                disabled={loading}
+              >
+                Cancel
+              </Button>
               <Button
                 variant="contained"
                 sx={{
