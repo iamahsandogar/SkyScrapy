@@ -1,5 +1,7 @@
 import React, { useEffect, useState } from "react";
 import { Navigate, Outlet } from "react-router-dom";
+import { Box, CircularProgress } from "@mui/material";
+import DotLoader from "../global/DotLoader";
 
 const AuthGuard = () => {
   const [isAuthenticated, setIsAuthenticated] = useState(null); // null = checking
@@ -28,10 +30,24 @@ const AuthGuard = () => {
 
   if (isLoading) {
     // Show loading spinner
-    return <div>Loading...</div>;
+    return (
+      <Box
+        display="flex"
+        flexDirection="column"
+        alignItems="center"
+        justifyContent="center"
+        sx={{ minHeight: "100vh" }}
+      >
+        <DotLoader size={48} color="#0A66C2" />
+      </Box>
+    );
   }
 
-  return isAuthenticated ? <Outlet /> : <Navigate to="/login" replace />;
+  if (!isAuthenticated) {
+    return <Navigate to="/login" replace />;
+  }
+
+  return <Outlet />;
 };
 
 export default AuthGuard;

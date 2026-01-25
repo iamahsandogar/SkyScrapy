@@ -68,7 +68,7 @@ export default function Cards({ data, mode = "admin", employeeCount }) {
       value: employeeCount,
       loading: loading,
       accentGroup: "blueAccent",
-      caption: "Active team members",
+      caption: "Employees in organization",
       icon: PeopleIcon,
     },
     
@@ -78,7 +78,7 @@ export default function Cards({ data, mode = "admin", employeeCount }) {
       value: totalLeadsCount,
       loading: loading,
       accentGroup: "purpleAccent",
-      caption: "Leads in the pipeline",
+      caption: "Leads in pipeline",
       icon: AssignmentIcon,
     },
   ];
@@ -107,7 +107,7 @@ export default function Cards({ data, mode = "admin", employeeCount }) {
               sx={{
                 flex: 1,
                 minWidth: 240,
-                minHeight: 120,
+                minHeight: 80,
                 p: 3,
                 borderRadius: 3,
                 boxShadow: "none",

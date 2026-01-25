@@ -52,6 +52,39 @@ function RoleBasedAllLeads({ adminComponent, employeeComponent }) {
   return isEmployee ? employeeComponent : adminComponent;
 }
 
+// Component to handle catch-all routes with authentication check
+function CatchAllRoute() {
+  const [isAuthenticated, setIsAuthenticated] = useState(null);
+  const [isLoading, setIsLoading] = useState(true);
+
+  useEffect(() => {
+    const checkAuth = () => {
+      const user = localStorage.getItem("user");
+      const isAuth = localStorage.getItem("isAuth") === "true";
+      setIsAuthenticated(user && isAuth);
+      setIsLoading(false);
+    };
+    checkAuth();
+  }, []);
+
+  if (isLoading) {
+    return (
+      <Box
+        display="flex"
+        flexDirection="column"
+        alignItems="center"
+        justifyContent="center"
+        sx={{ minHeight: "100vh" }}
+      >
+        <DotLoader size={48} color={colors.blueAccent[500]} />
+      </Box>
+    );
+  }
+
+  // If authenticated, redirect to dashboard; otherwise to login
+  return <Navigate to={isAuthenticated ? "/dashboard" : "/login"} replace />;
+}
+
 export default function App() {
   return (
     <Routes>
@@ -113,8 +146,8 @@ export default function App() {
         </Route>
       </Route>
 
-      {/* Catch-all: redirect any unknown path to login */}
-      <Route path="*" element={<Navigate to="/login" replace />} />
+      {/* Catch-all: redirect based on authentication status */}
+      <Route path="*" element={<CatchAllRoute />} />
     </Routes>
   );
 }
