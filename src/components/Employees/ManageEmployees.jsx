@@ -554,6 +554,11 @@ export default function ManageEmployees() {
                         variant="contained"
                         onClick={() => toggleStatus(emp)}
                         disabled={loading || (loadingAction.id === (emp.id || emp.pk) && loadingAction.type === 'toggle')}
+                        startIcon={
+                          loadingAction.id === (emp.id || emp.pk) && loadingAction.type === 'toggle' ? (
+                            <CircularProgress size={20} color="inherit" />
+                          ) : null
+                        }
                         sx={{
                           ...getActionButtonStyles(
                             emp.status === "Active" || emp.is_active
@@ -567,7 +572,10 @@ export default function ManageEmployees() {
                           minWidth: 90,
                         }}
                       >
-                        {emp.status === "Active" || emp.is_active ? "Deactivate" : "Activate"}
+                        {loadingAction.id === (emp.id || emp.pk) && loadingAction.type === 'toggle' 
+                          ? (emp.status === "Active" || emp.is_active ? "Deactivating..." : "Activating...")
+                          : (emp.status === "Active" || emp.is_active ? "Deactivate" : "Activate")
+                        }
                       </Button>
 
                       <Button
@@ -584,11 +592,7 @@ export default function ManageEmployees() {
                           minWidth: 80,
                         }}
                       >
-                        {loadingAction.id === (emp.id || emp.pk) && loadingAction.type === 'delete' ? (
-                          "Delete"
-                        ) : (
-                          "Delete"
-                        )}
+                        Delete
                       </Button>
                     </Box>
                   </TableCell>
