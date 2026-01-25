@@ -106,3 +106,51 @@ export const isConvertedStatus = (status) => {
   
   return matchesConvertedPattern || hasConvertedAndProject;
 };
+
+/**
+ * Check if a lead has been converted to a project
+ * @param {Object} lead - The lead object to check
+ * @param {Set<string>} projectIds - Optional set of project IDs to check against
+ * @returns {boolean} - True if the lead is a project
+ */
+export const isProject = (lead, projectIds = null) => {
+  if (!lead) return false;
+  
+  // Check if lead ID is in the projects list
+  if (projectIds && projectIds.size > 0) {
+    const leadId = String(lead.id || lead.pk || lead.uuid || "");
+    if (projectIds.has(leadId)) {
+      return true;
+    }
+  }
+  
+  // Check various field names for is_project flag
+  const hasProjectFlag = 
+    lead.is_project === true || 
+    lead.is_project === 1 ||
+    lead.is_project === "true" ||
+    lead.is_project === "1" ||
+    lead.isProject === true ||
+    lead.isProject === 1 ||
+    lead.isProject === "true" ||
+    lead.isProject === "1" ||
+    lead.is_project === "True" ||
+    lead.isProject === "True";
+  
+  if (hasProjectFlag) {
+    return true;
+  }
+  
+  // Check status name for converted patterns
+  const statusVal =
+    lead.status_label ||
+    lead.statusName ||
+    lead.status_name ||
+    (lead.status && typeof lead.status === "object" ? lead.status.name : null);
+  
+  if (statusVal && isConvertedStatus(statusVal)) {
+    return true;
+  }
+  
+  return false;
+};

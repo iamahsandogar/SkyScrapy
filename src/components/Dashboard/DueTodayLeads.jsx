@@ -22,6 +22,7 @@ import {
   getFollowUpTimestamp,
   formatFollowUpLabel,
   normalizeDateValue,
+  isProject,
 } from "./leadUtils";
 
 const extractStatusName = (statusObj) => {
@@ -110,11 +111,12 @@ function DueTodayLeads({ data }) {
   const remindersData = data?.reminders || {};
   const statuses = data?.statuses || [];
 
-  // Get due today leads
+  // Get due today leads (excluding projects)
   const dueTodayLeads = useMemo(() => {
     if (isLoading) return [];
     const leads = remindersData.due_today?.leads || [];
     return leads
+      .filter((lead) => !isProject(lead)) // Filter out projects
       .map((lead) => ({
         lead,
         dueDate: normalizeDateValue(getFollowUpTimestamp(lead)),

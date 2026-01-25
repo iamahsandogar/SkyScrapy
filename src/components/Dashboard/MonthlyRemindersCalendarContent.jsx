@@ -12,6 +12,7 @@ import ArrowBackIosNewIcon from "@mui/icons-material/ArrowBackIosNew";
 import ArrowForwardIosIcon from "@mui/icons-material/ArrowForwardIos";
 import { useTheme } from "../../contexts/ThemeContext";
 import { getColors } from "../../design-system/tokens";
+import { isProject } from "./leadUtils";
 
 const WEEK_DAYS = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
 
@@ -285,14 +286,16 @@ export default function MonthlyRemindersCalendarContent({ data }) {
   const remindersData = data?.reminders || {};
   const statuses = data?.statuses || [];
   
-  // Combine all leads from reminders sections
+  // Combine all leads from reminders sections (excluding projects)
   const leads = useMemo(() => {
     if (isLoading) return [];
     const overdueLeads = remindersData.overdue?.leads || [];
     const dueTodayLeads = remindersData.due_today?.leads || [];
     const upcomingLeads = remindersData.upcoming?.leads || [];
     const doneLeads = remindersData.done?.leads || [];
-    return [...overdueLeads, ...dueTodayLeads, ...upcomingLeads, ...doneLeads];
+    const allLeads = [...overdueLeads, ...dueTodayLeads, ...upcomingLeads, ...doneLeads];
+    // Filter out projects
+    return allLeads.filter((lead) => !isProject(lead));
   }, [remindersData, isLoading]);
   
   const reminders = useMemo(() => normalizeLeads(leads), [leads]);

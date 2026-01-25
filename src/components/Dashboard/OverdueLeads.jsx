@@ -21,6 +21,7 @@ import {
   normalizeDateValue,
   resolveTextValue,
   formatFollowUpLabel,
+  isProject,
 } from "./leadUtils";
 
 const formatDateLabel = (value) => {
@@ -126,11 +127,12 @@ function OverdueLeads({ data }) {
   const statuses = useMemo(() => data?.statuses || [], [data?.statuses]);
   const remindersData = useMemo(() => data?.reminders || {}, [data?.reminders]);
 
-  // Get overdue leads
+  // Get overdue leads (excluding projects)
   const overdueLeads = useMemo(() => {
     if (isLoading) return [];
     const leads = remindersData.overdue?.leads || [];
     return leads
+      .filter((lead) => !isProject(lead)) // Filter out projects
       .map((lead) => ({
         lead,
         followUp: normalizeDateValue(getFollowUpTimestamp(lead)),

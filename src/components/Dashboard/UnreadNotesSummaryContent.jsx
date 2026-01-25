@@ -13,6 +13,7 @@ import { useNavigate } from "react-router-dom";
 import apiRequest from "../services/api";
 import { tokens } from "../../design-system/tokens/colors.js";
 import { useTheme } from "../../contexts/ThemeContext";
+import { isProject } from "./leadUtils";
 
 const normalizeLeadId = (lead) => {
   if (!lead) return null;
@@ -301,7 +302,7 @@ export default function UnreadNotesSummaryContent({ data }) {
   }, [unreadNotesData, isLoading]);
   const remindersData = data?.reminders || {};
   
-  // Build a map of lead IDs to lead info from reminders data
+  // Build a map of lead IDs to lead info from reminders data (excluding projects)
   const leadInfoMap = useMemo(() => {
     if (isLoading) return new Map();
     const map = new Map();
@@ -311,13 +312,16 @@ export default function UnreadNotesSummaryContent({ data }) {
       ...(remindersData.upcoming?.leads || []),
       ...(remindersData.done?.leads || []),
     ];
-    allLeads.forEach(lead => {
-      if (lead.id) {
-        const name = buildLeadLabel(lead);
-        const assignedTo = getAssignedToName(lead);
-        map.set(String(lead.id), { name, assignedTo });
-      }
-    });
+    // Filter out projects before building the map
+    allLeads
+      .filter((lead) => !isProject(lead))
+      .forEach(lead => {
+        if (lead.id) {
+          const name = buildLeadLabel(lead);
+          const assignedTo = getAssignedToName(lead);
+          map.set(String(lead.id), { name, assignedTo });
+        }
+      });
     return map;
   }, [remindersData, isLoading]);
   
@@ -331,16 +335,29 @@ export default function UnreadNotesSummaryContent({ data }) {
       const leadId = note.lead || resolveNoteLeadId(note);
       if (!leadId) return;
       
+      // Check if the lead in the note is a project
+      const leadObject = note.lead && typeof note.lead === 'object' ? note.lead : null;
+      if (leadObject && isProject(leadObject)) {
+        return; // Skip projects
+      }
+      
       const leadKey = String(leadId);
+      
+      // Also check if lead is in leadInfoMap (which already filters projects)
+      // If not in map and we don't have lead object, it might be a project
+      if (!leadObject && !leadInfoMap.has(leadKey)) {
+        return; // Skip if not found in filtered leadInfoMap
+      }
+      
       if (!leadNotesMap.has(leadKey)) {
         // Try to get info from leadInfoMap, then from note, then fallback
         let leadName = "Untitled lead";
         let assignedToName = "";
         
         // 1. Check if note has full lead object
-        if (note.lead && typeof note.lead === 'object') {
-           leadName = buildLeadLabel(note.lead);
-           assignedToName = getAssignedToName(note.lead);
+        if (leadObject) {
+           leadName = buildLeadLabel(leadObject);
+           assignedToName = getAssignedToName(leadObject);
         } else {
            // 2. Fallback to map
            const info = leadInfoMap.get(leadKey);

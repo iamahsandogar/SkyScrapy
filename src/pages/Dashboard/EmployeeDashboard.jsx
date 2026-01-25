@@ -12,7 +12,7 @@ import DueTodayLeads from "../../components/Dashboard/DueTodayLeads";
 import { getColors } from "../../design-system/tokens";
 import { useTheme } from "../../contexts/ThemeContext";
 import apiRequest from "../../components/services/api";
-import { isConvertedStatus } from "../../components/Dashboard/leadUtils";
+import { isConvertedStatus, isProject } from "../../components/Dashboard/leadUtils";
 
 export default function EmployeeDashboard() {
   const navigate = useNavigate();
@@ -143,20 +143,64 @@ export default function EmployeeDashboard() {
         console.log(`Projects excluded: ${leadsList.length - nonProjectLeads.length}`);
         console.log(`✅ Actual leads count (excluding projects): ${actualLeadCount}`);
 
-        // Update statusData with the accurate count
+        // Calculate lead status breakdown from actual leads (excluding projects)
+        const statusBreakdown = new Map();
+        nonProjectLeads.forEach(lead => {
+          // Extract status name from various possible field names
+          let statusName = null;
+          
+          if (lead.status && typeof lead.status === "object") {
+            statusName = lead.status.name || lead.status.status_name || lead.status.label || null;
+          } else if (lead.status_label) {
+            statusName = lead.status_label;
+          } else if (lead.statusName) {
+            statusName = lead.statusName;
+          } else if (lead.status_name) {
+            statusName = lead.status_name;
+          } else if (typeof lead.status === "string") {
+            statusName = lead.status;
+          }
+          
+          if (statusName) {
+            const normalizedStatusName = String(statusName).trim();
+            const currentCount = statusBreakdown.get(normalizedStatusName) || 0;
+            statusBreakdown.set(normalizedStatusName, currentCount + 1);
+          }
+        });
+        
+        // Convert map to array format matching API response structure
+        const calculatedLeadStatuses = Array.from(statusBreakdown.entries()).map(([statusName, count]) => ({
+          status_name: statusName,
+          name: statusName,
+          status__name: statusName,
+          count: count,
+          status_id: null, // We don't have status IDs from leads, but that's okay for display
+        }));
+        
+        console.log(`=== CALCULATED STATUS BREAKDOWN FROM ACTUAL LEADS ===`);
+        console.log(`Total statuses found: ${calculatedLeadStatuses.length}`);
+        calculatedLeadStatuses.forEach(s => {
+          console.log(`  - Status: "${s.status_name}", Count: ${s.count}`);
+        });
+
+        // Update statusData with the accurate count and calculated status breakdown
         setStatusData(prev => {
           if (prev) {
             return {
               ...prev,
               total_leads_count: actualLeadCount,
+              lead_statuses: calculatedLeadStatuses, // Use calculated breakdown from actual leads
             };
           } else {
-            // If statusData doesn't exist yet, create it with just the count
-            // The status data will be set by the other useEffect
+            // If statusData doesn't exist yet, create it with count and calculated breakdown
             return {
-              lead_statuses: [],
+              lead_statuses: calculatedLeadStatuses,
               employees: [],
-              statuses: [],
+              statuses: calculatedLeadStatuses.map((s) => ({
+                id: s.status_id,
+                name: s.status_name,
+                count: s.count,
+              })),
               total_leads_count: actualLeadCount,
               always_active: { count: 0 },
             };
@@ -171,61 +215,8 @@ export default function EmployeeDashboard() {
     fetchLeadsCount();
   }, []); // Run once on mount
 
-  // Fetch lead statuses and employees
-  useEffect(() => {
-    const fetchStatusData = async () => {
-      try {
-        const response = await apiRequest("/api/common/dashboard/lead-statuses-employees/");
-        console.log("Employee Status API Response:", response);
-        
-        if (response) {
-          // Filter out converted statuses (leads that have been converted to projects)
-          const filteredLeadStatuses = (response.lead_statuses || []).filter(
-            (s) => {
-              const statusName = s.status_name || s.name || "";
-              const isConverted = isConvertedStatus(statusName);
-              if (isConverted) {
-                console.log(`Filtering out converted status: "${statusName}" with count: ${s.count}`);
-              }
-              return !isConverted;
-            }
-          );
-
-          const statuses = filteredLeadStatuses.map((s) => ({
-            id: s.status_id,
-            name: s.status_name,
-            count: s.count,
-          }));
-
-          // Calculate total leads count from filtered statuses (excluding converted leads)
-          // This is a temporary count until we fetch actual leads from /api/leads/
-          const totalLeadsCount = filteredLeadStatuses.reduce(
-            (sum, s) => sum + (Number(s.count) || 0),
-            0
-          );
-
-          // Log for debugging
-          const apiTotalCount = response.total_leads_count;
-          console.log("=== INITIAL LEAD COUNT CALCULATION (from statuses) ===");
-          console.log(`API total_leads_count: ${apiTotalCount}`);
-          console.log(`Sum of filtered status counts: ${totalLeadsCount}`);
-          console.log(`Note: Will fetch actual leads count from /api/leads/ to get accurate count`);
-
-          setStatusData({
-            lead_statuses: filteredLeadStatuses,
-            employees: [],
-            statuses: statuses,
-            total_leads_count: totalLeadsCount, // Initial count, will be updated by leads API call
-            always_active: response.always_active || { count: 0 },
-          });
-        }
-      } catch (err) {
-        console.error("Failed to fetch status data:", err);
-        setStatusData({ lead_statuses: [], employees: [], statuses: [], total_leads_count: 0, always_active: { count: 0 } });
-      }
-    };
-    fetchStatusData();
-  }, []);
+  // Note: Status breakdown is now calculated from actual leads in fetchLeadsCount
+  // No need to fetch from API endpoint anymore
 
   // Fetch reminders
   useEffect(() => {
@@ -242,6 +233,12 @@ export default function EmployeeDashboard() {
             return {
               ...category,
               leads: category.leads.filter((lead) => {
+                // Filter out projects using comprehensive check
+                if (isProject(lead)) {
+                  return false;
+                }
+                
+                // Also check status name for converted patterns (backup check)
                 const statusVal =
                   lead.status_label ||
                   lead.statusName ||
