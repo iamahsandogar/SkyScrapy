@@ -43,6 +43,10 @@ export default function ProjectDetailsModal({ open, onClose, project, getEmploye
   const getField = (camelCase, snakeCase) => {
     const value = project[snakeCase] || project[camelCase];
     if (value === null || value === undefined || value === "") return "-";
+    // If value is an object with a 'name' property, return the name
+    if (typeof value === "object" && value !== null && "name" in value) {
+      return value.name;
+    }
     return value;
   };
 
@@ -93,10 +97,10 @@ export default function ProjectDetailsModal({ open, onClose, project, getEmploye
             <strong>Follow-up Status:</strong> {getField("followupStatus", "follow_up_status")}
           </Typography>
           <Typography>
-            <strong>Source:</strong> {getField("source", "source")}
+            <strong>Source:</strong> {project.source?.name || project.source || "-"}
           </Typography>
           <Typography>
-            <strong>Lifecycle:</strong> {getField("lifecycle", "lifecycle")}
+            <strong>Lifecycle:</strong> {project.lifecycle?.name || project.lifecycle || "-"}
           </Typography>
           <Typography>
             <strong>Company:</strong> {getField("company", "company_name")}
