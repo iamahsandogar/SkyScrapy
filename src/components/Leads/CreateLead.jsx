@@ -19,7 +19,7 @@ import apiRequest from "../services/api";
 import { clearLeadDataCache, addLeadToCache, getCachedLeadData } from "../../utils/prefetchData";
 import { useNotification } from "../../contexts/NotificationContext.jsx";
 import LeadFormFields from "./LeadFormFields";
-import { parseEmployeesPayload, isValidLinkedInURL, filterAssignableEmployees } from "./leadFormUtils";
+import { parseEmployeesPayload, isValidLinkedInURL, isValidEmail, filterAssignableEmployees } from "./leadFormUtils";
 
 export default function CreateLead() {
   const { editId } = useParams();
@@ -636,6 +636,17 @@ export default function CreateLead() {
         console.log(`Field value:`, formData[field]);
         return false;
       }
+    }
+
+    // Validate email format (optional field, but if provided must be valid)
+    if (
+      formData.contact_email &&
+      formData.contact_email.trim() !== "" &&
+      !isValidEmail(formData.contact_email)
+    ) {
+      console.log("❌ Validation failed: Invalid email address");
+      notifyError("Please enter a valid email address!", {autoClose: 5000});
+      return false;
     }
 
     // Validate LinkedIn URL format

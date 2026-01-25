@@ -123,6 +123,16 @@ export const isValidLinkedInURL = (url) => {
   return regex.test(url);
 };
 
+export const isValidEmail = (email) => {
+  if (!email || typeof email !== "string") return false;
+  const trimmedEmail = email.trim();
+  if (trimmedEmail === "") return false;
+  // Email validation: requires at least 2 characters for TLD (e.g., .com, .org)
+  // This prevents emails like "user@domain.c" from passing validation
+  const emailRegex = /^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$/;
+  return emailRegex.test(trimmedEmail);
+};
+
 export const filterAssignableEmployees = (allEmployees = [], currentUserId = null, allowAll = false) => {
   const activeEmployees = (allEmployees || []).filter((emp) => {
      const status = emp.status || (emp.user_details && emp.user_details.status);

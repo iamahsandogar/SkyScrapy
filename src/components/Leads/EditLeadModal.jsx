@@ -19,7 +19,7 @@ import {
 import DotLoader from "../global/DotLoader";
 import { useNotification } from "../../contexts/NotificationContext.jsx";
 import LeadFormFields from "./LeadFormFields";
-import { parseEmployeesPayload, isValidLinkedInURL, filterAssignableEmployees } from "./leadFormUtils";
+import { parseEmployeesPayload, isValidLinkedInURL, isValidEmail, filterAssignableEmployees } from "./leadFormUtils";
 
 const EMPTY_FORM = {
   title: "",
@@ -473,6 +473,17 @@ export default function EditLeadModal({ open, leadId, lead: initialLead, onClose
       ) {
         return false;
       }
+    }
+
+    // Validate email format (optional field, but if provided must be valid)
+    if (
+      formData.contact_email &&
+      formData.contact_email.trim() !== "" &&
+      !isValidEmail(formData.contact_email)
+    ) {
+      console.log("❌ Validation failed: Invalid email address");
+      notifyError("Please enter a valid email address!", {autoClose: 5000});
+      return false;
     }
 
     if (
