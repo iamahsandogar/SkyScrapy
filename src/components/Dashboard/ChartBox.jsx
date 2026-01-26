@@ -21,10 +21,11 @@ function ChartBoxFallback() {
         padding: 4,
         backgroundColor: cardBackground,
         width: "100%",
+        height: "390px",
       }}
     >
       <CardContent
-        sx={{ height: "100%", display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", minHeight: 300 }}
+        sx={{ height: "100%", display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center" }}
       >
         <Typography fontWeight="bold" mb={2}>Lead Status Breakdown</Typography>
         <DotLoader />

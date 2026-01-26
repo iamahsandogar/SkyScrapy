@@ -59,10 +59,11 @@ const tableData = useMemo(() => {
           padding: 4,
           backgroundColor: cardBackground,
           width: "100%",
+          height: "390px",
         }}
       >
         <CardContent
-          sx={{ height: "100%", display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", minHeight: 300 }}
+          sx={{ height: "100%", display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center" }}
         >
           <Typography fontWeight="bold" mb={2}>Lead Status Breakdown</Typography>
           <Typography sx={{ color: subTextColor }}>...</Typography>
@@ -79,6 +80,7 @@ const tableData = useMemo(() => {
         padding: 4,
         backgroundColor: cardBackground,
         width: "100%",
+        height: "390px",
       }}
     >
       <CardContent
@@ -92,7 +94,7 @@ const tableData = useMemo(() => {
               display: "flex",
               alignItems: "center",
               justifyContent: "center",
-              minHeight: 200,
+              flex: 1,
               color: subTextColor,
             }}
           >
@@ -106,8 +108,7 @@ const tableData = useMemo(() => {
               boxShadow: "none",
               borderRadius: "8px",
               width: "100%",
-              display: "block",
-              maxHeight: "200px", // shows header + top 3 rows
+              flex: 1,
               overflowY: "auto",
               overflowX: "auto",
             }}
