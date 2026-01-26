@@ -1,4 +1,4 @@
-import { useCallback, useMemo, useState } from "react";
+import { useCallback, useMemo, useState, useEffect } from "react";
 import {
   Box,
   Typography,
@@ -13,7 +13,7 @@ import { useNavigate } from "react-router-dom";
 import apiRequest from "../services/api";
 import { tokens } from "../../design-system/tokens/colors.js";
 import { useTheme } from "../../contexts/ThemeContext";
-import { isProject } from "./leadUtils";
+import { isProject, getAssignedToName as getAssignedToNameFromUtils } from "./leadUtils";
 
 const normalizeLeadId = (lead) => {
   if (!lead) return null;
@@ -28,33 +28,10 @@ const toArray = (maybeArray) => {
   return [];
 };
 
-const getAssignedToName = (lead) => {
-  if (!lead) return "";
-  
-  // 1. Check assigned_to object
-  const assigned = lead.assigned_to || lead.assignedTo;
-  if (assigned && typeof assigned === "object") {
-    // Check user_details
-    if (assigned.user_details?.name) return assigned.user_details.name;
-    if (assigned.user_details?.username) return assigned.user_details.username;
-    // Removed email fallback as per user request
-    
-    // Check direct properties
-    if (assigned.name) return assigned.name;
-    if (assigned.username) return assigned.username;
-    // Removed email fallback as per user request
-  }
-  
-  // 2. Check flat fields
-  if (lead.assigned_to_name) return lead.assigned_to_name;
-  if (lead.assignedToName) return lead.assignedToName;
-  
-  return "";
-};
-
 const buildLeadLabel = (lead = {}) => {
   // 1. Prioritize Lead Title (as per user request)
   if (lead.title) return lead.title;
+  if (lead.lead_title) return lead.lead_title;
 
   // 2. Try to construct full name from first/last name
   const firstName = lead.first_name || lead.firstName;
@@ -289,6 +266,7 @@ export default function UnreadNotesSummaryContent({ data }) {
 
   // Extract unread notes from props (from /api/common/dashboard/)
   const unreadNotesData = data?.unread_notes;
+  const employees = data?.employees || [];
   
   const rawNotes = useMemo(() => {
     if (isLoading || !unreadNotesData) return [];
@@ -301,6 +279,9 @@ export default function UnreadNotesSummaryContent({ data }) {
     return [];
   }, [unreadNotesData, isLoading]);
   const remindersData = data?.reminders || {};
+  
+  // State to store fetched leads that aren't in reminders
+  const [fetchedLeadsMap, setFetchedLeadsMap] = useState(new Map());
   
   // Build a map of lead IDs to lead info from reminders data (excluding projects)
   const leadInfoMap = useMemo(() => {
@@ -318,12 +299,89 @@ export default function UnreadNotesSummaryContent({ data }) {
       .forEach(lead => {
         if (lead.id) {
           const name = buildLeadLabel(lead);
-          const assignedTo = getAssignedToName(lead);
+          const assignedTo = getAssignedToNameFromUtils(lead, employees);
           map.set(String(lead.id), { name, assignedTo });
         }
       });
+    
+    // Merge with fetched leads map
+    fetchedLeadsMap.forEach((value, key) => {
+      map.set(key, value);
+    });
+    
     return map;
-  }, [remindersData, isLoading]);
+  }, [remindersData, isLoading, fetchedLeadsMap, employees]);
+  
+  // Fetch lead data for notes whose leads aren't in leadInfoMap
+  useEffect(() => {
+    if (isLoading || !rawNotes.length) return;
+    
+    const fetchMissingLeads = async () => {
+      // Get unique lead IDs from notes that aren't in the initial leadInfoMap
+      const initialLeadIds = new Set();
+      const allLeads = [
+        ...(remindersData.overdue?.leads || []),
+        ...(remindersData.due_today?.leads || []),
+        ...(remindersData.upcoming?.leads || []),
+        ...(remindersData.done?.leads || []),
+      ];
+      allLeads.forEach(lead => {
+        if (lead.id) initialLeadIds.add(String(lead.id));
+      });
+      
+      const noteLeadIds = new Set();
+      rawNotes.forEach(note => {
+        const leadId = note.lead || resolveNoteLeadId(note);
+        if (leadId && !initialLeadIds.has(String(leadId))) {
+          noteLeadIds.add(String(leadId));
+        }
+      });
+      
+      if (noteLeadIds.size === 0) return;
+      
+      // Fetch leads in batches
+      const leadIdsArray = Array.from(noteLeadIds);
+      const batchSize = 10;
+      const newLeadsMap = new Map();
+      
+      for (let i = 0; i < leadIdsArray.length; i += batchSize) {
+        const batch = leadIdsArray.slice(i, i + batchSize);
+        try {
+          const promises = batch.map(leadId => 
+            apiRequest(`/api/leads/${leadId}/`).catch(err => {
+              console.warn(`Failed to fetch lead ${leadId}:`, err);
+              return null;
+            })
+          );
+          
+          const leads = await Promise.all(promises);
+          
+          leads.forEach(lead => {
+            if (lead && !isProject(lead)) {
+              const leadId = String(lead.id || lead.pk || lead.uuid);
+              const name = buildLeadLabel(lead);
+              const assignedTo = getAssignedToNameFromUtils(lead, employees);
+              newLeadsMap.set(leadId, { name, assignedTo });
+            }
+          });
+        } catch (err) {
+          console.error("Error fetching leads batch:", err);
+        }
+      }
+      
+      if (newLeadsMap.size > 0) {
+        setFetchedLeadsMap(prev => {
+          const merged = new Map(prev);
+          newLeadsMap.forEach((value, key) => {
+            merged.set(key, value);
+          });
+          return merged;
+        });
+      }
+    };
+    
+    fetchMissingLeads();
+  }, [rawNotes, remindersData, isLoading, employees]);
   
   // Transform notes to the expected summary format
   const summaries = useMemo(() => {
@@ -343,11 +401,9 @@ export default function UnreadNotesSummaryContent({ data }) {
       
       const leadKey = String(leadId);
       
-      // Also check if lead is in leadInfoMap (which already filters projects)
-      // If not in map and we don't have lead object, it might be a project
-      if (!leadObject && !leadInfoMap.has(leadKey)) {
-        return; // Skip if not found in filtered leadInfoMap
-      }
+      // Check if lead is in leadInfoMap (which already filters projects)
+      // If not in map and we don't have lead object, we'll show it with fallback title
+      // (The useEffect will fetch the lead data and update leadInfoMap if it's not a project)
       
       if (!leadNotesMap.has(leadKey)) {
         // Try to get info from leadInfoMap, then from note, then fallback
@@ -357,7 +413,7 @@ export default function UnreadNotesSummaryContent({ data }) {
         // 1. Check if note has full lead object
         if (leadObject) {
            leadName = buildLeadLabel(leadObject);
-           assignedToName = getAssignedToName(leadObject);
+           assignedToName = getAssignedToNameFromUtils(leadObject, employees);
         } else {
            // 2. Fallback to map
            const info = leadInfoMap.get(leadKey);
@@ -399,7 +455,7 @@ export default function UnreadNotesSummaryContent({ data }) {
     return Array.from(leadNotesMap.values())
       .filter(s => s.unreadCount > 0)
       .filter(s => !markedAsReadLeadIds.has(s.id));
-  }, [rawNotes, leadInfoMap, markedAsReadLeadIds, isLoading]);
+  }, [rawNotes, leadInfoMap, markedAsReadLeadIds, isLoading, employees]);
 
   const totalUnread = useMemo(() => {
     if (isLoading) return 0;

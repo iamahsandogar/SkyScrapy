@@ -396,7 +396,7 @@ export default function AdminDashboard() {
           data={remindersData ? { ...remindersData, statuses: statusData?.statuses, employees: statusData?.employees } : null} 
         />
         <UnreadNotesSummary 
-          data={notesData ? { ...notesData, reminders: remindersData?.reminders } : null} 
+          data={notesData ? { ...notesData, reminders: remindersData?.reminders, employees: statusData?.employees || [] } : null} 
         />
       </Box>
     </Box>
